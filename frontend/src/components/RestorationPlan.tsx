@@ -41,8 +41,8 @@ export default function RestorationPlan({ at, scenario, onSelectSite, onFly }: P
         <h2 className="mt-1 text-[20px] font-semibold leading-snug">{data.headline}</h2>
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <Bubble label="Each utility alone" value={`${s.alone.done_hours} h`} sub={`to finish, average wait ${s.alone.avg_wait_hours} h`} />
-        <Bubble tone="save" label="With mutual aid" value={`${s.mutual_aid.done_hours} h`} sub={`to finish, average wait ${s.mutual_aid.avg_wait_hours} h`} />
+        <Bubble label="Each utility alone" value={`${s.alone.done_hours} h`} sub={`avg wait ${s.alone.avg_wait_hours} h`} />
+        <Bubble tone="save" label="With mutual aid" value={`${s.mutual_aid.done_hours} h`} sub={`avg wait ${s.mutual_aid.avg_wait_hours} h`} />
       </div>
 
       {moves.length > 0 && mode === "mutual" && (

@@ -41,10 +41,11 @@ export default function StormBriefing({ at, scenario, onSelectSite }: Props) {
         <p className="mt-1 text-[13px] text-muted">Forecast issued {etTime(s.issued)}. Wind zones use {s.radii_source}.</p>
       </div>
 
+      <div className="text-[13px] font-semibold text-muted">Substations in damaging winds</div>
       <div className="grid grid-cols-2 gap-2">
         {(data.likely_hit ?? []).map((h) => (
-          <Bubble key={h.org} tone={ORG_TONE[h.org] ?? "plain"} label={h.name} value={`${h.damaging_winds} substations`}
-            sub={h.hurricane_winds ? `in damaging winds, ${h.hurricane_winds} hurricane-force` : "in damaging winds"} />
+          <Bubble key={h.org} tone={ORG_TONE[h.org] ?? "plain"} label={h.name} value={h.damaging_winds}
+            sub={h.hurricane_winds ? `${h.hurricane_winds} of them hurricane-force` : `${h.tropical_storm_winds} in the wind zone`} />
         ))}
       </div>
       {(data.likely_hit ?? []).some((h) => h.counties.length) && (
