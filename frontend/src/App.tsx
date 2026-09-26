@@ -179,6 +179,7 @@ export default function App() {
     : <Timeline jobs={jobs} opportunities={shown} selected={selected} onSelect={setSelectedId} filter={timelineFilter} onClearFilter={() => setTimelineFilter(null)}
         hoverKey={hover?.key ?? null} scrollToHover={hover?.from === "map"} onHover={(key) => setHover(key ? { key, from: "timeline" } : null)} />;
   const sheetOpen = selectedId != null;
+  const rightGap = { right: 12 + (sheetOpen ? 444 : 0) + (crewlyOpen ? 392 : 0) };  // bottom panels stop where side sheets begin
 
   return (
     <div className="flex h-full flex-col bg-canvas">
@@ -255,9 +256,9 @@ export default function App() {
             </div>
           )}
           {horizon === "emergency" ? (
-            <div className={`absolute bottom-3 left-3 z-10 h-[220px] overflow-hidden rounded-[var(--radius-bubble)] bg-surface shadow-float ${sheetOpen ? "right-[456px]" : "right-3"}`}>{bottom}</div>
+            <div style={rightGap} className="absolute bottom-3 left-3 z-10 h-[220px] overflow-hidden rounded-[var(--radius-bubble)] bg-surface shadow-float">{bottom}</div>
           ) : drawer ? (
-            <div className={`absolute bottom-3 left-3 z-10 flex h-[260px] flex-col overflow-hidden rounded-[var(--radius-bubble)] bg-surface shadow-float ${sheetOpen ? "right-[456px]" : "right-3"}`}>
+            <div style={rightGap} className="absolute bottom-3 left-3 z-10 flex h-[260px] flex-col overflow-hidden rounded-[var(--radius-bubble)] bg-surface shadow-float">
               <button onClick={() => setDrawer(false)} className="flex items-center justify-between px-5 pb-1 pt-3 text-left">
                 <span className="display text-[16px] font-semibold">{lanes ? "Crew schedule" : "Timeline"}</span>
                 <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-muted">Hide <ChevronUp size={16} className="rotate-180" /></span>

@@ -40,6 +40,10 @@
 html, body, #root { height: 100%; }
 body { font-family: var(--font-sans); font-size: 15px; background: var(--color-canvas); color: var(--color-ink); -webkit-font-smoothing: antialiased; }
 h1, h2, h3, .display { font-family: var(--font-display); letter-spacing: 0.005em; }
+h1, h2, h3 { text-wrap: balance; }
+.display { font-variant-numeric: tabular-nums; }
+button, a, input, label { touch-action: manipulation; }
+.overflow-y-auto, .overflow-auto { overscroll-behavior: contain; }
 :focus-visible { outline: 3px solid color-mix(in srgb, var(--color-desc) 55%, transparent); outline-offset: 2px; border-radius: 10px; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
 

@@ -34,7 +34,8 @@ export default function IngestModal({ onClose, onDone }: { onClose: () => void; 
           <input type="file" accept="application/pdf" className="sr-only" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
         </label>
         <Field label="Or paste a link to the PDF">
-          <input value={url} onChange={(e) => setUrl(e.target.value)} disabled={!!file} placeholder="https://" className={inputClass} />
+          <input type="url" name="filing_url" inputMode="url" autoComplete="off" spellCheck={false} value={url} onChange={(e) => setUrl(e.target.value)}
+            disabled={!!file} placeholder="https://example.com/filing.pdf…" className={inputClass} />
         </Field>
         <details className="rounded-[20px] bg-soft px-4 py-3">
           <summary className="cursor-pointer text-[14px] font-semibold">A utility OpenCrew hasn't seen before</summary>
