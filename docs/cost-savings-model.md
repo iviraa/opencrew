@@ -86,7 +86,18 @@ never are, so four factors cut it down. All four are in `factors()` in `cost.py`
 | `same_time` | how much of the shorter build window overlaps the other | the overlap fraction, or a chaining credit (below) |
 | `drive` | commuting eats into sharing | 100% next door, falling to 70% at 45 minutes, **0% past 45 minutes** |
 | `size` | places the pair inside MISO's 115 kV–230 kV band | 0 at 115 kV, 1 at 230 kV, from the lower voltage of the pair |
+| `project_scale` | sizes setup costs to this project rather than MISO's typical one | `cost / $10M`, capped at 1.0; 1.0 when the filing gives no cost |
 | `SHARE` | how much of a duplicated setup one partner really avoids | 50% at the low end, 100% at the high end |
+
+**`project_scale` exists because the first version of this model was badly wrong on small jobs.** MISO's mobilization
+($100k–200k) and yard ($158k–263k) are absolute figures for its typical project. Applied unchanged to a real filing — whose median
+smaller-project budget is $1.3M, with many jobs under $100k — they produced savings of 2259% of the project cost in the worst case,
+and over 100% in 47 of 633 overlaps. Every line that assumes a full-size project's setup or field presence (the three mobilization
+lines, the yard, per diem, gear, the outage, the corridor and its survey) now scales linearly against a $10M reference.
+
+The reference is MISO's own: the mobilization note puts $100k–200k at 1–2% of a typical project, which implies ~$10M, so scaling
+linearly reproduces that 1–2% at any project size. Above $10M the published figure stands unscaled, and a filing with no cost keeps
+the full range rather than being scaled to zero.
 
 **The 45 minute rule.** Past a 45 minute road drive, crews, yards and equipment stop being shareable and every line that depends
 on them goes to zero. This is why some overlaps that look close on the map show no savings.
@@ -130,6 +141,28 @@ These are the four cases `scripts.cost_evidence` prints, so the table can be reg
 
 A test asserts the high end stays under 15% of the smaller project's budget. If a pair ever exceeds that, the model is wrong
 rather than the opportunity being extraordinary.
+
+Measured over all 1,988 long-horizon overlaps in the live dataset (616 of which have both a budget and a saving):
+
+| | Before `project_scale` | After |
+|---|---|---|
+| over 100% of the smaller budget | 47 | **0** |
+| over 50% | 93 | **0** |
+| over 25% | 150 | **0** |
+| over 15% | 216 | **0** |
+| median share of budget | 7.0% | **1.3%** |
+
+The worst remaining case is 11.4%. Median saving across all overlaps with one is about $20k.
+
+### Refreshing the stored figures
+
+`opportunity.savings_low` and `savings_high` are **stored columns**, written by `recompute`. The overlap list reads them; the detail
+panel recomputes live. After any change to this model the two disagree until `recompute` runs, so a model change is not fully
+deployed until it has:
+
+```sh
+cd backend && uv run python -m scripts.load_national recompute
+```
 
 ## 6. Sources
 

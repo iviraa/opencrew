@@ -4,7 +4,7 @@ Every line is quantity x unit price: the price comes from a key in config.ASSUMP
 config.DRIVERS. Lines carry the cost type they belong to, so the total can be shown as labour, equipment, travel, time, land and
 overhead rather than one unexplained figure. docs/cost-savings-model.md shows the working and the sources.
 """
-from app.config import ACRE_M2, ASSUMPTIONS, CATEGORIES, MAX_DRIVE_MIN, MILE_M, MOB_SPLIT, TIER_WEIGHT, TIERS, driver
+from app.config import ACRE_M2, ASSUMPTIONS, CATEGORIES, MAX_DRIVE_MIN, MILE_M, MOB_SPLIT, SIZE_REF_USD, TIER_WEIGHT, TIERS, driver
 
 RANK = {name: i for i, (name, _) in enumerate(TIERS)}  # lower rank = closer tier, tiers stack
 CHAIN_DAYS = 180  # back-to-back jobs this many days apart can still hand a crew over
@@ -48,8 +48,10 @@ def factors(time_overlap=None, drive_min=None, pair=None):
     drive = 1.0 if drive_min is None else (0.0 if drive_min > MAX_DRIVE_MIN else 1 - 0.3 * drive_min / MAX_DRIVE_MIN)  # longer commutes eat some of it: 100% next door, 70% at 45 min
     kv = pair.get("kv")
     size = None if kv is None else min(max((kv - 115) / (230 - 115), 0.0), 1.0)  # 115 kV sits at the low cost, 230 kV at the high
+    budget = pair.get("cost_usd")
+    scale = 1.0 if not budget else min(budget / SIZE_REF_USD, 1.0)  # a $1M job does not carry a $10M job's setup
     return {"same_time": round(same_time, 2), "drive": round(drive, 2), "size": size, "kv": kv, "gap_days": gap,
-            "shared_days": pair.get("shared_days"), "budget_usd": pair.get("cost_usd")}
+            "shared_days": pair.get("shared_days"), "budget_usd": budget, "project_scale": round(scale, 3)}
 
 
 def money(n):
@@ -67,6 +69,7 @@ def count(lo, hi):
 def line_items(tier, overlap_m, a, f, pair):
     """Every duplicated cost one partner avoids: name, cost type, how many, the unit price behind it and a low/high range."""
     t, d = f["same_time"], f["drive"]
+    sc = f["project_scale"]  # setup and field-presence lines are sized to this project, not to MISO's typical $10M one
     shared_days = float(pair.get("shared_days") or 0)
     budget = pair.get("cost_usd")
     corridor_mi = overlap_m / MILE_M
@@ -87,36 +90,37 @@ def line_items(tier, overlap_m, a, f, pair):
     def crew_hour(end):
         return worker_hour(end) * driver("crew_size", end)
 
-    mob_span = span(mob("low"), mob("high"))
+    mob_span = span(mob("low") * sc, mob("high") * sc)
+    sized = "" if sc >= 1 else f", sized to a {money(budget)} project ({sc:.0%} of the {money(SIZE_REF_USD)} project MISO's figure assumes)"
     if t * d > 0:  # a second mobilization is only avoided when one crew and fleet can serve both sites
-        add("Hauling the fleet in and out once", "travel", f"{count(*[driver('crew_moves', e) for e in ENDS])} crew moves",
-            f"{MOB_SPLIT['travel']:.0%} of a {mob_span} project mobilization (MISO), the hauling share",
-            lambda end: mob(end) * MOB_SPLIT["travel"] * SHARE[end] * t * d)
-        add("Standing the site up and tearing it down once", "labor", f"{count(*[driver('setup_crew_days', e) for e in ENDS])} crew-days",
-            f"{MOB_SPLIT['labor']:.0%} of a {mob_span} project mobilization (MISO), the crew share",
-            lambda end: mob(end) * MOB_SPLIT["labor"] * SHARE[end] * t * d)
+        add("Hauling the fleet in and out once", "travel", f"{count(*[driver('crew_moves', e) * sc for e in ENDS])} crew moves",
+            f"{MOB_SPLIT['travel']:.0%} of a {mob_span} project mobilization (MISO), the hauling share{sized}",
+            lambda end: mob(end) * sc * MOB_SPLIT["travel"] * SHARE[end] * t * d)
+        add("Standing the site up and tearing it down once", "labor", f"{count(*[driver('setup_crew_days', e) * sc for e in ENDS])} crew-days",
+            f"{MOB_SPLIT['labor']:.0%} of a {mob_span} project mobilization (MISO), the crew share{sized}",
+            lambda end: mob(end) * sc * MOB_SPLIT["labor"] * SHARE[end] * t * d)
         add("One set of temporary facilities", "overhead", "1 site setup",
-            f"{MOB_SPLIT['overhead']:.0%} of a {mob_span} project mobilization (MISO): site power, access and welfare",
-            lambda end: mob(end) * MOB_SPLIT["overhead"] * SHARE[end] * t * d)
+            f"{MOB_SPLIT['overhead']:.0%} of a {mob_span} project mobilization (MISO): site power, access and welfare{sized}",
+            lambda end: mob(end) * sc * MOB_SPLIT["overhead"] * SHARE[end] * t * d)
     if RANK[tier] <= RANK["site"] and t > 0 and d > 0:
         add("One laydown yard instead of two", "overhead", "1 yard",
-            f"MISO site mobilization for an existing ({money(a['yard_usd']['low'])}) or new ({money(a['yard_usd']['high'])}) site",
-            lambda end: a["yard_usd"][end] * SHARE[end] * t)
+            f"MISO site mobilization for an existing ({money(a['yard_usd']['low'] * sc)}) or new ({money(a['yard_usd']['high'] * sc)}) site{sized}",
+            lambda end: a["yard_usd"][end] * sc * SHARE[end] * t)
     if shared_days > 0 and d > 0:  # these two run with the calendar, so they need days when both sites are actually open
         add("Per diem and lodging for one crew, not two", "travel",
             f"{shared_days:,.0f} shared days x {count(*[driver('crew_size', e) for e in ENDS])} workers",
             f"GSA FY2027 standard CONUS per diem, {span(a['per_diem_usd_day']['low'], a['per_diem_usd_day']['high'], lambda n: f'${n:,.0f}')} a person-day",
-            lambda end: shared_days * driver("crew_size", end) * a["per_diem_usd_day"][end] * driver("crew_share", end) * d,
+            lambda end: shared_days * driver("crew_size", end) * a["per_diem_usd_day"][end] * driver("crew_share", end) * d * sc,
             over=f"over {shared_days / DAYS_PER_MONTH:.0f} shared months")
     if RANK[tier] <= RANK["site"] and shared_days > 0 and d > 0:
         gear = ["crane_standby_usd_day", "digger_derrick_standby_usd_day", "puller_tensioner_standby_usd_day"]
         add("Crane and stringing gear held once", "equipment",
             f"{count(*[min(driver('gear_days', e), shared_days) for e in ENDS])} of {shared_days:,.0f} shared days",
             "FEMA 2025 equipment rates with Caltrans delay factors: crane, digger derrick and puller/tensioner standing idle",
-            lambda end: min(driver("gear_days", end), shared_days) * sum(a[k][end] for k in gear) * driver("gear_share", end) * d)
+            lambda end: min(driver("gear_days", end), shared_days) * sum(a[k][end] for k in gear) * driver("gear_share", end) * d * sc)
     if RANK[tier] <= RANK["land"] and overlap_m > 0:  # the corridor is bought once whether or not the timing lines up
         # two lines in one corridor still need a corridor; what they avoid is the extra width, not a whole second right-of-way
-        acres = {end: overlap_m * a["row_width_m"][end] * driver("row_shared_frac", end) / ACRE_M2 for end in ENDS}
+        acres = {end: overlap_m * a["row_width_m"][end] * driver("row_shared_frac", end) * sc / ACRE_M2 for end in ENDS}
         add("Width saved by sharing one corridor", "land", f"{count(acres['low'], acres['high'])} acres over {corridor_mi:.1f} mi",
             f"USDA NASS 2026 land value {span(a['land_usd_per_acre']['low'], a['land_usd_per_acre']['high'], lambda n: f'${n:,.0f}')} an acre on "
             f"{driver('row_shared_frac', 'low'):.0%}-{driver('row_shared_frac', 'high'):.0%} of a MISO right-of-way width "
@@ -125,12 +129,12 @@ def line_items(tier, overlap_m, a, f, pair):
         add("One route survey and environmental walk-down", "labor",
             f"{corridor_mi:.1f} mi x {count(*[driver('survey_days_per_mile', e) for e in ENDS])} crew-days a mile",
             f"BLS OEWS May 2025 line-worker wages loaded with BLS ECEC benefits, {span(crew_hour('low'), crew_hour('high'), lambda n: f'${n:,.0f}')} a crew-hour",
-            lambda end: corridor_mi * driver("survey_days_per_mile", end) * crew_hour(end) * driver("shift_hours", end))
+            lambda end: corridor_mi * driver("survey_days_per_mile", end) * crew_hour(end) * driver("shift_hours", end) * sc)
     if tier == "crossing" and t > 0:
         add("One switching crew for a shared outage", "labor",
             f"{driver('switch_crews'):.0f} crews x {driver('switch_shifts'):.0f} shifts x {driver('shift_hours'):.0f} h",
-            f"Derived from line-worker crew-hours: {span(a['outage_usd']['low'], a['outage_usd']['high'])} an outage",
-            lambda end: a["outage_usd"][end] * t)
+            f"Derived from line-worker crew-hours: {span(a['outage_usd']['low'] * sc, a['outage_usd']['high'] * sc)} an outage{sized}",
+            lambda end: a["outage_usd"][end] * sc * t)
     if budget and t > 0 and d > 0:  # coordinating stops the second project waiting, and waiting costs escalation
         months = {end: driver("months_pulled_in", end) * TIER_WEIGHT[tier] * t * d for end in ENDS}
         add("Months of waiting taken out of the schedule", "time",

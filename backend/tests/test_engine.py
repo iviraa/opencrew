@@ -75,6 +75,26 @@ def test_savings_recurring_lines_need_shared_days_and_a_budget():
     assert budgeted["share_of_budget"]["high"] < 0.15  # a coordination saving is a slice of the project, never most of it
 
 
+def test_setup_costs_are_sized_to_the_project():
+    """MISO's mobilization and yard figures assume a ~$10M project. Against a real filing full of small jobs they have to scale down,
+    or a $50k pole swap gets credited a $200k setup (which is what shipped first and showed savings of 2259% of budget)."""
+    from app.config import SIZE_REF_USD
+    base = dict(tier="site", overlap_m=2000, drive_min=5, time_overlap=1.0)
+    window = {"kv": 115, "gap_days": 0, "shared_days": 300}
+    big = savings(**base, pair={**window, "cost_usd": SIZE_REF_USD})
+    small = savings(**base, pair={**window, "cost_usd": SIZE_REF_USD / 100})
+    unknown = savings(**base, pair={**window, "cost_usd": None})
+    huge = savings(**base, pair={**window, "cost_usd": SIZE_REF_USD * 5})
+    setup = lambda s: sum(ln["high"] for ln in s["lines"] if ln["category"] != "time")  # the time line only exists with a budget
+    assert setup(unknown) == setup(big) == setup(huge)  # at or above the reference project the published figure stands, and is capped
+    assert setup(small) < setup(big) / 50  # a project 100x smaller cannot claim the same setup
+    for s in (big, small, unknown):
+        assert s["share_of_budget"] is None or s["share_of_budget"]["high"] < 0.15
+    # scaling linearly off a $10M reference reproduces MISO's own "mobilization is 1-2% of a typical project" note
+    mob = [ln for ln in small["lines"] if "mobilization (MISO)" in ln["basis"]]
+    assert len(mob) == 3 and sum(ln["high"] for ln in mob) <= 0.02 * SIZE_REF_USD / 100 * 1.05
+
+
 def test_mobilization_split_reconciles_with_crew_and_move_rates():
     """MISO gives one mobilization figure; our split into hauling, crew and facilities has to survive a bottom-up check."""
     from app.config import ASSUMPTIONS as A, MOB_SPLIT, driver

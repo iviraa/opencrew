@@ -113,6 +113,11 @@ DRIVERS = {
 # MISO publishes one mobilization figure per project; this is our split of what it pays for, so the table can name the cost type
 MOB_SPLIT = {"travel": 0.45, "labor": 0.35, "overhead": 0.20}
 
+# The project MISO's mobilization and yard figures are sized for: its own note puts $100k-200k at 1-2% of a typical project, so ~$10M.
+# Scaling those lines linearly by the project's own cost reproduces that 1-2% for any size, so a $50k pole swap is not credited a
+# $200k setup. Capped at 1.0 so a large project never gets more than the published figure; filings with no cost keep the full range.
+SIZE_REF_USD = 10_000_000
+
 CATEGORIES = [  # the cost types the savings table groups by, in the order it shows them
     ("labor", "Labor", "Crew hours one side no longer has to pay for"),
     ("equipment", "Equipment", "Machines that would otherwise be hired or held twice"),

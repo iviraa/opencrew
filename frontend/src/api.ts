@@ -18,7 +18,7 @@ export type Opportunity = {
 
 export type SavingsFactors = {
   same_time: number; drive: number; size: number | null; kv: number | null; gap_days: number | null;
-  shared_days: number | null; budget_usd: number | null;
+  shared_days: number | null; budget_usd: number | null; project_scale?: number;
 };
 // one avoided duplicate cost: how many (qty), the published unit price behind it (basis) and, when it runs with the calendar, over what (over)
 export type SavingsLine = { name: string; category: string; qty: string; basis: string; over: string | null; low: number; high: number };
