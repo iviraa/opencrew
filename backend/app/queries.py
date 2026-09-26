@@ -14,7 +14,7 @@ FROM job j JOIN org o ON o.id = j.org_id LEFT JOIN source_doc d ON d.id = j.sour
 """
 
 OPP_SQL = """
-SELECT op.id, op.job_a, op.job_b, op.horizon, op.distance_m, op.center_distance_m, op.overlap_m, op.drive_min, op.drive_km, op.tier,
+SELECT op.id, op.job_a, op.job_b, op.horizon, op.distance_m, op.center_distance_m, op.overlap_m, op.drive_min, op.drive_km, op.meet_lon, op.meet_lat, op.meet_road, op.meet_min, op.tier,
        op.time_overlap, op.time_gap_days, op.risk, op.vulnerability, op.score, op.flags, op.savings_low, op.savings_high,
        op.status, ST_AsGeoJSON(op.link)::json AS link,
        ja.name AS a_name, ja.phase AS a_phase, lower(ja.work_window) AS a_start, ja.org_id AS a_org, oa.color AS a_color, ja.confidence AS a_conf, ja.geom_quality AS a_quality,

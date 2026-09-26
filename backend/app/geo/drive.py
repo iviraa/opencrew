@@ -44,6 +44,27 @@ class Drive:
             self.cache[key] = {"min": round(r["duration"] / 60, 1), "km": round(r["distance"] / 1000, 1)}
         return self.cache[key]
 
+    def halfway(self, a, b):
+        """Point on the road route at half the drive time, with the road name: a place both crews reach equally fast."""
+        key = "half:" + ";".join(f"{p[0]:.4f},{p[1]:.4f}" for p in (a, b))
+        if key not in self.cache:
+            data = self._get(f"{OSRM}/route/v1/driving/{a[0]:.5f},{a[1]:.5f};{b[0]:.5f},{b[1]:.5f}",
+                             {"overview": "false", "steps": "true", "geometries": "geojson"})
+            if not data or not data.get("routes"):
+                return None
+            steps = [st for leg in data["routes"][0]["legs"] for st in leg["steps"]]
+            total = sum(st["duration"] for st in steps) or 1.0
+            spent, pick, frac = 0.0, steps[-1], 1.0
+            for st in steps:
+                if st["duration"] > 0 and spent + st["duration"] >= total / 2:
+                    pick, frac = st, (total / 2 - spent) / st["duration"]
+                    break
+                spent += st["duration"]
+            coords = pick["geometry"]["coordinates"]
+            lon, lat = coords[min(len(coords) - 1, int(frac * (len(coords) - 1)))]  # position within the step by share of its time
+            self.cache[key] = {"lon": lon, "lat": lat, "road": pick.get("ref") or pick.get("name") or "", "min": round(total / 120, 1)}
+        return self.cache[key]
+
     def zone(self, center, minutes=45):
         """Approximate drive-time polygon: farthest sampled point per bearing reachable within `minutes`."""
         key = f"zone:{center[0]:.3f},{center[1]:.3f}:{minutes}"

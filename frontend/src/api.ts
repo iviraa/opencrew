@@ -8,7 +8,7 @@ export type Job = {
 };
 
 export type Opportunity = {
-  id: number; job_a: string; job_b: string; horizon: string; distance_m: number; center_distance_m: number; overlap_m: number; drive_min: number | null; drive_km: number | null; tier: Tier;
+  id: number; job_a: string; job_b: string; horizon: string; distance_m: number; center_distance_m: number; overlap_m: number; drive_min: number | null; drive_km: number | null; meet_lon: number | null; meet_lat: number | null; meet_road: string | null; meet_min: number | null; tier: Tier;
   time_overlap: number; time_gap_days: number | null; risk: number; vulnerability: number; score: number; flags: string[]; savings_low: number; savings_high: number;
   status: string; link: GeoJSON.LineString;
   a_name: string; a_phase: string | null; a_start: string; a_org: string; a_color: string; a_conf: number; a_quality: string;

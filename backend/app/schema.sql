@@ -115,6 +115,10 @@ CREATE TABLE IF NOT EXISTS opportunity (
   overlap_m          REAL NOT NULL DEFAULT 0,
   drive_min          REAL,               -- road minutes between the closest points (osrm)
   drive_km           REAL,
+  meet_lon           REAL,               -- halfway point by road, a real spot both crews reach equally fast
+  meet_lat           REAL,
+  meet_road          TEXT,
+  meet_min           REAL,
   tier               TEXT NOT NULL,      -- crossing | land | site | crew
   time_overlap       REAL NOT NULL,
   time_gap_days      INT,
@@ -183,3 +187,8 @@ CREATE TABLE IF NOT EXISTS phase_risk (
 );
 
 ALTER TABLE job ADD COLUMN IF NOT EXISTS located_via JSONB;  -- databases built before the column existed
+
+ALTER TABLE opportunity ADD COLUMN IF NOT EXISTS meet_lon REAL;
+ALTER TABLE opportunity ADD COLUMN IF NOT EXISTS meet_lat REAL;
+ALTER TABLE opportunity ADD COLUMN IF NOT EXISTS meet_road TEXT;
+ALTER TABLE opportunity ADD COLUMN IF NOT EXISTS meet_min REAL;

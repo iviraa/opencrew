@@ -39,13 +39,15 @@ LEFT JOIN LATERAL (
 """
 
 UPSERT_SQL = """
-INSERT INTO opportunity (job_a, job_b, horizon, distance_m, center_distance_m, overlap_m, drive_min, drive_km, tier,
+INSERT INTO opportunity (job_a, job_b, horizon, distance_m, center_distance_m, overlap_m, drive_min, drive_km, meet_lon, meet_lat, meet_road, meet_min, tier,
                          time_overlap, time_gap_days, risk, vulnerability, score, flags, savings_low, savings_high, link)
-VALUES (%(job_a)s, %(job_b)s, %(horizon)s, %(distance_m)s, %(center_distance_m)s, %(overlap_m)s, %(drive_min)s, %(drive_km)s, %(tier)s,
+VALUES (%(job_a)s, %(job_b)s, %(horizon)s, %(distance_m)s, %(center_distance_m)s, %(overlap_m)s, %(drive_min)s, %(drive_km)s,
+        %(meet_lon)s, %(meet_lat)s, %(meet_road)s, %(meet_min)s, %(tier)s,
         %(time_overlap)s, %(time_gap_days)s, %(risk)s, %(vulnerability)s, %(score)s, %(flags)s, %(savings_low)s, %(savings_high)s, ST_GeogFromText(%(link)s))
 ON CONFLICT (job_a, job_b) DO UPDATE SET
   distance_m = EXCLUDED.distance_m, center_distance_m = EXCLUDED.center_distance_m,
-  overlap_m = EXCLUDED.overlap_m, drive_min = EXCLUDED.drive_min, drive_km = EXCLUDED.drive_km, tier = EXCLUDED.tier, time_overlap = EXCLUDED.time_overlap,
+  overlap_m = EXCLUDED.overlap_m, drive_min = EXCLUDED.drive_min, drive_km = EXCLUDED.drive_km,
+  meet_lon = EXCLUDED.meet_lon, meet_lat = EXCLUDED.meet_lat, meet_road = EXCLUDED.meet_road, meet_min = EXCLUDED.meet_min, tier = EXCLUDED.tier, time_overlap = EXCLUDED.time_overlap,
   time_gap_days = EXCLUDED.time_gap_days, risk = EXCLUDED.risk, vulnerability = EXCLUDED.vulnerability, score = EXCLUDED.score, flags = EXCLUDED.flags,
   savings_low = EXCLUDED.savings_low, savings_high = EXCLUDED.savings_high, link = EXCLUDED.link
 """
@@ -77,6 +79,12 @@ def recompute(conn, horizon="long"):
         a, b = link_ends(r["link"])
         drive = {"min": 0.0, "km": 0.0} if r["distance_m"] < 100 else road.between(a, b)  # same spot needs no drive
         drive_min = drive and drive["min"]
+        if r["distance_m"] < 100:
+            meet = {"lon": a[0], "lat": a[1], "road": "", "min": 0.0}  # the projects touch
+        elif drive_min is not None and not too_far(drive_min):
+            meet = road.halfway(a, b)  # only pairs a crew can really share get a meeting spot
+        else:
+            meet = None
         sav = savings(tier, r["overlap_m"], drive_min=drive_min)
         fl = flags({"name": r["a_name"], "endpoints": r["a_endpoints"]}, {"name": r["b_name"], "endpoints": r["b_endpoints"]},
                    r["risk"], r["a_start"], r["a_end"], r["b_start"], r["b_end"],
@@ -86,6 +94,7 @@ def recompute(conn, horizon="long"):
         ps = phase_share(r["a_phase"], r["b_phase"])
         out.append({**r, "horizon": horizon, "tier": tier, "time_overlap": ov, "flags": fl,
                     "drive_min": drive_min, "drive_km": drive and drive["km"],
+                    "meet_lon": meet and meet["lon"], "meet_lat": meet and meet["lat"], "meet_road": meet and meet["road"], "meet_min": meet and meet["min"],
                     "score": score(tier, ov, r["risk"], r["vulnerability"], ps[0] if ps else 1.0, drive_min),
                     "savings_low": sav["low"], "savings_high": sav["high"]})
     road.save()

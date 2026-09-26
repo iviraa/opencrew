@@ -56,27 +56,32 @@ function jobPopup(p: Record<string, unknown>) {
 const far = (o: Opportunity) => o.drive_min != null && o.drive_min > 45;
 
 function oppFeatures(opps: Opportunity[]): GeoJSON.FeatureCollection {
-  const links = opps.map((o) => ({ type: "Feature", properties: { id: o.id, tier: o.tier, score: o.score, far: far(o) }, geometry: o.link }));
-  const spots = new Map<string, Opportunity[]>();  // pairs that meet at the same spot share one bubble
+  const links = opps.map((o) => ({ type: "Feature", properties: { id: o.id, tier: o.tier, score: o.score, far: far(o) }, geometry: o.link }));  // the bridge between the two projects
+  const spots = new Map<string, Opportunity[]>();  // pairs sharing a meeting spot share one bubble
   for (const o of [...opps].sort((a, b) => b.score - a.score)) {
-    const [p, q] = o.link.coordinates;
-    const key = `${((p[0] + q[0]) / 2).toFixed(3)},${((p[1] + q[1]) / 2).toFixed(3)}`;
+    if (o.meet_lon == null || o.meet_lat == null) continue;  // too far by road: bridge only, no meeting spot
+    const key = `${o.meet_lon.toFixed(3)},${o.meet_lat.toFixed(3)}`;
     spots.set(key, [...(spots.get(key) ?? []), o]);
   }
   const markers = [...spots.values()].map((group) => {
     const top = group[0];
-    const [p, q] = top.link.coordinates;
-    return { type: "Feature", geometry: { type: "Point", coordinates: [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2] },
-      properties: { marker: true, id: top.id, ids: `,${group.map((o) => o.id).join(",")},`, count: group.length, tier: top.tier, score: top.score, far: group.every(far) } };
+    return { type: "Feature", geometry: { type: "Point", coordinates: [top.meet_lon, top.meet_lat] },
+      properties: { marker: true, id: top.id, ids: `,${group.map((o) => o.id).join(",")},`, count: group.length, tier: top.tier, score: top.score, far: false,
+        road: top.meet_road ?? "", minutes: Math.round(top.meet_min ?? 0) } };
   });
   return { type: "FeatureCollection", features: [...links, ...markers] as GeoJSON.Feature[] };
+}
+
+function meetText(road: string, minutes: number) {
+  if (!minutes) return "The two projects touch here";
+  return `Shared yard idea${road ? ` on ${road}` : ""}: about ${minutes} min drive from each site`;
 }
 
 function pickList(ids: number[], opps: Opportunity[], onPick: (id: number) => void) {
   const box = document.createElement("div");
   box.style.cssText = "max-height:340px;overflow-y:auto;overscroll-behavior:contain";
   const head = document.createElement("div");
-  head.textContent = `${ids.length} team-ups meet here`;
+  head.textContent = `${ids.length} team-ups here`;
   head.style.cssText = "font-family:Fredoka,Figtree,sans-serif;font-weight:600;font-size:15px;margin-bottom:6px";
   box.append(head);
   for (const id of ids) {
@@ -163,8 +168,12 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
       m.addSource("jobs", { type: "geojson", data: EMPTY });
       m.addSource("opps", { type: "geojson", data: EMPTY });
       const faded = ["case", ["<", ["get", "confidence"], 0.7], 0.45, 0.95] as maplibregl.ExpressionSpecification;
-      m.addLayer({ id: "opp-links", type: "line", source: "opps", filter: ["!", ["has", "marker"]], layout: { "line-cap": "round" },
-        paint: { "line-color": tierColor, "line-width": 3, "line-dasharray": [0.1, 1.8], "line-opacity": 0.9 } });  // round dots
+      m.addLayer({ id: "opp-links-casing", type: "line", source: "opps", filter: ["==", ["get", "id"], -1], layout: { "line-cap": "round" },
+        paint: { "line-color": "#ffffff", "line-width": ["interpolate", ["linear"], ["zoom"], 6, 7, 11, 11] } });  // only the selected bridge is drawn
+      m.addLayer({ id: "opp-links-far", type: "line", source: "opps", filter: ["==", ["get", "id"], -1], layout: { "line-cap": "round" },
+        paint: { "line-color": FAR_COLOR, "line-width": 2.5, "line-dasharray": [1.5, 2], "line-opacity": 0.8 } });  // too far by road: no shared spot
+      m.addLayer({ id: "opp-links", type: "line", source: "opps", filter: ["==", ["get", "id"], -1], layout: { "line-cap": "round" },
+        paint: { "line-color": tierColor, "line-width": ["interpolate", ["linear"], ["zoom"], 6, 3, 11, 6], "line-opacity": 0.9 } });  // the bridge that is the overlap
       m.addLayer({ id: "job-casing", type: "line", source: "jobs", filter: ["==", ["geometry-type"], "LineString"], layout: { "line-cap": "round", "line-join": "round" },
         paint: { "line-color": "#ffffff", "line-width": ["interpolate", ["linear"], ["zoom"], 6, 5, 11, 9], "line-opacity": 0.9 } });
       m.addLayer({ id: "job-lines", type: "line", source: "jobs", filter: ["all", ["==", ["geometry-type"], "LineString"], ["!=", ["get", "geom_quality"], "straight_line"]],
@@ -233,6 +242,14 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
         paint: { "circle-radius": 10, "circle-color": "transparent", "circle-stroke-color": "#f59e0b", "circle-stroke-width": 3.5 } });
 
       m.on("click", (e) => clickRef.current?.(e.lngLat.lng, e.lngLat.lat));
+      const tip = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 16, maxWidth: "260px" });
+      m.on("mousemove", "opp-markers", (e) => {
+        const p = e.features![0].properties;
+        tip.setLngLat(e.lngLat).setText(Number(p.count) > 1 ? `${p.count} team-ups here. ${meetText(String(p.road), Number(p.minutes))}` : meetText(String(p.road), Number(p.minutes))).addTo(m);
+      });
+      m.on("mouseleave", "opp-markers", () => tip.remove());
+      m.on("click", "opp-links", (e) => { if (!clickRef.current) onSelectRef.current(Number(e.features![0].properties.id)); });
+      m.on("click", "opp-links-far", (e) => { if (!clickRef.current) onSelectRef.current(Number(e.features![0].properties.id)); });  // far pairs have no bubble, so the bridge is clickable
       m.on("click", "opp-markers", (e) => {
         if (clickRef.current) return;
         const p = e.features![0].properties;
@@ -246,7 +263,7 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
           new maplibregl.Popup({ closeButton: false, maxWidth: "300px" }).setLngLat(e.lngLat).setHTML(jobPopup(e.features![0].properties)).addTo(m);
         });
       }
-      for (const layer of ["opp-markers", "job-hit", "job-points"]) {
+      for (const layer of ["opp-markers", "opp-links", "opp-links-far", "job-hit", "job-points"]) {
         m.on("mouseenter", layer, () => (m.getCanvas().style.cursor = "pointer"));
         m.on("mouseleave", layer, () => (m.getCanvas().style.cursor = ""));
       }
@@ -281,7 +298,10 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
     m.setFilter("opp-selected", ["all", ["has", "marker"], inGroup]);
     const focus = (on: number, off: number) =>
       (selected ? ["case", ["any", ["==", ["get", "id"], selected.id], inGroup], on, off] : on) as maplibregl.ExpressionSpecification;
-    m.setPaintProperty("opp-links", "line-opacity", focus(0.95, 0.2));
+    const bridge = ["all", ["!", ["has", "marker"]], ["==", ["get", "id"], selected?.id ?? -1]] as maplibregl.ExpressionSpecification;
+    m.setFilter("opp-links-casing", bridge);
+    m.setFilter("opp-links", ["all", bridge, ["!", ["get", "far"]]]);
+    m.setFilter("opp-links-far", ["all", bridge, ["get", "far"]]);
     m.setPaintProperty("opp-markers", "circle-stroke-opacity", focus(1, 0.4));
     m.setPaintProperty("opp-markers", "circle-opacity", focus(1, 0.35));
     m.setPaintProperty("opp-glow", "circle-opacity", focus(0.3, 0.05));

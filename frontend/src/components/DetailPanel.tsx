@@ -92,7 +92,8 @@ export default function DetailPanel({ detail, assumptions, onClose, onStatus, on
 
         <p className="mt-4 flex gap-2 text-[14px] leading-relaxed text-muted">
           <Info size={17} className="mt-0.5 shrink-0 text-faint" />
-          <span>{far ? "Crews and yards only count when the sites are within a 45 minute drive." : TIER_HINT[detail.tier]}</span>
+          <span>{far ? "Crews and yards only count when the sites are within a 45 minute drive." : TIER_HINT[detail.tier]}
+            {!far && detail.meet_min ? ` A shared yard could go${detail.meet_road ? ` on ${detail.meet_road}` : ""}, about ${Math.round(detail.meet_min)} min drive from each site (the bubble on the map).` : ""}</span>
         </p>
 
         <div className="mt-4">
