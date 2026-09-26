@@ -311,6 +311,9 @@ export default function Shell() {
     <OverlapList me={me} overlaps={visible} requests={reqs} selected={selected} focused={!!focus} onOpen={openOverlap}
       partners={partners} partner={partner} onPartner={(p) => {
         setPartner(p); setSelected(null);
+        const os = ov.overlaps.filter((o) => !p || partnerOf(me, o) === p);  // zoom to that neighbor
+        const b = bboxOf([{ type: "FeatureCollection", features: os.map((o) => ({ type: "Feature" as const, geometry: o.link, properties: {} })) }]);
+        if (b) setFit({ bbox: b, key: `p${p}${Date.now()}` });
         say(p ? `Showing our overlaps with ${company(p).name}.` : "Showing every neighbor again.", "nod");
       }}
       onClearFocus={() => { setFocus(null); say("Showing all our overlaps again.", "nod"); const b = bboxOf([ov.jobs]); if (b) setFit({ bbox: b, key: `all${Date.now()}` }); }} />
