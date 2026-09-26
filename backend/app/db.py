@@ -10,8 +10,14 @@ load_dotenv(ROOT / ".env")
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://postgres:opencrew@localhost:5433/opencrew")
 
 
+SEARCH_PATH = os.environ.get("DB_SEARCH_PATH")  # e.g. "planner, extensions, public" on supabase, where the planner tables live in their own schema
+
+
 def connect():
-    return psycopg.connect(DATABASE_URL, row_factory=dict_row)
+    conn = psycopg.connect(DATABASE_URL, row_factory=dict_row, connect_timeout=15)
+    if SEARCH_PATH:
+        conn.execute(f"SET search_path TO {SEARCH_PATH}")  # poolers may drop the search_path option from the url
+    return conn
 
 
 def get_conn():

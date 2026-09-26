@@ -430,8 +430,12 @@ def plan_explain(opportunity_id: int | None = None, project: str | None = None, 
 
 
 @api.get("/health")
-def health(conn=Depends(get_conn)):
-    return {"ok": True, "jobs": conn.execute("SELECT count(*) AS n FROM job").fetchone()["n"]}
+def health():
+    try:
+        with connect() as conn:
+            return {"ok": True, "jobs": conn.execute("SELECT count(*) AS n FROM job").fetchone()["n"]}
+    except Exception as e:  # say what is wrong with the database, without the url
+        raise HTTPException(503, f"database: {type(e).__name__}: {str(e)[:200]}")
 
 
 # ---------- storm response: pre-storm briefing and restoration crew plan ----------

@@ -20,6 +20,9 @@ services:
       - key: DATABASE_URL
         scope: RUN_TIME
         type: SECRET
+      - key: DB_SEARCH_PATH
+        scope: RUN_TIME
+        value: "planner, extensions, public"
       - key: SUPABASE_URL
         scope: RUN_TIME
       - key: SUPABASE_PUBLISHABLE_KEY
