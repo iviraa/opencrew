@@ -220,3 +220,26 @@ CREATE TABLE IF NOT EXISTS job_hazard (
   since_year       INT,
   checked_at       TIMESTAMPTZ DEFAULT now()
 );
+
+-- national expansion: one utility per state, keeping every field the planners publish
+ALTER TABLE org ADD COLUMN IF NOT EXISTS state TEXT;  -- home state, two letters
+ALTER TABLE org ADD COLUMN IF NOT EXISTS planner TEXT;  -- who publishes its plan: PJM, MISO, SPP, ERCOT, filing...
+ALTER TABLE org ADD COLUMN IF NOT EXISTS short TEXT;
+ALTER TABLE org ADD COLUMN IF NOT EXISTS login TEXT UNIQUE;  -- crewly username
+ALTER TABLE source_doc ADD COLUMN IF NOT EXISTS planner TEXT;
+ALTER TABLE source_doc ADD COLUMN IF NOT EXISTS edition TEXT;  -- e.g. MTEP24, RTEP 2025
+ALTER TABLE source_doc ADD COLUMN IF NOT EXISTS sha256 TEXT;  -- proves which file the rows came from
+ALTER TABLE job ADD COLUMN IF NOT EXISTS state TEXT;
+ALTER TABLE job ADD COLUMN IF NOT EXISTS planner TEXT;
+ALTER TABLE job ADD COLUMN IF NOT EXISTS source_project_id TEXT;  -- the planner's own id, e.g. PJM b3800
+ALTER TABLE job ADD COLUMN IF NOT EXISTS status TEXT;  -- planned, under construction, engineering...
+ALTER TABLE job ADD COLUMN IF NOT EXISTS need TEXT;  -- why it is built: reliability, load growth, economic, policy
+ALTER TABLE job ADD COLUMN IF NOT EXISTS length_mi REAL;
+ALTER TABLE job ADD COLUMN IF NOT EXISTS counties TEXT[];
+ALTER TABLE job ADD COLUMN IF NOT EXISTS raw JSONB;  -- the whole source row, nothing thrown away
+CREATE INDEX IF NOT EXISTS job_org_state_idx ON job (org_id, state);
+UPDATE org SET state = CASE id WHEN 'desc' THEN 'SC' WHEN 'gpc' THEN 'GA' END, planner = 'filing',
+               short = CASE id WHEN 'desc' THEN 'Dominion SC' WHEN 'gpc' THEN 'Georgia Power' END,
+               login = CASE id WHEN 'desc' THEN 'dominion' WHEN 'gpc' THEN 'georgia' END
+WHERE id IN ('desc', 'gpc') AND state IS NULL;
+UPDATE job j SET state = o.state, planner = o.planner FROM org o WHERE o.id = j.org_id AND j.state IS NULL;
