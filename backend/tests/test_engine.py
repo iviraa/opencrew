@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from app.engine.cost import savings
+from app.engine.cost import SHARE, savings
 from app.engine.scoring import score, tier_for, time_overlap
 from app.ingest.classify import endpoints, job_type, parse_date, voltage
 
@@ -39,8 +39,18 @@ def test_savings_stack_and_range():
 
 
 def test_savings_overrides():
-    s = savings("crew", 0, {"mobilization_usd": {"low": 1000, "high": 2000}})
-    assert (s["low"], s["high"]) == (1000, 2000)
+    s = savings("crew", 0, {"mobilization_usd": {"low": 10000, "high": 20000}})
+    assert (s["low"], s["high"]) == (10000 * SHARE["low"], 20000)
+
+
+def test_savings_scale_per_pair():
+    full = savings("crew", 0, drive_min=0, time_overlap=1.0, pair={"kv": 230, "gap_days": 0})
+    half = savings("crew", 0, drive_min=0, time_overlap=0.5, pair={"kv": 230, "gap_days": 0})
+    small = savings("crew", 0, drive_min=0, time_overlap=1.0, pair={"kv": 115, "gap_days": 0})
+    commute = savings("crew", 0, drive_min=45, time_overlap=1.0, pair={"kv": 230, "gap_days": 0})
+    assert half["high"] == full["high"] / 2 and small["high"] < full["high"] and commute["high"] < full["high"]
+    assert savings("crew", 0, time_overlap=0.0, pair={"kv": 230, "gap_days": 90})["high"] > 0  # back-to-back crews can chain
+    assert savings("crew", 0, time_overlap=0.0, pair={"kv": 230, "gap_days": 400})["high"] == 0  # years apart share nothing
 
 
 def test_name_parsing():

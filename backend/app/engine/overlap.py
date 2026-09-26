@@ -1,7 +1,7 @@
 import time
 
 from app.config import OVERLAP_RADIUS_M
-from app.engine.cost import savings
+from app.engine.cost import pair_from, savings
 from app.engine.flags import flags
 from app.geo.drive import Drive
 from app.engine.scoring import phase_share, score, tier_for, time_overlap, too_far
@@ -9,7 +9,7 @@ from app.geo import wetlands
 
 PAIRS_SQL = """
 WITH j AS (
-  SELECT id, org_id, name, phase, endpoints, horizon, geom, work_window, in_service,
+  SELECT id, org_id, name, phase, endpoints, voltage_kv, horizon, geom, work_window, in_service,
          ST_GeometryType(geom::geometry) = 'ST_LineString' AS is_line,
          CASE WHEN ST_GeometryType(geom::geometry) = 'ST_LineString'
               THEN ST_Centroid(ST_MakeLine(ST_StartPoint(geom::geometry), ST_EndPoint(geom::geometry)))
@@ -17,7 +17,7 @@ WITH j AS (
   FROM job WHERE horizon = %(horizon)s
 )
 SELECT a.id AS job_a, b.id AS job_b, a.name AS a_name, b.name AS b_name, a.endpoints AS a_endpoints, b.endpoints AS b_endpoints,
-       a.phase AS a_phase, b.phase AS b_phase,
+       a.phase AS a_phase, b.phase AS b_phase, a.voltage_kv AS a_kv, b.voltage_kv AS b_kv,
        ST_Distance(a.geom, b.geom) AS distance_m,
        ST_Distance(a.center, b.center, false) AS center_distance_m,
        ST_Intersects(a.geom, b.geom) AS touches,
@@ -85,7 +85,7 @@ def recompute(conn, horizon="long"):
             meet = road.halfway(a, b)  # only pairs a crew can really share get a meeting spot
         else:
             meet = None
-        sav = savings(tier, r["overlap_m"], drive_min=drive_min)
+        sav = savings(tier, r["overlap_m"], drive_min=drive_min, time_overlap=ov, pair=pair_from(r))
         fl = flags({"name": r["a_name"], "endpoints": r["a_endpoints"]}, {"name": r["b_name"], "endpoints": r["b_endpoints"]},
                    r["risk"], r["a_start"], r["a_end"], r["b_start"], r["b_end"],
                    (wet.get(r["job_a"]), wet.get(r["job_b"])))

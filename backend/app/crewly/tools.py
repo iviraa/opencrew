@@ -5,7 +5,7 @@ from datetime import datetime
 from app import outreach, vendors
 from app.config import MILE_M
 from app.ingest import filing
-from app.engine.cost import savings
+from app.engine.cost import savings_for
 from app.queries import JOB_SQL, OPP_SQL, shareable
 from app.storm import replay
 from app.storm.helene import LANDFALL
@@ -59,17 +59,17 @@ def get_opportunity(conn, opportunity_id):
                 "location_confidence_pct": round(j["confidence"] * 100), "source": f"{j['source_title']}, page {j['source_page']}",
                 "description": j["description"]}
 
-    s = savings(o["tier"], o["overlap_m"], drive_min=o["drive_min"])
+    s = savings_for(conn, o)
     return ({**_opp_row(o), "job_a": job(jobs[o["job_a"]]), "job_b": job(jobs[o["job_b"]]), "shareable": shareable(o["tier"], o["a_phase"], o["b_phase"], o["drive_min"]),
              "savings_breakdown": {k: f"${int(v['low']):,} to ${int(v['high']):,}" for k, v in s["items"].items()}},
             [{"type": "select", "horizon": o["horizon"], "opportunity_id": o["id"]}])
 
 
 def estimate_savings(conn, opportunity_id, assumptions=None):
-    o = conn.execute("SELECT id, tier, overlap_m, horizon, drive_min FROM opportunity WHERE id = %s", (opportunity_id,)).fetchone()
+    o = conn.execute("SELECT id, job_a, job_b, tier, overlap_m, horizon, drive_min, time_overlap FROM opportunity WHERE id = %s", (opportunity_id,)).fetchone()
     if not o:
         return {"error": f"no opportunity {opportunity_id}"}, []
-    s = savings(o["tier"], o["overlap_m"], assumptions, o["drive_min"])
+    s = savings_for(conn, o, assumptions)
     far = o["drive_min"] is not None and o["drive_min"] > 45
     return ({"opportunity_id": o["id"], "savings_usd": f"${int(s['low']):,} to ${int(s['high']):,}",
              "drive_minutes": o["drive_min"], "crews_and_yards_shareable": not far,

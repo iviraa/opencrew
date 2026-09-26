@@ -3,7 +3,7 @@ from datetime import date
 
 from app.config import ASSUMPTIONS, MAX_DRIVE_MIN, MILE_M
 from app.llm import generate, provider, unsourced
-from app.engine.cost import savings
+from app.engine.cost import savings_for
 from app.queries import JOB_SQL, OPP_SQL, shareable
 
 QUALITY = {"straight_line": "approximate route (straight line between endpoints)", "partial_point": "one endpoint located",
@@ -33,7 +33,7 @@ def facts(conn, opp_id):
     if not o:
         return None
     jobs = {j["id"]: j for j in conn.execute(JOB_SQL + " WHERE j.id IN (%s, %s)", (o["job_a"], o["job_b"])).fetchall()}
-    return o, jobs[o["job_a"]], jobs[o["job_b"]], savings(o["tier"], o["overlap_m"], drive_min=o["drive_min"])
+    return o, jobs[o["job_a"]], jobs[o["job_b"]], savings_for(conn, o)
 
 
 def template_summary(o, a, b):

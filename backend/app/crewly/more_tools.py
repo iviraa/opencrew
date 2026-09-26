@@ -5,7 +5,7 @@ from rapidfuzz import fuzz, process, utils
 from app.config import ASSUMPTIONS, MILE_M, STATUSES
 from app.crewly import brief
 from app.engine import equipment
-from app.engine.cost import savings
+from app.engine.cost import savings_for
 from app.engine.scoring import tier_for, time_overlap
 
 TABS = ["overlaps", "equipment", "plan", "review"]
@@ -68,13 +68,13 @@ def set_assumptions(conn, overrides, opportunity_id=None, top=5):
             return {"error": f"{key}: need 0 <= low <= high"}, []
         clean[key] = {"low": lo, "high": hi}
     where = "id = %(id)s" if opportunity_id else "horizon = 'long' ORDER BY score DESC LIMIT %(n)s"
-    rows = conn.execute(f"SELECT id, tier, overlap_m, savings_low, savings_high FROM opportunity WHERE {where}",
+    rows = conn.execute(f"SELECT id, job_a, job_b, tier, overlap_m, drive_min, time_overlap, savings_low, savings_high FROM opportunity WHERE {where}",
                         {"id": opportunity_id, "n": min(int(top), 20)}).fetchall()
     if not rows:
         return {"error": f"no opportunity {opportunity_id}"}, []
     out = []
     for r in rows:
-        s = savings(r["tier"], r["overlap_m"], clean)
+        s = savings_for(conn, r, clean)
         out.append({"opportunity_id": r["id"], "tier": r["tier"], "default_savings_usd": _usd(r["savings_low"], r["savings_high"]),
                     "new_savings_usd": _usd(s["low"], s["high"])})
     values = {k: {"low": v["low"], "high": v["high"]} for k, v in ASSUMPTIONS.items()} | clean

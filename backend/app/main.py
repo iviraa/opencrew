@@ -12,7 +12,7 @@ from app.config import ASSUMPTIONS, MAX_DRIVE_MIN, STATUSES
 from app import outreach, vendors
 from app.crewly import agent, brief
 from app.db import ROOT, connect, get_conn
-from app.engine.cost import savings
+from app.engine.cost import savings_for
 from app.engine.overlap import recompute
 from app.engine import equipment, plan
 from app.engine.phases import build_phases
@@ -76,7 +76,7 @@ def opportunity(opp_id: int, conn=Depends(get_conn)):
     job_rows = conn.execute(JOB_SQL + " WHERE j.id IN (%s, %s)", (op["job_a"], op["job_b"])).fetchall()
     by_id = {j["id"]: j for j in job_rows}
     return {**op, "a": by_id[op["job_a"]], "b": by_id[op["job_b"]], "shareable": shareable(op["tier"], op["a_phase"], op["b_phase"], op["drive_min"]),
-            "savings": savings(op["tier"], op["overlap_m"], drive_min=op["drive_min"])}
+            "savings": savings_for(conn, op)}
 
 
 class Recompute(BaseModel):
@@ -94,10 +94,10 @@ class Savings(BaseModel):
 
 @api.post("/opportunities/{opp_id}/savings")
 def estimate(opp_id: int, body: Savings, conn=Depends(get_conn)):
-    op = conn.execute("SELECT tier, overlap_m, drive_min FROM opportunity WHERE id = %s", (opp_id,)).fetchone()
+    op = conn.execute("SELECT job_a, job_b, tier, overlap_m, drive_min, time_overlap FROM opportunity WHERE id = %s", (opp_id,)).fetchone()
     if not op:
         raise HTTPException(404, "opportunity not found")
-    return savings(op["tier"], op["overlap_m"], body.assumptions, op["drive_min"])
+    return savings_for(conn, op, body.assumptions)
 
 
 class Status(BaseModel):

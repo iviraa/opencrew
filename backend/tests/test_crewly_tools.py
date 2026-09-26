@@ -59,9 +59,9 @@ def test_savings_what_ifs(conn):
     r = call(conn, "estimate_savings", opportunity_id=jasper(conn), assumptions=yard)[0]
     assert r["savings_usd"] == "$0 to $0" and not r["crews_and_yards_shareable"] and r["drive_minutes"] > 45  # 3 mi apart, an hour by road
     mob = {"mobilization_usd": {"low": 100000, "high": 200000}}
-    assert call(conn, "estimate_savings", opportunity_id=okatie_kraft(conn), assumptions=mob)[0]["savings_usd"] == "$100,000 to $200,000"
+    est = call(conn, "estimate_savings", opportunity_id=okatie_kraft(conn), assumptions=mob)[0]["savings_usd"]
     r, ui = call(conn, "set_assumptions", overrides=mob, opportunity_id=okatie_kraft(conn))
-    assert r["opportunities"][0]["new_savings_usd"] == "$100,000 to $200,000" and not r["saved"]
+    assert r["opportunities"][0]["new_savings_usd"] == est != "$0 to $0" and not r["saved"]  # both tools use the same per-pair model
     assert ui[0]["type"] == "assumptions" and ui[0]["values"]["mobilization_usd"] == {"low": 100000.0, "high": 200000.0}
     assert "error" in call(conn, "set_assumptions", overrides={"bogus": {"low": 1, "high": 2}})[0]
     assert "error" in call(conn, "set_assumptions", overrides={"yard_usd": {"low": 9, "high": 1}})[0]
