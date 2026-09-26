@@ -78,7 +78,9 @@ def summary_of(article, keyword=None):
     text = article.get("text") or article.get("description") or ""
     sentences = [s.strip() for s in SENTENCE.split(text) if len(s.strip()) > 20]
     picks = [s for s in sentences if keyword and re.search(re.escape(keyword), s, re.I)] or sentences[:1]
-    s = (picks[0] if picks else article.get("title") or "").strip()
+    if not picks:
+        return None  # nothing beyond the headline; the UI shows the title alone
+    s = picks[0].strip()
     return (s[:197] + "...") if len(s) > 200 else s
 
 

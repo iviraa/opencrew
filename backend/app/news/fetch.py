@@ -84,9 +84,13 @@ def google_news(name, days=90):
             when = parsedate_to_datetime(it.findtext("pubDate") or "")
         except (TypeError, ValueError):
             when = None
-        desc = re.sub(r"<[^>]+>", " ", html.unescape(it.findtext("description") or ""))
+        desc = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html.unescape(it.findtext("description") or ""))).strip()
+        if desc.startswith(title):  # google's description is usually just the headline and the outlet again
+            desc = desc[len(title):].strip(" -|")
+        if source and desc.strip() == source:
+            desc = ""
         out.append({"url": it.findtext("link"), "title": title, "source": source or "Google News", "published": when,
-                    "description": re.sub(r"\s+", " ", desc).strip()[:500], "provider": "google_news", "query": name})
+                    "description": desc[:500], "provider": "google_news", "query": name})
     return [o for o in out if o["url"] and o["title"]]
 
 

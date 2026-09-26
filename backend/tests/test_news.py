@@ -77,6 +77,7 @@ def test_summary_stays_within_the_story_and_200_chars():
     long = "First sentence here. " + "The outage " + "x" * 300 + " ended."
     s = classify.summary_of({"title": "t", "text": long}, "outage")
     assert s.startswith("The outage") and len(s) <= 200
+    assert classify.summary_of({"title": "t", "text": ""}, "outage") is None
 
 
 def test_feed_item_shape_matches_the_contract():
