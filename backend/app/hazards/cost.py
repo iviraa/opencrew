@@ -3,6 +3,7 @@
 Every number traces to a key in config.ASSUMPTIONS (crew_costs.json) or a stop rule; ranges are low/high, never a single guess.
 """
 import calendar
+from contextvars import ContextVar
 from datetime import date, datetime, timedelta, timezone
 
 from app.config import ASSUMPTIONS, PHASES, STOP_RULES
@@ -30,8 +31,12 @@ ENDS = ("low", "high")
 MONTHS = list(calendar.month_abbr)
 
 
+OVERRIDES = ContextVar("hazard_cost_overrides", default=None)  # a what-if can swap assumption values for one evaluation
+
+
 def _a(key, end):
-    return float(ASSUMPTIONS[key][end])
+    o = (OVERRIDES.get() or {}).get(key) or {}
+    return float(o[end]) if end in o else float(ASSUMPTIONS[key][end])
 
 
 def _day(d):

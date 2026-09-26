@@ -15,6 +15,7 @@ from app.crewly.more_tools import MORE_TOOLS
 from app.crewly.outlook_tools import OUTLOOK_TOOLS
 from app.crewly.tools import REGIONS, TOOLS, _opp_row
 from app.planner.tools import planner_tools
+from app.scenario.tools import PROMPT as SCENARIO_PROMPT, scenario_tools
 from app.queries import OPP_SQL
 
 
@@ -213,6 +214,7 @@ def app_tools(ctx):
     tools["news_for"] = news_tool(ctx)
     tools.update(generate_tools(ctx))
     tools.update(stormlab_tools(ctx))
+    tools.update(scenario_tools(ctx))
     return tools
 
 
@@ -277,4 +279,4 @@ Rules:
 - For "plan our quarter/year", "what should we pursue" or "build a plan" call build_plan once (plan_status if one exists); it picks
   the pairs worth pursuing, the cheapest months to work each by weather history, savings and risks, and opens the Plan tab where the
   user accepts or skips items. Describe it with the tool's numbers only. For "why this pair/these months" call explain_plan_item.
-- Keep replies short and warm: one to three sentences or a compact list. Refer to overlaps as "#id" with both project names.""" + GENERATE_PROMPT + STORMLAB_PROMPT + memory_prompt(ctx.get("memories"))
+- Keep replies short and warm: one to three sentences or a compact list. Refer to overlaps as "#id" with both project names.""" + GENERATE_PROMPT + STORMLAB_PROMPT + SCENARIO_PROMPT + memory_prompt(ctx.get("memories"))

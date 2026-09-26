@@ -3,6 +3,7 @@
 Nothing here computes cost: month costs come from app.hazards.cost, savings from the opportunity row. Crewly proposes; a person decides.
 """
 import calendar
+from contextvars import ContextVar
 from datetime import date, datetime, timedelta
 
 from dateutil.relativedelta import relativedelta
@@ -12,6 +13,7 @@ from app.config import PHASES
 from app.hazards import cost as hcost
 from app.hazards.config import HAZARDS
 
+BLACKOUT = ContextVar("planner_blackout", default=None)  # {job_id or "*": [months]}, set by a what-if
 HORIZONS = {"quarter": (3, 8), "year": (12, 20), "window": (None, None)}  # months ahead, most items
 TARGET_MONTHS = 3  # how long one coordinated push lasts
 CONSIDER = 40  # most promising overlaps priced per build
@@ -176,6 +178,10 @@ def item_for(conn, pricer, op, company, reqs, period, today):
     if lo > hi and not (passed and period is None):
         return None, "outside the horizon"
     allowed = [m for m in months_between(lo, hi) if last(m) >= lo] if not passed else months_between(common[0], common[1])[-TARGET_MONTHS:]
+    bl = BLACKOUT.get() or {}  # a what-if rule: months no work may be planned in
+    banned = {int(x) for k in ("*", op["job_a"], op["job_b"]) for x in bl.get(k, [])}
+    if banned:
+        allowed = [m for m in allowed if m.month not in banned] or allowed[:0]
     months = pricer.pair(op)
     win = choose_window(months, allowed)
     if not win:
