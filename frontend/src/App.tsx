@@ -23,6 +23,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [crewlyOpen, setCrewlyOpen] = useState(false);
   const [crewlyIds, setCrewlyIds] = useState<number[] | null>(null);
+  const [review, setReview] = useState(0);
   const [fly, setFly] = useState<{ bbox: [number, number, number, number]; at: number } | null>(null);
 
   useEffect(() => {
@@ -30,6 +31,8 @@ export default function App() {
       .then(([j, o, a]) => { setJobs(j); setOpps(o); setAssumptions(a); })
       .catch((e) => setError(String(e)));
   }, [horizon]);
+
+  useEffect(() => { api.review().then((r) => setReview(r.length)).catch(() => {}); }, []);
 
   useEffect(() => {
     if (selectedId == null) { setDetail(null); return; }
@@ -73,6 +76,7 @@ export default function App() {
         <div className="ml-auto flex items-center gap-4 text-xs text-slate-500">
           {[...counts].map(([org, n]) => <span key={org}>{org}: <b className="text-slate-800">{n}</b> {horizon === "near" ? "phases" : "projects"}</span>)}
           <span>Opportunities: <b className="text-slate-800">{opps.length}</b></span>
+          {review > 0 && <span className="rounded bg-amber-100 px-2 py-0.5 text-amber-800" title="Projects parsed from filings but not yet placed on the map">{review} need location review</span>}
           <button onClick={() => setCrewlyOpen((o) => !o)}
             className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${crewlyOpen ? "bg-slate-900 text-white" : "bg-blue-600 text-white hover:bg-blue-700"}`}>
             Ask Crewly

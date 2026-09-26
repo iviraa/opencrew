@@ -43,6 +43,8 @@ export const api = {
   assumptions: () => call<Record<string, Assumption>>("/assumptions"),
   savings: (id: number, assumptions: Record<string, { low: number; high: number }>) =>
     call<Savings>(`/opportunities/${id}/savings`, { method: "POST", body: JSON.stringify({ assumptions }) }),
+  brief: (id: number) => call<{ markdown: string; summary_source: string }>(`/opportunities/${id}/brief`, { method: "POST" }),
+  review: () => call<{ id: number; org_id: string; reason: string; name: string }[]>("/review"),
   crewly: (messages: { role: string; text: string }[]) => call<CrewlyReply>("/crewly", { method: "POST", body: JSON.stringify({ messages }) }),
   setStatus: (id: number, status: string) =>
     call<{ id: number; status: string }>(`/opportunities/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
