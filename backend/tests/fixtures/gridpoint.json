@@ -1,0 +1,13 @@
+{
+  "properties": {
+    "windGust": {
+      "uom": "wmoUnit:km_h-1",
+      "values": [
+        {"validTime": "2026-09-27T12:00:00+00:00/PT3H", "value": 40.7},
+        {"validTime": "2026-09-28T15:00:00+00:00/PT2H", "value": 72.4},
+        {"validTime": "2026-09-28T20:00:00+00:00/PT1H", "value": 50.0},
+        {"validTime": "2026-09-29T12:00:00+00:00/PT1H", "value": null}
+      ]
+    }
+  }
+}

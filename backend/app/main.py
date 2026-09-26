@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import httpx
 from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, UploadFile
@@ -17,7 +17,7 @@ from app.engine.phases import build_phases
 from app.geo.drive import Drive
 from app.ingest import filing
 from app.queries import JOB_SQL, OPP_SQL, shareable
-from app.storm import replay
+from app.storm import live, replay
 
 app = FastAPI(title="OpenCrew")
 api = APIRouter(prefix="/api")
@@ -236,8 +236,48 @@ def procurement(conn=Depends(get_conn)):
 
 
 @api.get("/storm/frame")
-def storm_frame(at: datetime, conn=Depends(get_conn)):
-    return replay.frame(conn, at)
+def storm_frame(at: datetime | None = None, mode: str = "replay", conn=Depends(get_conn)):
+    if mode not in ("replay", "live"):
+        raise HTTPException(400, "mode must be replay or live")
+    return replay.frame(conn, at or datetime.now(timezone.utc), mode)
+
+
+INCIDENT_COLS = """id, ts, mode, kind, where_text, precision, utility_mentioned, customers_affected, confidence, verified, needs_confirmation,
+                   ST_Y(geom::geometry) AS lat, ST_X(geom::geometry) AS lon"""
+
+
+@api.get("/incidents")
+def incidents_list(at: datetime | None = None, mode: str = "replay", hours: float = 96, conn=Depends(get_conn)):
+    t = at or datetime.now(timezone.utc)
+    return conn.execute(f"SELECT {INCIDENT_COLS}, jsonb_array_length(sources) AS n_sources FROM incident "
+                        "WHERE mode = %s AND ts <= %s AND ts >= %s ORDER BY verified DESC, confidence DESC, ts",
+                        (mode, t, t - timedelta(hours=hours))).fetchall()
+
+
+@api.get("/incidents/{incident_id}")
+def incident_detail(incident_id: int, conn=Depends(get_conn)):
+    row = conn.execute(f"SELECT {INCIDENT_COLS}, sources, nearest, ST_NPoints(footprint::geometry) AS n_points FROM incident WHERE id = %s",
+                       (incident_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "incident not found")
+    return row
+
+
+@api.get("/weather/alerts")
+def weather_alerts(conn=Depends(get_conn)):
+    rows = conn.execute("""SELECT ts, payload, ST_AsGeoJSON(geom, 4)::json AS geometry FROM storm_event
+                           WHERE kind = 'nws_alert' AND payload->>'mode' = 'live' AND (payload->>'expire')::timestamptz > now()""").fetchall()
+    return {"type": "FeatureCollection", "features": [replay.feature(r) for r in rows]}
+
+
+@api.get("/weather/phase_risks")
+def weather_phase_risks(conn=Depends(get_conn)):
+    return conn.execute("SELECT job_id, site, day, gust_mph, work, alert, fetched_at FROM phase_risk ORDER BY day, gust_mph DESC").fetchall()
+
+
+@api.post("/live/poll")
+def live_poll(conn=Depends(get_conn)):
+    return live.poll(conn)  # official feeds, latest news, incidents, phase wind risks
 
 
 @api.get("/layers/grid")
