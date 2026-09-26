@@ -11,6 +11,7 @@ from app.db import ROOT, connect, init_schema
 
 STATES = {"13": ("GA", "Georgia"), "45": ("SC", "SouthCarolina")}
 TRACTS = "https://www2.census.gov/geo/tiger/GENZ2023/shp/cb_2023_{fips}_tract_500k.zip"
+STATE_LINES = "https://www2.census.gov/geo/tiger/GENZ2023/shp/cb_2023_us_state_500k.zip"
 SVI = "https://svi.cdc.gov/Documents/Data/2022/csv/states/{name}.csv"
 NRI = "https://services.arcgis.com/XG15cJAlne2vxtgt/arcgis/rest/services/National_Risk_Index_Census_Tracts/FeatureServer/0/query"
 LAYERS = ROOT / "data/layers"
@@ -21,6 +22,11 @@ def download(url, path):
     if not path.exists():
         path.write_bytes(httpx.get(url, headers=HEADERS, timeout=120, follow_redirects=True).raise_for_status().content)
     return path
+
+
+def state_lines():
+    if not (LAYERS / "states/cb_2023_us_state_500k.shp").exists():  # used by the home-state check in geolocation
+        zipfile.ZipFile(download(STATE_LINES, LAYERS / "states.zip")).extractall(LAYERS / "states")
 
 
 def tracts(fips):
@@ -67,6 +73,8 @@ def grid_lines(conn):
 
 
 def main():
+    LAYERS.mkdir(parents=True, exist_ok=True)
+    state_lines()
     with connect() as conn:
         init_schema(conn)
         conn.execute("TRUNCATE tract")
