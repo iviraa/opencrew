@@ -117,7 +117,7 @@ function Row({ o, rank, selected, onSelect }: { o: Opportunity; rank: number; se
           </div>
           <div className="shrink-0 text-right">
             <div className={`display text-[16px] font-semibold ${o.savings_high > 0 ? "text-save" : "text-faint"}`}>{o.savings_high > 0 ? usd(o.savings_high) : "$0"}</div>
-            <div className="text-[12px] text-faint">{o.savings_high > 0 ? `from ${usd(o.savings_low)}` : "too far"}</div>
+            <div className="text-[12px] text-faint">{o.savings_high > 0 ? `from ${usd(o.savings_low)}` : far ? "too far" : "not same time"}</div>
             {o.status !== "not_contacted" && <div className="mt-1 text-[12px] font-semibold text-desc">{title(o.status)}</div>}
           </div>
         </div>

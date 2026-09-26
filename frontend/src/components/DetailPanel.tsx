@@ -1,6 +1,6 @@
 import { FileText, Info, Send } from "lucide-react";
 import { useEffect, useState } from "react";
-import { api, type Assumption, type Job, type OpportunityDetail, type Savings } from "../api";
+import { api, type Assumption, type Job, type OpportunityDetail, type Savings, type SavingsFactors } from "../api";
 import { BASIS_LABEL, FLAG_LABEL, QUALITY_LABEL, STATUSES, TIER_HINT, miles, monthYear, pct, title, tooFar, usd } from "../format";
 import HazardBadge from "./HazardBadge";
 import BriefModal from "./BriefModal";
@@ -77,10 +77,18 @@ export default function DetailPanel({ detail, assumptions, onClose, onStatus, on
               The sites are {Math.round(detail.drive_min ?? 0)} minutes apart by road, over the 45 minute limit for sharing crews or a yard.
             </p>
           </div>
+        ) : savings.high === 0 ? (
+          <div className="mt-5 rounded-[20px] bg-soft px-5 py-4">
+            <div className="display text-[24px] font-semibold text-muted">Not at the same time</div>
+            <p className="mt-1 text-[14px] text-muted">
+              The work windows are {savings.factors?.gap_days != null ? gap(savings.factors.gap_days) : "too far"} apart, so a crew cannot move straight from one job to the other.
+            </p>
+          </div>
         ) : (
           <div className="mt-5 rounded-[20px] bg-save-soft px-5 py-4">
             <div className="display text-[30px] font-semibold leading-tight text-save">{usd(savings.low)} to {usd(savings.high)}</div>
             <p className="mt-1 text-[14px] text-ink/80">Could be saved if the two jobs are scheduled together.</p>
+            {savings.factors && <p className="mt-2 text-[13px] text-muted">{factorText(savings.factors)}</p>}
           </div>
         )}
 
@@ -236,3 +244,12 @@ function ordinal(n: number) {
   const s = n % 100 >= 11 && n % 100 <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[n % 10] ?? "th";
   return `${n}${s}`;
 }
+
+function factorText(f: SavingsFactors) {
+  const parts = [f.kv ? `sized for a ${f.kv} kV job` : "job size unknown, full cost range"];
+  parts.push(f.gap_days && f.same_time < 1 && f.same_time > 0 && f.gap_days > 0 ? `crew handed over ${gap(f.gap_days)} later (${Math.round(f.same_time * 100)}%)` : `${Math.round(f.same_time * 100)}% of the time together`);
+  parts.push(`drive keeps ${Math.round(f.drive * 100)}%`);
+  return `Scaled by: ${parts.join(", ")}.`;  // mirrors backend cost.factors
+}
+
+const gap = (days: number) => (days < 60 ? `${days} days` : days < 730 ? `${Math.round(days / 30)} months` : `${Math.round(days / 365)} years`);

@@ -15,7 +15,8 @@ export type Opportunity = {
   b_name: string; b_phase: string | null; b_start: string; b_org: string; b_color: string; b_conf: number; b_quality: string;
 };
 
-export type Savings = { low: number; high: number; items: Record<string, { low: number; high: number }> };
+export type SavingsFactors = { same_time: number; drive: number; size: number | null; kv: number | null; gap_days: number | null };
+export type Savings = { low: number; high: number; items: Record<string, { low: number; high: number }>; factors?: SavingsFactors };
 
 export type OpportunityDetail = Opportunity & { a: Job; b: Job; shareable: string[]; savings: Savings };
 
