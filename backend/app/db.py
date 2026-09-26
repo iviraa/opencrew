@@ -21,5 +21,5 @@ def get_conn():
 
 def init_schema(conn, reset=False):
     if reset:
-        conn.execute("DROP TABLE IF EXISTS outreach, contact, opportunity, storm_event, job_version, job_review, job, source_doc, org CASCADE")
+        conn.execute("DROP TABLE IF EXISTS outreach, contact, opportunity, storm_event, job_version, job_review, job, source_doc, org CASCADE")  # keeps reference layers
     conn.execute((Path(__file__).parent / "schema.sql").read_text())

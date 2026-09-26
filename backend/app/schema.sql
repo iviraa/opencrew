@@ -48,6 +48,15 @@ CREATE TABLE IF NOT EXISTS job (
 CREATE INDEX IF NOT EXISTS job_geom_idx ON job USING GIST (geom);
 CREATE INDEX IF NOT EXISTS job_window_idx ON job USING GIST (work_window);
 
+CREATE TABLE IF NOT EXISTS tract (
+  geoid          TEXT PRIMARY KEY,
+  state          TEXT,
+  geom           GEOMETRY(MultiPolygon, 4326),
+  risk           REAL,                   -- FEMA NRI hurricane risk score / 100
+  vulnerability  REAL                    -- CDC SVI overall percentile
+);
+CREATE INDEX IF NOT EXISTS tract_geom_idx ON tract USING GIST (geom);
+
 CREATE TABLE IF NOT EXISTS job_review (
   id             SERIAL PRIMARY KEY,
   org_id         TEXT REFERENCES org(id),
