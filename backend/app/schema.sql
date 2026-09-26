@@ -151,3 +151,32 @@ CREATE TABLE IF NOT EXISTS outreach (
   sent_at         TIMESTAMPTZ,
   reply_summary   TEXT
 );
+
+CREATE TABLE IF NOT EXISTS incident (
+  id                  BIGSERIAL,
+  ts                  TIMESTAMPTZ NOT NULL,
+  mode                TEXT NOT NULL DEFAULT 'replay',  -- replay | live
+  kind                TEXT NOT NULL,                   -- downed_line | substation_damage | outage | tree_on_line | flooding | wind_damage | tornado
+  geom                GEOGRAPHY(Point, 4326),
+  footprint           GEOGRAPHY(MultiPoint, 4326),     -- every merged source location
+  where_text          TEXT,
+  precision           TEXT,                            -- exact | road | town | county | state
+  utility_mentioned   TEXT,
+  customers_affected  INT,
+  confidence          REAL,
+  verified            BOOLEAN,
+  needs_confirmation  BOOLEAN,
+  sources             JSONB,                           -- [{type, name, url, title, quote_evidence, ts}]
+  nearest             JSONB                            -- {org: {asset, km}}
+);
+SELECT create_hypertable('incident', by_range('ts'), if_not_exists => TRUE);
+
+CREATE TABLE IF NOT EXISTS phase_risk (
+  job_id      TEXT,
+  site        TEXT,
+  day         DATE,
+  gust_mph    REAL,
+  work        TEXT,
+  alert       TEXT,
+  fetched_at  TIMESTAMPTZ DEFAULT now()
+);

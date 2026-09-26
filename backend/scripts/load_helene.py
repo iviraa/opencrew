@@ -2,7 +2,7 @@ import json
 import re
 
 from app.db import ROOT, connect, init_schema
-from app.storm import helene
+from app.storm import helene, incidents, news
 
 OWNERS = {"desc": re.compile(r"dominion|sce&g|south carolina (electric|gas)", re.I), "gpc": re.compile(r"georgia power", re.I)}
 
@@ -24,12 +24,13 @@ def main():
     with connect() as conn:
         init_schema(conn)
         print("assets", load_assets(conn))
-        conn.execute("DELETE FROM storm_event")
+        conn.execute("DELETE FROM storm_event WHERE coalesce(payload->>'mode', 'replay') = 'replay'")  # keep live rows
         for source, gen in [("NHC", helene.track_events), ("NHC", helene.cone_events), ("NWS via IEM", helene.warning_events), ("SPC", helene.spc_events), ("NWS LSR via IEM", helene.lsr_events)]:
             rows = [(ts, kind, wkt, json.dumps({**payload, "source": source})) for ts, kind, wkt, payload in gen()]
             with conn.cursor() as cur:
                 cur.executemany("INSERT INTO storm_event (ts, kind, geom, payload, confidence, verified) VALUES (%s, %s, ST_GeogFromText(%s), %s, 1.0, TRUE)", rows)
             print(gen.__name__, len(rows))
+        print("incidents", dict(incidents.rebuild(conn, "replay", news.replay_items())))
 
 
 if __name__ == "__main__":

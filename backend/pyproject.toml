@@ -17,6 +17,7 @@ dependencies = [
     "python-multipart>=0.0.32",
     "python-dateutil>=2.9.0.post0",
     "ortools>=9.15.6755",
+    "trafilatura>=2.2.0",
 ]
 
 [dependency-groups]
