@@ -165,7 +165,7 @@ export function OverlapDetailPanel({ me, id, requests, onBack, onSent, onOpenReq
     setSending(true); setErr(null);
     try {
       onSent(await requestsApi.send(me, d, note));
-      setJustSent(true); beaver("happy");
+      setJustSent(true); setNote(""); beaver("happy");
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e)); beaver("sad");
     } finally { setSending(false); }
@@ -236,7 +236,7 @@ export function OverlapDetailPanel({ me, id, requests, onBack, onSent, onOpenReq
 
         <section className="rounded-2xl border-2 border-pen px-3 py-3">
           <h3 className="mb-1 flex items-center gap-1.5 font-logo text-base font-semibold"><Handshake size={17} /> Collaborate</h3>
-          {justSent || (req?.status === "pending" && req.from_company === me.company) ? (
+          {(justSent && !req) || (req?.status === "pending" && req.from_company === me.company) ? (  // the live status wins once it arrives
             <div className="pop-in">
               <p className="flex items-center gap-1.5 text-sm font-semibold text-save"><Check size={16} /> Collaboration request sent</p>
               <p className="mt-0.5 text-xs text-muted">We'll let you know when {me.other_name} answers.</p>

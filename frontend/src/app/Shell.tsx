@@ -81,9 +81,8 @@ export default function Shell() {
         const list = await requestsApi.list().catch(() => null);
         if (list) setReqs(list);
         noticesApi.list().then(setNotes).catch(() => {});
-        const r = list?.find((x) => x.id === n.request_id);
         const who = COMPANY[meRef.current!.other].name;
-        setToast({ request: n.request_id, text: n.kind === "request" ? `${who} sent you a collaboration request` : `${who} ${n.kind} your request${r ? `: ${r.summary.ours}` : ""}` });
+        setToast({ request: n.request_id, text: n.kind === "request" ? `${who} sent you a collaboration request` : `${who} ${n.kind} your request` });
         setRing((x) => x + 1);
         beaver(n.kind === "declined" ? "sad" : n.kind === "approved" ? "happy" : "surprised");
       })
@@ -91,6 +90,12 @@ export default function Shell() {
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [me]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { setPop(null); setToast(null); } };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 7000); return () => clearTimeout(t); }, [toast]);
 
@@ -308,7 +313,7 @@ export default function Shell() {
         )}
 
         {toast && (
-          <div className="pop-in absolute left-1/2 top-3 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full border-2 border-pen bg-white py-1.5 pl-4 pr-1.5 shadow-lg">
+          <div className="pop-in absolute left-1/2 top-[68px] z-30 flex -translate-x-1/2 items-center gap-3 whitespace-nowrap rounded-full border-2 border-pen bg-white py-1.5 pl-4 pr-1.5 shadow-lg" role="status">
             <Bell size={16} className="text-grape" />
             <span className="text-sm font-semibold">{toast.text}</span>
             <button onClick={() => { openRequest(toast.request); setToast(null); }} className="rounded-full bg-grape px-3 py-1 text-sm font-semibold text-white">Open</button>
