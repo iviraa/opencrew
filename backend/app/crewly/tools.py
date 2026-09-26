@@ -187,5 +187,7 @@ TOOLS = {
 }
 
 from app.crewly.more_tools import MORE_TOOLS  # noqa: E402  kept at the bottom so tools stay one registry
+from app.crewly.plan_tools import PLAN_TOOLS  # noqa: E402
 
 TOOLS.update(MORE_TOOLS)
+TOOLS.update(PLAN_TOOLS)
