@@ -109,7 +109,7 @@ def test_ingest_rejects_non_pdf(client):
         r = client.post("/api/ingest", files={"file": ("x.pdf", b"not a pdf", "application/pdf")})
         assert r.status_code == 422 and "not a PDF" in r.json()["detail"]
     finally:
-        for f in set(UPLOADS.iterdir()) - before:  # drop the test upload
+        for f in (set(UPLOADS.iterdir()) if UPLOADS.exists() else set()) - before:  # drop the test upload
             f.unlink()
 
 
