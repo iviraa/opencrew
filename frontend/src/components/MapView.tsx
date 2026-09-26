@@ -3,7 +3,7 @@ import type { GeoJSONSource, LngLatBoundsLike } from "maplibre-gl";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { useEffect, useRef, useState } from "react";
 import { api, type JobCollection, type Opportunity, type StormFrame } from "../api";
-import { TIER_COLOR, TIER_LABEL } from "../format";
+import { QUALITY_LABEL, TIER_COLOR, TIER_LABEL, monthYear, title } from "../format";
 
 type Props = {
   jobs: JobCollection | null;
@@ -22,7 +22,29 @@ maplibregl.setWorkerUrl(workerUrl); // v6 needs an explicit worker once bundled
 const STYLE = "https://tiles.openfreemap.org/styles/positron";
 const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 const ROW_KEY = ["coalesce", ["get", "parent_job_id"], ["get", "id"]] as maplibregl.ExpressionSpecification;  // phases share their project's row
-const tierColor =["match", ["get", "tier"], ...Object.entries(TIER_COLOR).flat(), "#64748b"] as unknown as maplibregl.ExpressionSpecification;
+const tierColor = ["match", ["get", "tier"], ...Object.entries(TIER_COLOR).flat(), "#64748b"] as unknown as maplibregl.ExpressionSpecification;
+
+const esc = (v: unknown) => String(v ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);  // popup text comes from filings and storm reports
+const present = (v: unknown) => v != null && v !== "null" && v !== "";
+const stamp = (iso: unknown) => new Date(String(iso)).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+
+function jobPopup(p: Record<string, unknown>) {
+  const kind = `${title(String(p.job_type))}${present(p.voltage_kv) ? ` · ${p.voltage_kv} kV` : ""}${present(p.phase) ? ` · ${p.phase}` : ""}`;
+  const quality = `${QUALITY_LABEL[String(p.geom_quality)] ?? p.geom_quality} · ${Math.round(Number(p.confidence) * 100)}% location confidence`;
+  const when = p.job_type === "restoration"
+    ? `Restoration window ${stamp(p.start_at)} → ${stamp(p.end_at)} ET`
+    : `Work ${monthYear(String(p.start_at))} → ${monthYear(String(p.end_at))} · in service ${String(p.in_service).slice(0, 10)}`;
+  const source = present(p.source_title) ? `${p.source_title}${present(p.source_page) ? `, p.${p.source_page}` : ""}` : "";
+  const reports = p.job_type === "restoration" && present(p.description) ? String(p.description).slice(0, 320) : "";
+  return `<div style="max-width:280px;line-height:1.35">
+    <div style="font-weight:600">${esc(p.name)}</div>
+    <div style="color:${esc(p.color)};font-weight:500">${esc(p.org_name)}</div>
+    <div>${esc(kind)}</div><div>${esc(when)}</div>
+    <div style="color:#64748b">${esc(quality)}</div>
+    ${source ? `<div style="color:#94a3b8">${esc(source)}</div>` : ""}
+    ${reports ? `<div style="margin-top:4px;color:#475569">${esc(reports)}</div>` : ""}
+  </div>`;
+}
 
 function oppFeatures(opps: Opportunity[]): GeoJSON.FeatureCollection {
   return {
@@ -99,6 +121,8 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
           "circle-color": ["case", ["==", ["get", "geom_quality"], "partial_point"], "#ffffff", ["get", "color"]],
           "circle-stroke-color": ["get", "color"], "circle-stroke-width": 2, "circle-opacity": faded, "circle-stroke-opacity": faded,
         } });
+      m.addLayer({ id: "job-hit", type: "line", source: "jobs", filter: ["==", ["geometry-type"], "LineString"],
+        paint: { "line-color": "#000", "line-width": 14, "line-opacity": 0.01 } });  // wide invisible target for hover and click
       m.addLayer({ id: "job-selected", type: "line", source: "jobs", filter: ["in", ["get", "id"], ["literal", []]],
         paint: { "line-color": "#0f172a", "line-width": 7, "line-opacity": 0.25 } });
       m.addLayer({ id: "opp-markers", type: "circle", source: "opps", filter: ["has", "marker"],
@@ -116,8 +140,8 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
         paint: { "text-color": "#166534", "text-halo-color": "#fff", "text-halo-width": 1.5 } });
       m.on("click", "reports", (e) => {
         const p = JSON.parse(String(e.features![0].properties.payload));
-        new maplibregl.Popup({ closeButton: false }).setLngLat(e.lngLat)
-          .setHTML(`<b>${p.type ?? p.kind} · ${p.place}, ${p.state}</b><br/>${p.remark ?? p.comments ?? ""}`).addTo(m);
+        new maplibregl.Popup({ closeButton: false, maxWidth: "300px" }).setLngLat(e.lngLat)
+          .setHTML(`<b>${esc(p.type ?? p.kind)} · ${esc(p.place)}, ${esc(p.state)}</b><br/>${esc(p.remark ?? p.comments)}`).addTo(m);
       });
       m.addLayer({ id: "opp-selected", type: "circle", source: "opps", filter: ["all", ["has", "marker"], ["==", ["get", "id"], -1]],
         paint: { "circle-radius": 18, "circle-color": "transparent", "circle-stroke-color": "#0f172a", "circle-stroke-width": 3 } });
@@ -128,19 +152,18 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
 
       m.on("click", (e) => clickRef.current?.(e.lngLat.lng, e.lngLat.lat));
       m.on("click", "opp-markers", (e) => { if (!clickRef.current) onSelectRef.current(Number(e.features![0].properties.id)); });
-      for (const layer of ["job-lines", "job-lines-approx", "job-points"]) {
+      for (const layer of ["job-hit", "job-points"]) {
         m.on("click", layer, (e) => {
-          const p = e.features![0].properties;
-          new maplibregl.Popup({ closeButton: false }).setLngLat(e.lngLat)
-            .setHTML(`<b>${p.name}</b><br/>${p.org_name} · in service ${String(p.in_service).slice(0, 10)}`).addTo(m);
+          if (clickRef.current || m.queryRenderedFeatures(e.point, { layers: ["opp-markers"] }).length) return;  // markers win
+          new maplibregl.Popup({ closeButton: false, maxWidth: "300px" }).setLngLat(e.lngLat).setHTML(jobPopup(e.features![0].properties)).addTo(m);
         });
       }
-      for (const layer of ["opp-markers", "job-lines", "job-lines-approx", "job-points"]) {
+      for (const layer of ["opp-markers", "job-hit", "job-points"]) {
         m.on("mouseenter", layer, () => (m.getCanvas().style.cursor = "pointer"));
         m.on("mouseleave", layer, () => (m.getCanvas().style.cursor = ""));
       }
       let hovered: string | null = null;
-      for (const layer of ["job-lines", "job-lines-approx", "job-points"]) {
+      for (const layer of ["job-hit", "job-points"]) {
         m.on("mousemove", layer, (e) => {
           const p = e.features![0].properties;
           const key = p.parent_job_id && p.parent_job_id !== "null" ? String(p.parent_job_id) : String(p.id);
