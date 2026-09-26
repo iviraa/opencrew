@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.config import ASSUMPTIONS, MAX_DRIVE_MIN, STATUSES
-from app import outreach, vendors
+from app import app_api, outreach, vendors
 from app.crewly import agent, brief
 from app.db import ROOT, connect, get_conn
 from app.engine.cost import savings_for
@@ -475,6 +475,7 @@ def hazards_one(job_id: str, conn=Depends(get_conn)):
 
 
 app.include_router(api)
+app.include_router(app_api.router)
 
 STATIC = os.environ.get("STATIC_DIR") or str(ROOT / "frontend/dist")
 if os.path.isdir(STATIC):
