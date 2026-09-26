@@ -1,8 +1,8 @@
-import { API_BASE } from "../apiBase";
+import { API_BASE, SUPABASE_KEY, SUPABASE_URL } from "../apiBase";
 import { createClient, type Session } from "@supabase/supabase-js";
 import type { Job, Opportunity, OpportunityDetail } from "../api";
 
-export const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
+export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 export const EMAIL_DOMAIN = "crewly.test";  // people log in with a username; auth wants an email
 

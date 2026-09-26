@@ -1,10 +1,12 @@
 import asyncio
+import json
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 
 import httpx
 from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -518,6 +520,13 @@ app.include_router(api)
 app.include_router(app_api.router)
 app.include_router(weather_api.router)
 app.include_router(hazards_api.router)
+
+@app.get("/config.js", include_in_schema=False)
+def web_config():
+    """Public settings for the built frontend, so the image needs no build-time variables."""
+    cfg = {"supabaseUrl": os.environ.get("SUPABASE_URL", ""), "supabaseKey": os.environ.get("SUPABASE_PUBLISHABLE_KEY", ""), "apiUrl": ""}
+    return Response(f"window.__CREWLY__ = {json.dumps(cfg)};", media_type="application/javascript", headers={"Cache-Control": "no-store"})
+
 
 STATIC = os.environ.get("STATIC_DIR") or str(ROOT / "frontend/dist")
 if os.path.isdir(STATIC):
