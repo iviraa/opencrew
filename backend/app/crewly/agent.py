@@ -30,14 +30,14 @@ Rules:
   serves both utilities); only quote its headline when it is on, and always say it rests on that assumption.
 - Keep replies short: a few sentences or a compact list. Data comes from public filings only."""
 
-def _declarations():
+def _declarations(tools=TOOLS):
     return [types.FunctionDeclaration(name=name, description=desc,
                                       parameters_json_schema={"type": "object", "properties": props, "required": req})
-            for name, (_, desc, props, req) in TOOLS.items()]
+            for name, (_, desc, props, req) in tools.items()]
 
 
-def execute(conn, name, args):
-    fn = TOOLS.get(name)
+def execute(conn, name, args, tools=TOOLS):
+    fn = tools.get(name)
     try:
         return fn[0](conn, **args) if fn else ({"error": f"unknown tool {name}"}, [])
     except Exception as e:  # tool errors go back to the model, not the user
@@ -45,26 +45,32 @@ def execute(conn, name, args):
         return {"error": str(e)}, []
 
 
-def run(conn, messages):
+def run(conn, messages, system=SYSTEM, tools=TOOLS):
     which = provider()
     if not which:
         return {"reply": "Crewly is offline: set GEMINI_API_KEY or LOCAL_LLM_URL in .env.", "ui_actions": [], "tool_calls": [], "unsourced": []}
     try:
-        return run_local(conn, messages) if which == "local" else run_gemini(conn, messages)
+        return run_local(conn, messages, system, tools) if which == "local" else run_gemini(conn, messages, system, tools)
     except Exception as e:  # model outages become a reply, not a 500
         conn.rollback()
-        return {"reply": f"Crewly could not reach the model right now ({str(e)[:160]}). Please try again in a minute.",
-                "ui_actions": [], "tool_calls": [], "unsourced": []}
+        return {"reply": offline_reply(e), "ui_actions": [], "tool_calls": [], "unsourced": [], "offline": True}
 
 
-def run_local(conn, messages):
-    tools = [{"type": "function", "function": {"name": n, "description": d, "parameters": {"type": "object", "properties": p, "required": r}}}
-             for n, (_, d, p, r) in TOOLS.items()]
-    msgs = [{"role": "system", "content": SYSTEM}] + [{"role": "assistant" if m["role"] == "model" else "user", "content": m["text"]} for m in messages]
+def offline_reply(e):
+    text = str(e)
+    if "RESOURCE_EXHAUSTED" in text or "quota" in text.lower():  # free tier daily limits
+        return "I've used up my thinking time for today (the Gemini quota ran out), so I can't answer right now. The map, overlaps and requests all still work."
+    return "I couldn't reach my brain just now. Please try again in a minute."
+
+
+def run_local(conn, messages, system=SYSTEM, tools=TOOLS):
+    decls = [{"type": "function", "function": {"name": n, "description": d, "parameters": {"type": "object", "properties": p, "required": r}}}
+             for n, (_, d, p, r) in tools.items()]
+    msgs = [{"role": "system", "content": system}] + [{"role": "assistant" if m["role"] == "model" else "user", "content": m["text"]} for m in messages]
     ui, calls_log = [], []
     tool_text = next((m["text"] for m in reversed(messages) if m["role"] != "model"), "")  # numbers the user gave are allowed back
     for _ in range(MAX_STEPS):
-        msg = local_chat(msgs, tools=tools)
+        msg = local_chat(msgs, tools=decls)
         calls = msg.get("tool_calls") or []
         if not calls:
             reply = (msg.get("content") or "").strip()
@@ -76,7 +82,7 @@ def run_local(conn, messages):
                 args = json.loads(call["function"].get("arguments") or "{}")
             except json.JSONDecodeError:
                 args = {}
-            result, actions = execute(conn, name, args)
+            result, actions = execute(conn, name, args, tools)
             ui += actions
             tool_text += json.dumps(result, default=str) + json.dumps(args, default=str)
             calls_log.append({"name": name, "args": args})
@@ -84,9 +90,9 @@ def run_local(conn, messages):
     return {"reply": "I ran out of steps; try a narrower question.", "ui_actions": ui, "tool_calls": calls_log, "unsourced": []}
 
 
-def run_gemini(conn, messages):
+def run_gemini(conn, messages, system=SYSTEM, tools=TOOLS):
     contents = [types.Content(role="model" if m["role"] == "model" else "user", parts=[types.Part.from_text(text=m["text"])]) for m in messages]
-    config = types.GenerateContentConfig(system_instruction=SYSTEM, temperature=0.2, tools=[types.Tool(function_declarations=_declarations())],
+    config = types.GenerateContentConfig(system_instruction=system, temperature=0.2, tools=[types.Tool(function_declarations=_declarations(tools))],
                                          automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True))
     ui, calls_log = [], []
     tool_text = next((m["text"] for m in reversed(messages) if m["role"] != "model"), "")  # numbers the user gave are allowed back
@@ -99,7 +105,7 @@ def run_gemini(conn, messages):
         contents.append(resp.candidates[0].content)
         parts = []
         for call in calls:
-            result, actions = execute(conn, call.name, call.args or {})
+            result, actions = execute(conn, call.name, call.args or {}, tools)
             ui += actions
             tool_text += json.dumps(result, default=str) + json.dumps(call.args or {}, default=str)
             calls_log.append({"name": call.name, "args": call.args or {}})

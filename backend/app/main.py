@@ -9,8 +9,10 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.config import ASSUMPTIONS, MAX_DRIVE_MIN, STATUSES
-from app import outreach, vendors
-from app.crewly import agent, brief
+from app import app_api, outreach, vendors, weather_api
+from app.hazards import api as hazards_api
+from app.companies import companies
+from app.crewly import agent, brief, proactive
 from app.db import ROOT, connect, get_conn
 from app.engine.cost import savings_for
 from app.engine.overlap import recompute
@@ -26,6 +28,11 @@ def poll_once():
         return live.poll(conn)
 
 
+def suggest_once(company):
+    with connect() as conn:
+        return proactive.scan(conn, company)
+
+
 @asynccontextmanager
 async def lifespan(_app):
     minutes = float(os.environ.get("LIVE_POLL_MINUTES") or 0)  # off unless set, so tests never hit live feeds
@@ -39,9 +46,38 @@ async def lifespan(_app):
             await asyncio.sleep(minutes * 60)
 
     task = asyncio.create_task(loop()) if minutes > 0 else None
+    hazard_minutes = float(os.environ.get("HAZARDS_REFRESH_MINUTES") or 0)  # live hazard layers, off unless set
+
+    def hazards_once():
+        from app.hazards import layers as hazard_layers
+        with connect() as conn:
+            return hazard_layers.refresh(conn)
+
+    async def hazards_loop():
+        while True:
+            try:
+                await asyncio.to_thread(hazards_once)
+            except Exception as e:  # a bad feed must not kill the loop
+                print("hazard refresh failed:", e)
+            await asyncio.sleep(hazard_minutes * 60)
+
+    hazard_task = asyncio.create_task(hazards_loop()) if hazard_minutes > 0 else None
+    nudge = float(os.environ.get("CREWLY_PROACTIVE_MINUTES") or 0)  # crewly's suggestions, off unless set
+
+    async def suggest():
+        while True:
+            for company in companies():
+                try:
+                    await asyncio.to_thread(suggest_once, company)
+                except Exception as e:  # one bad scan must not stop the others
+                    print("crewly suggestions failed:", company, e)
+            await asyncio.sleep(nudge * 60)
+
+    nudger = asyncio.create_task(suggest()) if nudge > 0 else None
     yield
-    if task:
-        task.cancel()
+    for t in (task, hazard_task, nudger):
+        if t:
+            t.cancel()
 
 
 app = FastAPI(title="OpenCrew", lifespan=lifespan)
@@ -475,6 +511,9 @@ def hazards_one(job_id: str, conn=Depends(get_conn)):
 
 
 app.include_router(api)
+app.include_router(app_api.router)
+app.include_router(weather_api.router)
+app.include_router(hazards_api.router)
 
 STATIC = os.environ.get("STATIC_DIR") or str(ROOT / "frontend/dist")
 if os.path.isdir(STATIC):

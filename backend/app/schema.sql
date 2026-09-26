@@ -220,3 +220,66 @@ CREATE TABLE IF NOT EXISTS job_hazard (
   since_year       INT,
   checked_at       TIMESTAMPTZ DEFAULT now()
 );
+
+-- national expansion: one utility per state, keeping every field the planners publish
+ALTER TABLE org ADD COLUMN IF NOT EXISTS state TEXT;  -- home state, two letters
+ALTER TABLE org ADD COLUMN IF NOT EXISTS planner TEXT;  -- who publishes its plan: PJM, MISO, SPP, ERCOT, filing...
+ALTER TABLE org ADD COLUMN IF NOT EXISTS short TEXT;
+ALTER TABLE org ADD COLUMN IF NOT EXISTS login TEXT UNIQUE;  -- crewly username
+ALTER TABLE source_doc ADD COLUMN IF NOT EXISTS planner TEXT;
+ALTER TABLE source_doc ADD COLUMN IF NOT EXISTS edition TEXT;  -- e.g. MTEP24, RTEP 2025
+ALTER TABLE source_doc ADD COLUMN IF NOT EXISTS sha256 TEXT;  -- proves which file the rows came from
+ALTER TABLE job ADD COLUMN IF NOT EXISTS state TEXT;
+ALTER TABLE job ADD COLUMN IF NOT EXISTS planner TEXT;
+ALTER TABLE job ADD COLUMN IF NOT EXISTS source_project_id TEXT;  -- the planner's own id, e.g. PJM b3800
+ALTER TABLE job ADD COLUMN IF NOT EXISTS status TEXT;  -- planned, under construction, engineering...
+ALTER TABLE job ADD COLUMN IF NOT EXISTS need TEXT;  -- why it is built: reliability, load growth, economic, policy
+ALTER TABLE job ADD COLUMN IF NOT EXISTS length_mi REAL;
+ALTER TABLE job ADD COLUMN IF NOT EXISTS counties TEXT[];
+ALTER TABLE job ADD COLUMN IF NOT EXISTS raw JSONB;  -- the whole source row, nothing thrown away
+CREATE INDEX IF NOT EXISTS job_org_state_idx ON job (org_id, state);
+UPDATE org SET state = CASE id WHEN 'desc' THEN 'SC' WHEN 'gpc' THEN 'GA' END, planner = 'filing',
+               short = CASE id WHEN 'desc' THEN 'Dominion SC' WHEN 'gpc' THEN 'Georgia Power' END,
+               login = CASE id WHEN 'desc' THEN 'dominion' WHEN 'gpc' THEN 'georgia' END
+WHERE id IN ('desc', 'gpc') AND state IS NULL;
+UPDATE job j SET state = o.state, planner = o.planner FROM org o WHERE o.id = j.org_id AND j.state IS NULL;
+
+-- hazards that affect the work: live and outlook layers, ten years of storm history by county and month, fema risk scores
+CREATE TABLE IF NOT EXISTS hazard_layer (
+  id           BIGSERIAL PRIMARY KEY,
+  layer        TEXT NOT NULL,              -- alerts | outlooks | fires | quakes
+  hazard       TEXT NOT NULL,              -- wind, storms, tornado, winter, heat, flood, tropical, wildfire, earthquake, hail
+  product      TEXT NOT NULL,              -- nws_alert, spc, spc48, spc_fire, wpc_ero, nhc_gtwo, wfigs_*, usgs, cpc_*
+  label        TEXT,
+  rank         INT,                        -- 1 low to 3 high
+  period_start TIMESTAMPTZ NOT NULL,
+  period_end   TIMESTAMPTZ NOT NULL,
+  props        JSONB,
+  source       TEXT,
+  fetched_at   TIMESTAMPTZ NOT NULL,
+  geom         GEOGRAPHY NOT NULL
+);
+CREATE INDEX IF NOT EXISTS hazard_layer_geom_idx ON hazard_layer USING GIST (geom);
+CREATE INDEX IF NOT EXISTS hazard_layer_period_idx ON hazard_layer (hazard, period_start, period_end);
+CREATE TABLE IF NOT EXISTS hazard_fetch (
+  product     TEXT PRIMARY KEY,
+  fetched_at  TIMESTAMPTZ NOT NULL,
+  rows        INT
+);
+CREATE TABLE IF NOT EXISTS hazard_climate (
+  county_fips TEXT NOT NULL,
+  state       TEXT,
+  month       INT NOT NULL,
+  hazard      TEXT NOT NULL,
+  event_days  INT NOT NULL,                -- distinct days with an event over all the years
+  years       INT NOT NULL,
+  damage_usd  NUMERIC,
+  PRIMARY KEY (county_fips, month, hazard)
+);
+CREATE TABLE IF NOT EXISTS hazard_nri (
+  county_fips TEXT PRIMARY KEY,
+  state       TEXT,
+  county      TEXT,
+  risk_score  REAL,
+  scores      JSONB                        -- hazard -> fema risk score 0-100
+);

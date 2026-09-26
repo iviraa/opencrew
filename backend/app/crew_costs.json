@@ -1,0 +1,365 @@
+{
+  "generated": "2026-09-26",
+  "scope": "US transmission line crew cost and weather stop-rule references for the crewly 7-day crew board",
+  "sources": {
+    "bls_oes_api": {
+      "title": "BLS OEWS May 2025, SOC 49-9051 Electrical Power-Line Installers and Repairers (national + 10 states, via BLS Public API v2)",
+      "url": "https://api.bls.gov/publicAPI/v2/timeseries/data/ (series OEUN000000000000049905103/08/..., OEUS{fips}00000000000499051{03,08,01})",
+      "file": "bls_api_oes_499051_national.json; bls_api_oes_499051_states.json"
+    },
+    "bls_oes_page": {
+      "title": "BLS OEWS occupational profile 49-9051",
+      "url": "https://www.bls.gov/oes/current/oes499051.htm",
+      "file": "bls_oes_499051.htm"
+    },
+    "bls_ooh": {
+      "title": "BLS Occupational Outlook Handbook: Line Installers and Repairers (2025 median pay)",
+      "url": "https://www.bls.gov/ooh/installation-maintenance-and-repair/line-installers-and-repairers.htm",
+      "file": "bls_ooh_line_installers.htm"
+    },
+    "bls_ecec": {
+      "title": "BLS Employer Costs for Employee Compensation, June 2025 (USDL release 2025-09-12)",
+      "url": "https://www.bls.gov/news.release/archives/ecec_09122025.pdf",
+      "file": "bls_ecec_june2025.pdf"
+    },
+    "fema_equip_2025": {
+      "title": "FEMA 2025 Schedule of Equipment Rates (disasters declared on/after 2025-07-01)",
+      "url": "https://www.fema.gov/sites/default/files/documents/fema_pa_schedule-equipment-rates_2025.pdf",
+      "file": "fema_schedule_equipment_rates_2025.pdf"
+    },
+    "caltrans_eqrr_2026": {
+      "title": "Caltrans Labor Surcharge and Equipment Rental Rates, effective 2026-04-01 to 2026-08-31",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/construction/documents/equipment-rental-rates-and-labor-surcharge/book_26v3.pdf",
+      "file": "caltrans_eqrr_book_26v3.pdf"
+    },
+    "caltrans_eqrr_faq": {
+      "title": "Caltrans Equipment Rental Rates FAQ",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/construction/documents/equipment-rental-rates-and-labor-surcharge/eqrr-frequently-asked-questions-a11y.pdf",
+      "file": "caltrans_eqrr_faq.pdf"
+    },
+    "pressherald_cmp_2023": {
+      "title": "Portland Press Herald, 'Storm surge: To get lights back on, Maine pays a premium for crews from away' (2023-01-29), citing Central Maine Power",
+      "url": "https://www.pressherald.com/2023/01/29/storm-surge-to-get-lights-back-on-maine-pays-a-premium-for-crews-from-away/",
+      "file": "pressherald_2023_storm_crew_premium.htm"
+    },
+    "powersouth_scope_2025": {
+      "title": "PowerSouth / JP04 Emergency Power Restoration Scope of Services (rev. 2025-02-24)",
+      "url": "https://www.powersouth.com/wp-content/uploads/JP04-Scope-of-Services-Clean-02.24.25.pdf",
+      "file": "powersouth_emergency_restoration_scope_2025.pdf"
+    },
+    "appa_mutual_aid_2024": {
+      "title": "APPA Mutual Aid Agreement: Guiding Principles for Reimbursement and Documentation Matters (2024-06-24)",
+      "url": "https://www.publicpower.org/system/files/documents/20240624-Mutual-Aid-Agreement-Statement-of-Principles-For-Signature.pdf",
+      "file": "appa_mutual_aid_principles_2024.pdf"
+    },
+    "ecfr_1926_1431": {
+      "title": "29 CFR 1926.1431 Hoisting personnel (cranes)",
+      "url": "https://www.ecfr.gov/current/title-29/subtitle-B/chapter-XVII/part-1926/subpart-CC/section-1926.1431",
+      "file": "ecfr_1926_1431.htm"
+    },
+    "ecfr_1926_1417": {
+      "title": "29 CFR 1926.1417 Operation (cranes and derricks)",
+      "url": "https://www.ecfr.gov/current/title-29/subtitle-B/chapter-XVII/part-1926/subpart-CC/section-1926.1417",
+      "file": "ecfr_1926_1417.htm"
+    },
+    "ecfr_1926_964": {
+      "title": "29 CFR 1926.964 Overhead lines and live-line barehand work",
+      "url": "https://www.ecfr.gov/current/title-29/subtitle-B/chapter-XVII/part-1926/subpart-V/section-1926.964",
+      "file": "ecfr_1926_964.htm"
+    },
+    "genie_manual": {
+      "title": "Genie boom lift Operator's Manual, Part No. 1000231 (5th ed.)",
+      "url": "https://manuals.genielift.com/operators/english/1000231.pdf",
+      "file": "genie_boom_operators_manual_1000231.pdf"
+    },
+    "osha_lightning_fs3863": {
+      "title": "OSHA/NOAA Fact Sheet FS-3863 Lightning Safety When Working Outdoors (2016)",
+      "url": "https://www.osha.gov/sites/default/files/publications/OSHA3863.pdf",
+      "file": "osha_fs3863_lightning.pdf"
+    },
+    "nws_lightning": {
+      "title": "NWS Lightning Safety overview",
+      "url": "https://www.weather.gov/safety/lightning-safety-overview",
+      "file": "nws_lightning_safety_overview.htm"
+    },
+    "osha_heat_index_guide": {
+      "title": "OSHA 'Using the Heat Index: A Guide for Employers' (NALC-hosted copy)",
+      "url": "https://www.nalc.org/workplace-issues/body/OSHA-Using-the-Heat-Index-A-Guide-for-Employers.pdf",
+      "file": "osha_using_heat_index_guide.pdf"
+    },
+    "osha_heat_nprm": {
+      "title": "OSHA Heat Injury and Illness Prevention NPRM presentation (proposed rule, 2024)",
+      "url": "https://www.osha.gov/sites/default/files/Heat-Rulemaking-NPRM-Presentation.pdf",
+      "file": "osha_heat_nprm_presentation.pdf"
+    },
+    "pge_emer_4102s": {
+      "title": "PG&E Utility Standard EMER-4102S Preventing and Mitigating Fires While Performing PG&E Work (2024-03-01, Rev 0)",
+      "url": "https://www.pge.com/assets/pge/docs/outages-and-safety/outage-preparedness-and-support/emer-4102s-preventing-and-mitigating-fires-while-performing-pge-work.pdf",
+      "file": "pge_emer_4102s_fire_prevention.pdf"
+    },
+    "pge_wildfire_matrix": {
+      "title": "PG&E Attachment 1 Wildfire Mitigation Matrix (2022-12-16, Rev 6)",
+      "url": "https://www.pge.com/assets/pge/docs/about/doing-business-with-pge/Attachment1-Wildfire-Mitigation-Matrix.pdf",
+      "file": "pge_wildfire_mitigation_matrix.pdf"
+    }
+  },
+  "assumptions": {
+    "lineworker_hourly_usd": {
+      "low": 36.25,
+      "high": 60.23,
+      "unit": "USD/hour (mean wage, excl. benefits)",
+      "label": "Power-line installer mean hourly wage, range across GA/SC/FL/AL/NC/TN/TX/VA/CA/NY",
+      "source_key": "bls_oes_api",
+      "page_or_section": "May 2025 OEWS; SC mean 36.25 (low), CA mean 60.23 (high); GA mean 39.37 / median 38.50",
+      "verified": true,
+      "note": "National May 2025: mean 44.22, median 45.83, p10 24.74, p25 32.34, p75 52.76, p90 61.87, employment 131,070. State means: GA 39.37, SC 36.25, FL 40.82, AL 39.64, NC 37.29, TN 39.89, TX 37.82, VA 37.71, CA 60.23, NY 51.94."
+    },
+    "lineworker_hourly_national_median_usd": {
+      "low": 45.83,
+      "high": 45.83,
+      "unit": "USD/hour",
+      "label": "National median hourly wage, SOC 49-9051 (May 2025)",
+      "source_key": "bls_ooh",
+      "page_or_section": "Quick Facts: 2025 Median Pay $95,320/yr, $45.83/hr (also API series OEUN000000000000049905108)",
+      "verified": true,
+      "note": ""
+    },
+    "labor_burden_factor": {
+      "low": 1.425,
+      "high": 1.464,
+      "unit": "multiplier on wages",
+      "label": "Wages-to-total-compensation loading (benefits)",
+      "source_key": "bls_ecec",
+      "page_or_section": "June 2025 ECEC Table: private industry wages 70.2% of compensation; installation, maintenance, and repair occupations wages 68.3% ($32.25 of $47.23)",
+      "verified": false,
+      "note": "Derived as 1/0.702 and 1/0.683. The shares 70.2% and 68.3% are literal in the doc; the multipliers are computed. Excludes contractor overhead and profit."
+    },
+    "crew_day_usd": {
+      "low": 4179,
+      "high": 7904,
+      "unit": "USD per crew-day (10 h), direct cost",
+      "label": "Line crew day: 4-6 workers + bucket truck(s) + digger derrick, normal (non-storm) conditions",
+      "source_key": "bls_oes_api",
+      "page_or_section": "derived; wages from bls_oes_api, burden from bls_ecec, equipment from fema_equip_2025 (#264/265 aerial lift, #358 digger derrick) and caltrans_eqrr_2026 (TRUCK 36-48k GVW $81.92/h)",
+      "verified": false,
+      "note": "low = 4 x 10h x $38.50 (GA median) x 1.464 + 10h x ($62.86 55ft bucket + $47.61 derrick + $81.92 carrier truck); high = 6 x 10h x $60.23 (CA mean) x 1.464 + 10h x (2 x $65.87 80ft bucket + $47.61 + $81.92). Excludes contractor overhead/profit (Caltrans force-account adds 15% markup on equipment), per diem, crane, and puller/tensioner. No public source publishes a 'transmission crew-day' rate directly."
+    },
+    "storm_crew_rate_usd_hr_2person": {
+      "low": 400,
+      "high": 500,
+      "unit": "USD/hour per 2-worker + bucket truck crew (storm)",
+      "label": "Bundled storm contractor rate paid by Central Maine Power (Dec 2022 storm)",
+      "source_key": "pressherald_cmp_2023",
+      "page_or_section": "article body: 'two workers and a bucket truck costs the company between $400 and $500 an hour ... includes wages for 17-hour shifts, fuel and equipment'",
+      "verified": true,
+      "note": "Excludes meals and lodging. Same article: April 2020 storm bundled contractor rate $211/hour per worker; CMP first-class lineman earns $44/hour regular time. Contractor invoices themselves are confidential at the Maine PUC."
+    },
+    "storm_rate_multiplier": {
+      "low": 1.5,
+      "high": 2.6,
+      "unit": "x normal cost per worker-hour",
+      "label": "Storm/emergency cost vs normal",
+      "source_key": "pressherald_cmp_2023",
+      "page_or_section": "derived",
+      "verified": false,
+      "note": "low = standard 1.5x overtime premium (FLSA; not downloaded). high = $250 per worker-hour storm bundle (CMP $500/h / 2 workers) / normal loaded worker-hour ($44 x 1.464 + half of a $62.86/h FEMA bucket truck = $95.85). Using $200 gives 2.1x. Storm shifts run up to 16 h/day billable (PowerSouth scope sec. E.4) or 17 h (Maine law per article)."
+    },
+    "storm_billable_hours_per_day": {
+      "low": 16,
+      "high": 17,
+      "unit": "hours/day",
+      "label": "Billable storm shift length",
+      "source_key": "powersouth_scope_2025",
+      "page_or_section": "Sec. E.4 Labor: 'labor hours are billed up to 16 hours per day'; Press Herald: max 17 h work, 7 h rest (Maine)",
+      "verified": true,
+      "note": "high value from pressherald_cmp_2023."
+    },
+    "mutual_aid_overhead_pct": {
+      "low": 0,
+      "high": null,
+      "unit": "percent markup on expenses",
+      "label": "Mutual aid / emergency billing basis",
+      "source_key": "appa_mutual_aid_2024",
+      "page_or_section": "APPA principles (1)-(4): reimburse 'actual costs' (pay and benefits, travel time, FEMA or ownership-based equipment rates); PowerSouth sec. E.5: 'no markups, overhead, or profit charges added to costs invoiced for lodging, meals, or other expenses'",
+      "verified": false,
+      "note": "The EEI Governing Principles (cost-plus-overhead basis for IOU mutual assistance) are not publicly posted; no public document found that states an overhead percentage. Model mutual aid as actual loaded labor + equipment + travel, with 0% markup on expenses. Treat labor overhead as unknown."
+    },
+    "crane_standby_usd_day": {
+      "low": 274,
+      "high": 2439,
+      "unit": "USD/day (8 h), excl. operator",
+      "label": "Idle mobile crane (50-100 ton class)",
+      "source_key": "caltrans_eqrr_2026",
+      "page_or_section": "HCETD class DELAY FACTOR = 0.12 (p.14); P&H 'ALPHA 100 ton' $304.88/h (p.15); FEMA #280 Grove GMK3055 60-ton all-terrain $285.76/h",
+      "verified": false,
+      "note": "low = 285.76 x 0.12 x 8 (Caltrans ownership-only delay rate, which Caltrans caps at 8 h/day). high = 304.88 x 8 (full operating rate, what a rental yard bills for an idle day). Caltrans says its rates are likely lower than rental-yard rates. Add a crane operator's wage if the operator is also held."
+    },
+    "bucket_truck_standby_usd_day": {
+      "low": 106,
+      "high": 527,
+      "unit": "USD/day (8 h), excl. operator",
+      "label": "Idle insulated bucket truck (55-80 ft)",
+      "source_key": "fema_equip_2025",
+      "page_or_section": "FEMA #264 Altec AA55 on Freightliner M2, 55 ft, incl. truck $62.86/h; #265 Altec AH85B 80 ft $65.87/h; Caltrans HYLFT DELAY FACTOR = 0.21 (p.16)",
+      "verified": false,
+      "note": "low = 62.86 x 0.21 x 8; high = 65.87 x 8 (full rate while idle)."
+    },
+    "digger_derrick_standby_usd_day": {
+      "low": 159,
+      "high": 1036,
+      "unit": "USD/day (8 h), excl. operator",
+      "label": "Idle digger derrick incl. carrier truck",
+      "source_key": "fema_equip_2025",
+      "page_or_section": "FEMA #358 Derrick, Hydraulic Digger 990/14 $47.61/h (no truck listed); Caltrans TRUCK 36-48k GVW $81.92/h, DELAY FACTOR 0.12 (p.34); HYLFT/AUGTK delay factor 0.21",
+      "verified": false,
+      "note": "low = 47.61 x 0.21 x 8 + 81.92 x 0.12 x 8; high = (47.61 + 81.92) x 8."
+    },
+    "puller_tensioner_standby_usd_day": {
+      "low": 70,
+      "high": 333,
+      "unit": "USD/day (8 h), excl. operators",
+      "label": "Idle wire puller + tensioner pair (small units only)",
+      "source_key": "fema_equip_2025",
+      "page_or_section": "FEMA #464 Wire Puller Machine UD-50 $23.24/h; #465 Hogg Davis OLT-38 bullwheel tensioner $18.33/h",
+      "verified": false,
+      "note": "Treat as a floor. These FEMA units are small (UD-50 is an underground puller; 5,000 lb tensioner). No public rate found for transmission-class pullers/tensioners. low applies the 0.21 delay factor; high is the full rate x 8."
+    },
+    "demob_remob_usd": {
+      "low": null,
+      "high": null,
+      "unit": "USD per crew move",
+      "label": "Mobilization / demobilization",
+      "source_key": "appa_mutual_aid_2024",
+      "page_or_section": "APPA (1) Travel Time Pay: actual pay+benefits portal-to-portal; equipment billed at hourly/mileage rates incl. travel time. PowerSouth sec. E.2: equipment billed only while operating (road vehicles portal-to-portal); sec. II.A: onsite within 48 h",
+      "verified": false,
+      "note": "No public document gives a dollar figure per move. Suggested model: travel_hours x (crew loaded wage + FEMA equipment hourly rates) + per diem. PowerSouth example GSA meals (Baldwin Co., AL): $16 breakfast, $17 lunch, $31 dinner. Example: a 5-person crew with a bucket truck and a digger derrick (~$192/h FEMA+Caltrans) on a 6 h drive each way comes to roughly 2 x 6 x (5 x $44.22 x 1.464 + $192) = ~$6.2k round trip, before per diem. Illustrative only, not sourced."
+    }
+  },
+  "stop_rules": {
+    "crane_personnel_platform_wind_mph": {
+      "threshold": 20,
+      "unit": "mph sustained or gust at platform",
+      "applies_to": [
+        "crane_lift_personnel",
+        "tower_erection",
+        "stringing_with_crane_basket"
+      ],
+      "source_key": "ecfr_1926_1431",
+      "page_or_section": "29 CFR 1926.1431(k)(8)(i)",
+      "note": "Literal: 'When wind speed (sustained or gusts) exceeds 20 mph at the personnel platform, a qualified person must determine if ... it is not safe to lift personnel.' Above 20 mph means a mandatory assessment; it is not an automatic stop."
+    },
+    "crane_gust_mph": {
+      "threshold": [
+        20,
+        30
+      ],
+      "unit": "mph gust",
+      "applies_to": [
+        "crane_lift",
+        "structure_setting",
+        "tower_erection"
+      ],
+      "source_key": "ecfr_1926_1417",
+      "page_or_section": "29 CFR 1926.1417(n) and (h)",
+      "note": "OSHA sets no numeric limit for material lifts; 1926.1417(n): 'adjust the equipment and/or operations to address the effect of wind, ice, and snow'; the manufacturer's limit governs. Suggested 20 mph = caution (matches the OSHA personnel threshold) and 30 mph = stop. The 30 mph figure is common industry practice and is NOT in a downloaded authoritative doc. ASME B30.5 is paywalled."
+    },
+    "aerial_lift_wind_mph": {
+      "threshold": 28,
+      "unit": "mph (12.5 m/s)",
+      "applies_to": [
+        "bucket_truck",
+        "aerial_work",
+        "insulator_hardware"
+      ],
+      "source_key": "genie_manual",
+      "page_or_section": "Safety rules, Tip-over hazards: 'Do not raise the boom when wind speeds may exceed 28 mph / 12.5 m/s'",
+      "verified": true,
+      "note": "Manufacturer limit for a Genie self-propelled boom (ANSI A92 rated 12.5 m/s). Utility insulated aerial devices (Altec/Terex) have their own manual limits."
+    },
+    "stringing_gust_mph": {
+      "threshold": null,
+      "unit": "mph",
+      "applies_to": [
+        "wire_stringing",
+        "pull_tension"
+      ],
+      "source_key": "ecfr_1926_964",
+      "page_or_section": "29 CFR 1926.964(b)(10) 'Employees may operate the pulling rig only when it is safe to do so'; (d)(4) note lists 'high winds'",
+      "note": "No numeric public limit found. IEEE 524 (stringing guide) is paywalled. Reuse crane_gust_mph (20 caution / 30 stop) as a placeholder and label it an assumption."
+    },
+    "adverse_weather_structures": {
+      "threshold": "thunderstorm, high wind, snow storm, ice storm",
+      "unit": "condition",
+      "applies_to": [
+        "tower_erection",
+        "structure_work",
+        "stringing"
+      ],
+      "source_key": "ecfr_1926_964",
+      "page_or_section": "29 CFR 1926.964(d)(4) and Note",
+      "note": "Literal: employees must 'discontinue work when adverse weather conditions would make the work hazardous' (except during emergency restoration). The note names thunderstorms in the vicinity, high winds, snow storms, and ice storms."
+    },
+    "lightning_miles": {
+      "threshold": 10,
+      "unit": "miles",
+      "applies_to": [
+        "all_outdoor",
+        "crane_lift",
+        "aerial_work",
+        "stringing"
+      ],
+      "source_key": "osha_lightning_fs3863",
+      "page_or_section": "FS-3863 p.1: lightning 'can strike ... even up to 10 miles from any rainfall'; stay in shelter 'at least 30 minutes after hearing the last sound of thunder'",
+      "note": "NWS (nws_lightning): 'If you hear thunder, you are likely within striking distance'; 'wait 30 minutes after the last lightning or thunder'. Suggested rule: thunderstorm probability in forecast = caution; forecast thunder at site = stop, 30-minute resume. The fact sheet names cranes and power utility field repair as vulnerable."
+    },
+    "heat_index_caution_f": {
+      "threshold": 91,
+      "unit": "deg F heat index",
+      "applies_to": [
+        "all_outdoor"
+      ],
+      "source_key": "osha_heat_index_guide",
+      "page_or_section": "Risk table: 'Less than 91\u00b0F Lower (Caution)'; '91\u00b0F to 103\u00b0F Moderate'",
+      "note": "OSHA's proposed rule (osha_heat_nprm, NPRM 2024; not final as far as found) sets an initial heat trigger at 80 F heat index and a high heat trigger at 90 F. Either 80, 90 or 91 F can serve as the caution line."
+    },
+    "heat_index_stop_f": {
+      "threshold": 115,
+      "unit": "deg F heat index",
+      "applies_to": [
+        "all_outdoor",
+        "climbing",
+        "aerial_work"
+      ],
+      "source_key": "osha_heat_index_guide",
+      "page_or_section": "Risk table: '103\u00b0F to 115\u00b0F High'; 'Greater than 115\u00b0F Very High to Extreme'",
+      "note": "The OSHA guide escalates protections but does not order a stop. Treating >115 F as stop (or 103 F for heavy climbing work) is a modelling choice."
+    },
+    "red_flag_hot_work": {
+      "threshold": "NWS Red Flag Warning in effect",
+      "unit": "boolean",
+      "applies_to": [
+        "hot_work",
+        "welding",
+        "grinding",
+        "cutting",
+        "implosive_splicing"
+      ],
+      "source_key": "pge_wildfire_matrix",
+      "page_or_section": "Matrix header WARNING: 'When Red Flag Warnings are in effect, work personnel must perform R5 Fire Potential Index Rating mitigations'; item 10 (welding, cutting, grinding: clear to mineral soil 10 ft); R5-Plus: 'Suspend all planned work'",
+      "note": "This is a PG&E (California) standard, not a federal rule. Under a Red Flag Warning, hot work moves to caution with mitigations (dedicated fire watch, water, clearance), not an automatic stop; PG&E suspends planned work only at R5-Plus. Also see pge_emer_4102s sec. 2.6 and 3.5."
+    },
+    "ice_aerial": {
+      "threshold": "ice storm / freezing rain / ice accretion forecast",
+      "unit": "condition",
+      "applies_to": [
+        "aerial_work",
+        "crane_lift",
+        "climbing",
+        "stringing"
+      ],
+      "source_key": "ecfr_1926_964",
+      "page_or_section": "29 CFR 1926.964(d)(4) Note ('ice storms'); 1926.964(c)(5) Note; 1926.1417(n) (effect of 'wind, ice, and snow' on crane stability)",
+      "note": "No numeric ice threshold in OSHA. Suggested: any forecast freezing rain or ice accretion = stop for aerial, climbing and crane work."
+    }
+  }
+}

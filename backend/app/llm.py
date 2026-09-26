@@ -6,7 +6,9 @@ import httpx
 import app.db  # noqa: F401  loads .env so keys work from any entry point
 
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
-FALLBACKS = [MODEL, "gemini-3.5-flash", "gemini-flash-latest"]  # busy or retired models fall through to the next
+FALLBACKS = [MODEL, "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3-flash-preview", "gemini-flash-latest",
+             "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-flash-lite-latest", "gemini-2.5-flash"]  # busy or retired models fall through
+SPENT = {}  # model -> day its daily quota ran out, so we skip it until tomorrow
 
 LIST_MARKER = re.compile(r"(?m)^\s*\d+[.)]\s")
 NUMBER = re.compile(r"(\$)?(\d[\d,]*(?:\.\d+)?)(?:\s?([kKmM])(?![a-zA-Z]))?(\s?%)?")
@@ -63,7 +65,8 @@ def gemini(call):
     from google.genai import errors
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])  # keep a reference: the sdk closes its http client when collected
     last = None
-    for model in dict.fromkeys(FALLBACKS):
+    today = time.strftime("%Y-%m-%d", time.gmtime())
+    for model in [m for m in dict.fromkeys(FALLBACKS) if SPENT.get(m) != today]:
         for attempt in range(2):
             try:
                 return call(client, model)
@@ -73,7 +76,12 @@ def gemini(call):
                     raise
                 if e.code == 404:
                     break  # this model is gone for this key, try the next
+                if e.code == 429 and "PerDay" in str(e):
+                    SPENT[model] = today  # out for the day, no point retrying
+                    break
                 time.sleep(2 * (attempt + 1))
+    if last is None:
+        raise RuntimeError("RESOURCE_EXHAUSTED: every Gemini model is out of daily quota")  # all skipped as spent today
     raise RuntimeError(f"Gemini is busy right now: {last}")
 
 
