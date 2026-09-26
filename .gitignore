@@ -20,5 +20,7 @@ data/raw/
 data/layers/
 .DS_Store
 
-# private docs
+# private docs: notes stay local, so published docs are listed one by one
 *.md
+!README.md
+!docs/cost-savings-model.md

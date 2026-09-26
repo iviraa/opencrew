@@ -9,7 +9,7 @@ from app.geo import wetlands
 
 PAIRS_SQL = """
 WITH j AS (
-  SELECT id, org_id, name, phase, endpoints, voltage_kv, horizon, geom, work_window, in_service,
+  SELECT id, org_id, name, phase, endpoints, voltage_kv, cost_usd, horizon, geom, work_window, in_service,
          ST_GeometryType(geom::geometry) = 'ST_LineString' AS is_line,
          CASE WHEN ST_GeometryType(geom::geometry) = 'ST_LineString'
               THEN ST_Centroid(ST_MakeLine(ST_StartPoint(geom::geometry), ST_EndPoint(geom::geometry)))
@@ -17,7 +17,7 @@ WITH j AS (
   FROM job WHERE horizon = %(horizon)s
 )
 SELECT a.id AS job_a, b.id AS job_b, a.name AS a_name, b.name AS b_name, a.endpoints AS a_endpoints, b.endpoints AS b_endpoints,
-       a.phase AS a_phase, b.phase AS b_phase, a.voltage_kv AS a_kv, b.voltage_kv AS b_kv,
+       a.phase AS a_phase, b.phase AS b_phase, a.voltage_kv AS a_kv, b.voltage_kv AS b_kv, a.cost_usd AS a_cost, b.cost_usd AS b_cost,
        ST_Distance(a.geom, b.geom) AS distance_m,
        ST_Distance(a.center, b.center, false) AS center_distance_m,
        ST_Intersects(a.geom, b.geom) AS touches,

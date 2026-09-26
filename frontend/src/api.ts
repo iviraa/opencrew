@@ -16,8 +16,17 @@ export type Opportunity = {
   b_name: string; b_phase: string | null; b_start: string; b_org: string; b_color: string; b_conf: number; b_quality: string;
 };
 
-export type SavingsFactors = { same_time: number; drive: number; size: number | null; kv: number | null; gap_days: number | null };
-export type Savings = { low: number; high: number; items: Record<string, { low: number; high: number }>; factors?: SavingsFactors };
+export type SavingsFactors = {
+  same_time: number; drive: number; size: number | null; kv: number | null; gap_days: number | null;
+  shared_days: number | null; budget_usd: number | null;
+};
+// one avoided duplicate cost: how many (qty), the published unit price behind it (basis) and, when it runs with the calendar, over what (over)
+export type SavingsLine = { name: string; category: string; qty: string; basis: string; over: string | null; low: number; high: number };
+export type SavingsCategory = { key: string; label: string; hint: string; lines: string[]; low: number; high: number };
+export type Savings = {
+  low: number; high: number; items: Record<string, { low: number; high: number }>; factors?: SavingsFactors;
+  lines?: SavingsLine[]; categories?: SavingsCategory[]; share_of_budget?: { low: number; high: number } | null;
+};
 
 export type OpportunityDetail = Opportunity & { a: Job; b: Job; shareable: string[]; savings: Savings };
 

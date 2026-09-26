@@ -2,6 +2,12 @@
 
 Crewly is an agentic operations platform for discovering, evaluating, and coordinating high-value collaboration opportunities across organizations. It turns fragmented plans, operational data, geographic context, and live conditions into actionable recommendations, shared work plans, and stakeholder outreach. The current application brings together utility filings, grid and geographic layers, restoration plans, weather and storm feeds, and the workflows needed to review and act on each opportunity.
 
+## Documentation
+
+- [How Crewly estimates the savings from a collaboration](docs/cost-savings-model.md) — what every line in the savings table
+  means, which published document sets its price, how the quantities were calibrated, and where the estimate should not be
+  trusted. `cd backend && uv run python -m scripts.cost_evidence` prints the same evidence from the live configuration.
+
 ## Stack
 
 - Backend: Python 3.12, FastAPI, PostgreSQL with TimescaleDB, and `uv`
