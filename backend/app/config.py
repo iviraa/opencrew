@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 MILE_M = 1609.344
 OVERLAP_RADIUS_M = 25 * MILE_M  # challenge rule: within 25 mi
 
@@ -29,12 +32,38 @@ ROAD_BOUND = {"crews", "equipment", "cranes", "staging yards", "laydown yards", 
 
 ACRE_M2 = 4046.86
 
+SOURCES = json.loads((Path(__file__).parent / "cost_sources.json").read_text())
+
+
+def cite(key, page):
+    return {"source": SOURCES[key]["title"], "url": SOURCES[key]["url"], "page": page}
+
+
+# every range comes from a document; verified=False means derived or a proxy, and the note says how
 ASSUMPTIONS = {
-    "row_width_m": {"low": 30, "high": 45, "unit": "m", "label": "ROW width", "source": "typical 115-230 kV corridor", "verified": False},
-    "land_usd_per_acre": {"low": 4000, "high": 7000, "unit": "$/acre", "label": "Land value", "source": "https://www.nass.usda.gov/Publications/Todays_Reports/", "verified": False},
-    "yard_usd": {"low": 150000, "high": 400000, "unit": "$", "label": "Staging yard", "source": "placeholder", "verified": False},
-    "mobilization_usd": {"low": 50000, "high": 150000, "unit": "$", "label": "Crew mobilization", "source": "placeholder", "verified": False},
-    "outage_usd": {"low": 25000, "high": 100000, "unit": "$", "label": "Coordinated outage", "source": "placeholder", "verified": False},
+    "row_width_m": {"low": 27, "high": 38, "unit": "m", "label": "Right-of-way width", "verified": True, **cite("miso_2024", "32, table 3.1-1"),
+                    "note": "115 kV lines use 90 ft (27 m) and 230 kV lines 125 ft (38 m)."},
+    "land_usd_per_acre": {"low": 4500, "high": 15300, "unit": "$/acre", "label": "Land value", "verified": True, **cite("usda_2026", "15, pasture value by state"),
+                          "note": "2026 pasture: SC $4,500 and GA $5,100 per acre. High end uses MISO's rule that cropland costs 3x pasture (MTEP24 guide p.8)."},
+    "mobilization_usd": {"low": 100000, "high": 200000, "unit": "$", "label": "Crew mobilization", "verified": True, **cite("miso_2018", "16, section 4.1.1.3"),
+                         "note": "Mobilizing and demobilizing all equipment and people for a line project: $100k at 115 kV, $200k at 230 kV (2018 dollars). "
+                                 "That is about 1-2% of a typical DESC project in our filing (median near $10M)."},
+    "yard_usd": {"low": 157590, "high": 262660, "unit": "$", "label": "Staging yard", "verified": False, **cite("miso_2018", "39, section 4.2.1.2"),
+                 "note": "No public unit cost for temporary laydown yards. Proxy: MISO's site mobilization for an existing ($157,590) or new ($262,660) substation site."},
+    "outage_usd": {"low": 28000, "high": 84000, "unit": "$", "label": "Coordinated outage", "verified": False, **cite("bls_ooh", "web page"),
+                   "note": "Derived: one shared outage avoids 2 switching crews x 2 shifts x 10 hours at the storm crew-hour cost."},
+    "crew_hour_usd": {"low": 700, "high": 2100, "unit": "$/crew-hour", "label": "Storm crew hour", "verified": False, "scope": "storm",
+                      **cite("gpc_helene_cost", "web page"),
+                      "note": "Low: 5 line workers x $45.83 median wage (BLS, May 2025) x 1.5 storm overtime x 2 for trucks and overhead. "
+                              "High: Georgia Power's $1.1B Helene restoration cost over 15,000+ workers for about 11 days at 16 hours, per 5-person crew "
+                              "(workforce from Georgia Power's Sept 29, 2024 release)."},
 }
+
+MOB_SHARE = {"general": 0.30, "heavy_haul": 0.15, "crane_lift": 0.20, "wire_stringing": 0.25, "commissioning": 0.10}  # our split of MISO's per-project mobilization
+
+
+def mob_share(key):
+    m = ASSUMPTIONS["mobilization_usd"]
+    return round(m["low"] * MOB_SHARE[key] / 1000), round(m["high"] * MOB_SHARE[key] / 1000)  # $k low and high
 
 STATUSES = ["not_contacted", "drafted", "sent", "replied", "call_scheduled", "agreed", "declined"]

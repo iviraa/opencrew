@@ -1,0 +1,37 @@
+{
+  "miso_2018": {
+    "title": "MISO Transmission and Substation Project Cost Estimation Guide for MTEP 2018",
+    "url": "https://cdn.misoenergy.org/Transmission-and-Substation-Project-Cost-Estimation-Guide-for-MTEP-2018144804.pdf",
+    "file": "data/raw/costs/miso_mtep2018_cost_guide.pdf"
+  },
+  "miso_2024": {
+    "title": "MISO Transmission Cost Estimation Guide for MTEP24 (May 1, 2024)",
+    "url": "https://cdn.misoenergy.org/20240501%20PSC%20Item%2004%20MISO%20Transmission%20Cost%20Estimation%20Guide%20for%20MTEP24632680.pdf",
+    "file": "data/raw/costs/miso_mtep24_cost_guide.pdf"
+  },
+  "usda_2026": {
+    "title": "USDA NASS Land Values 2026 Summary (July 2026)",
+    "url": "https://www.nass.usda.gov/Publications/Todays_Reports/reports/land0726.pdf",
+    "file": "data/raw/costs/usda_land0726.pdf"
+  },
+  "bls_ooh": {
+    "title": "BLS Occupational Outlook Handbook: Line Installers and Repairers (May 2025 median pay)",
+    "url": "https://www.bls.gov/ooh/installation-maintenance-and-repair/line-installers-and-repairers.htm",
+    "file": null
+  },
+  "gpc_helene_stats": {
+    "title": "Georgia Power press release: key estimated damage statistics from Hurricane Helene (Sept 29, 2024)",
+    "url": "https://www.georgiapower.com/news-hub/press-releases/georgia-power-releases-key-estimated-damage-statistics-from-helene.html",
+    "file": null
+  },
+  "gpc_helene_cost": {
+    "title": "WTOC: Georgia Power could raise rates to cover losses from Helene (Nov 26, 2024), quoting the company's SEC filing",
+    "url": "https://www.wtoc.com/2024/11/26/georgia-power-could-raise-rates-cover-losses-helene/",
+    "file": null
+  },
+  "desc_filing": {
+    "title": "DESC Planned Transmission Projects $2M and above, 2024-2028 (organizer package)",
+    "url": null,
+    "file": "data/raw/desc_2024_2028_projects.pdf"
+  }
+}
