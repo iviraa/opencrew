@@ -7,7 +7,11 @@ from concurrent.futures import ThreadPoolExecutor
 import httpx
 
 from app.db import ROOT
-from scripts.fetch_osm import MIRRORS
+import os
+
+from scripts.fetch_osm import MIRRORS as BASE
+
+MIRRORS = os.environ.get("OVERPASS_MIRRORS", "").split(",") if os.environ.get("OVERPASS_MIRRORS") else BASE
 
 STATES = ["AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
           "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD",
@@ -53,4 +57,5 @@ def main(states):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:] or [s for s in STATES if s not in ("GA", "SC")])
+    todo = sys.argv[1:] or [s for s in STATES if s not in ("GA", "SC")]
+    main(todo[::-1] if os.environ.get("REVERSE") else todo)
