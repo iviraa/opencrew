@@ -14,7 +14,8 @@ BASIS = {"filed": "start date from filing", "spend_years": "start from budget ye
          "derived": "derived phase"}
 FLAGS = {"hurricane_season_high_risk": "Shared work falls in hurricane season in a high-risk area: plan joint storm staging",
          "tie_line": "Involves an interstate tie line, which both utilities operate",
-         "shared_endpoint": "Both projects touch the same substation"}
+         "shared_endpoint": "Both projects touch the same substation",
+         "shared_wetland": "Both projects touch the same mapped wetland (USFWS NWI): coordinate permits and environmental review"}
 AGENDA = ["Confirm scope and current schedule of both projects", "Walk the shared area on the map: access roads, crossings, laydown sites",
           "Check whether outage windows or construction phases can line up", "Agree what to share first (crews, yard, right-of-way, permits)",
           "Name one contact per utility and set a follow-up date"]

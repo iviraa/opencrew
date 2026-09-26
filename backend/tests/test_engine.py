@@ -63,6 +63,18 @@ def test_flags():
     assert set(flags(a, b, 0.9, dt(2024), dt(2026), dt(2025), dt(2027))) == {"hurricane_season_high_risk", "tie_line", "shared_endpoint"}
 
 
+def test_shared_wetland_flag():
+    from app.engine.flags import flags
+    from app.geo.wetlands import key
+    a = {"name": "A - B 115kV Rebuild", "endpoints": ["A", "B"]}
+    b = {"name": "C - D 230kV Rebuild", "endpoints": ["C", "D"]}
+    args = (a, b, 0.0, dt(2024), dt(2025), dt(2024), dt(2025))
+    assert "shared_wetland" in flags(*args, ({"17616269": "Riverine"}, {"17616269": "Riverine", "7207187": "Forested"}))
+    assert "shared_wetland" not in flags(*args, ({"1": "Riverine"}, {"2": "Riverine"}))
+    assert "shared_wetland" not in flags(*args, (None, {"2": "Riverine"}))  # service had no answer
+    assert key({"type": "Point", "coordinates": [-81.15, 32.35]}) == key({"coordinates": [-81.15, 32.35], "type": "Point"})
+
+
 def test_phase_share():
     from app.engine.scoring import phase_share
     assert phase_share(None, "construction") is None

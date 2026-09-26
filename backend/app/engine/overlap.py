@@ -4,6 +4,7 @@ from app.config import OVERLAP_RADIUS_M
 from app.engine.cost import savings
 from app.engine.flags import flags
 from app.engine.scoring import phase_share, score, tier_for, time_overlap
+from app.geo import wetlands
 
 PAIRS_SQL = """
 WITH j AS (
@@ -52,7 +53,7 @@ ON CONFLICT (job_a, job_b) DO UPDATE SET
 def recompute(conn, horizon="long"):
     t0 = time.perf_counter()
     rows = conn.execute(PAIRS_SQL, {"horizon": horizon, "radius": OVERLAP_RADIUS_M}).fetchall()
-    out = []
+    kept = []
     for r in rows:
         tier = tier_for(r["distance_m"], r["touches"])
         if tier is None:
@@ -60,9 +61,18 @@ def recompute(conn, horizon="long"):
         ov = time_overlap(r["a_start"], r["a_end"], r["b_start"], r["b_end"])
         if horizon == "near" and ov == 0:
             continue  # near-term only cares about concurrent field work
+        kept.append((r, tier, ov))
+    wet = {}
+    if horizon != "emergency" and kept:
+        ids = sorted({j for r, _, _ in kept for j in (r["job_a"], r["job_b"])})
+        geoms = conn.execute("SELECT id, ST_AsGeoJSON(ST_Simplify(geom::geometry, 0.0005), 5)::json AS g FROM job WHERE id = ANY(%s)", (ids,)).fetchall()
+        wet = wetlands.lookup({g["id"]: g["g"] for g in geoms})  # NWI wetlands each job touches
+    out = []
+    for r, tier, ov in kept:
         sav = savings(tier, r["overlap_m"])
         fl = flags({"name": r["a_name"], "endpoints": r["a_endpoints"]}, {"name": r["b_name"], "endpoints": r["b_endpoints"]},
-                   r["risk"], r["a_start"], r["a_end"], r["b_start"], r["b_end"])
+                   r["risk"], r["a_start"], r["a_end"], r["b_start"], r["b_end"],
+                   (wet.get(r["job_a"]), wet.get(r["job_b"])))
         ps = phase_share(r["a_phase"], r["b_phase"])
         out.append({**r, "horizon": horizon, "tier": tier, "time_overlap": ov, "flags": fl,
                     "score": score(tier, ov, r["risk"], r["vulnerability"], ps[0] if ps else 1.0),

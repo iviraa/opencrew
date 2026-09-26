@@ -21,7 +21,7 @@ def in_hurricane_season(start, end):
     return 6 <= end.month <= 11
 
 
-def flags(a, b, risk, a_start, a_end, b_start, b_end):
+def flags(a, b, risk, a_start, a_end, b_start, b_end, wetlands=None):
     out = []
     start, end = max(a_start, b_start), min(a_end, b_end)
     if risk >= 0.8 and in_hurricane_season(start, end):
@@ -31,4 +31,6 @@ def flags(a, b, risk, a_start, a_end, b_start, b_end):
     ends_a, ends_b = [norm(e) for e in a["endpoints"] or []], [norm(e) for e in b["endpoints"] or []]
     if any(x and y and fuzz.token_set_ratio(x, y) >= 90 for x in ends_a for y in ends_b):  # "thurmond" vs "thurmond dam"
         out.append("shared_endpoint")
+    if wetlands and wetlands[0] and wetlands[1] and set(wetlands[0]) & set(wetlands[1]):  # both jobs touch the same NWI polygon
+        out.append("shared_wetland")
     return out
