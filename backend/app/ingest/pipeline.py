@@ -2,8 +2,11 @@ import json
 from collections import Counter
 
 from dateutil.relativedelta import relativedelta
+from shapely.geometry import Point
 
-from app.geo.geolocate import km
+from app.geo import audit
+from app.geo.geolocate import HOME, km
+from app.geo.nominatim import lookup
 from app.ingest import pdf
 
 UPSERT_JOB = """
@@ -72,6 +75,23 @@ def outside_zone(job, picks, zones):
     return f"found {bad['name']} but it is {km(c, (bad['lat'], bad['lon'])):.0f} km from the rest of planning zone {job['zone']}"
 
 
+def coords_of(wkt):
+    inner = wkt[wkt.index("(") + 1:wkt.rindex(")")]
+    return [[float(v) for v in pt.split()] for pt in inner.split(",")]
+
+
+def check(loc, org, job, picks, geo, zones):
+    state = loc.states[HOME[org]][0]
+
+    def county_at(name):
+        hit = lookup(f"{name} County, {state}")
+        return (float(hit["lat"]), float(hit["lon"])) if hit else None
+
+    home = loc.home(org)
+    return audit.assess(job, picks, coords_of(geo[0]), zones.get(job.get("zone")),
+                        lambda lat, lon: home.contains(Point(lon, lat)), county_at)
+
+
 def review(conn, org, raw, reason, doc_id, page):
     conn.execute("INSERT INTO job_review (org_id, raw, reason, source_doc_id, source_page) VALUES (%s, %s, %s, %s, %s)",
                  (org, json.dumps(raw, default=str), reason, doc_id, page))
@@ -96,12 +116,21 @@ def store(conn, loc, org, doc_id, pages, rows, bad, observed, extraction="parser
         if far:
             picks, why = [None], far  # a weak match far from the project's own planning zone is more likely wrong than right
         geo = geometry(job, picks, router)
+        checked = geo and check(loc, org, job, picks, geo, zones)
+        if checked and checked[0] == "wrong" and sum(1 for p in picks if p) == 2:  # keep the end we trust, drop the one that stretches the line
+            best = max((p for p in picks if p), key=lambda p: p["conf"])
+            picks = [p if p is best else None for p in picks]
+            geo = geometry(job, picks, router)
+            checked = check(loc, org, job, picks, geo, zones)
+        if geo and checked and checked[0] != "ok":
+            geo = (geo[0], geo[1], min(geo[2], 0.65))  # flagged placements show as approximate
         if not geo:
             review(conn, org, job, why or "no location match", doc_id, job["source_page"])
             stats["unplaced"] += 1
             continue
         wkt, quality, conf = geo
-        via = json.dumps([p and {"name": p["name"], "via": p["via"], "conf": p["conf"]} for p in picks])
+        via = json.dumps({"picks": [p and {"name": p["name"], "via": p["via"], "conf": p["conf"]} for p in picks],
+                          "audit": checked[0], "reasons": checked[1]})
         conn.execute(UPSERT_JOB, {**job, "wkt": wkt, "quality": quality, "conf": conf, "doc": doc_id, "extraction": extraction, "via": via})
         conn.execute("INSERT INTO job_version (job_id, observed_at, work_window, source_doc_id) VALUES (%s, %s, tstzrange(%s, %s), %s)",
                      (job["id"], observed, job["start"], job["in_service"], doc_id))
