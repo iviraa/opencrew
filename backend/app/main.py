@@ -91,8 +91,24 @@ async def lifespan(_app):
             await asyncio.sleep(plan_minutes * 60)
 
     planner_task = asyncio.create_task(plans()) if plan_minutes > 0 else None
+    news_minutes = float(os.environ.get("NEWS_REFRESH_MINUTES") or 0)  # utility news, off unless set
+
+    def news_once():
+        from app.news import feed
+        with connect() as conn:
+            return feed.run(conn, list(companies()), rebuild_lexicon=False)
+
+    async def news_loop():
+        while True:
+            try:
+                await asyncio.to_thread(news_once)
+            except Exception as e:  # a bad source must not kill the loop
+                print("news refresh failed:", e)
+            await asyncio.sleep(news_minutes * 60)
+
+    news_task = asyncio.create_task(news_loop()) if news_minutes > 0 else None
     yield
-    for t in (task, hazard_task, nudger, planner_task):
+    for t in (task, hazard_task, nudger, planner_task, news_task):
         if t:
             t.cancel()
 
@@ -543,6 +559,8 @@ app.include_router(weather_api.router)
 app.include_router(hazards_api.router)
 app.include_router(feasibility_api.router)
 app.include_router(planner_api.router)
+from app.news import api as news_api  # noqa: E402  kept with the other routers
+app.include_router(news_api.router)
 
 @app.get("/config.js", include_in_schema=False)
 def web_config():

@@ -283,3 +283,39 @@ CREATE TABLE IF NOT EXISTS hazard_nri (
   risk_score  REAL,
   scores      JSONB                        -- hazard -> fema risk score 0-100
 );
+
+-- utility-first news: what people search for per utility, what was fetched, and the items linked to our projects and overlaps
+CREATE TABLE IF NOT EXISTS news_lexicon (
+  org_id  TEXT NOT NULL REFERENCES org(id) ON DELETE CASCADE,
+  kind    TEXT NOT NULL,                   -- org | station | county | state
+  term    TEXT NOT NULL,
+  job_ids TEXT[],                          -- the projects a station or county term points at
+  PRIMARY KEY (org_id, kind, term)
+);
+CREATE TABLE IF NOT EXISTS news_raw (
+  url        TEXT PRIMARY KEY,
+  fetched_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  source     TEXT,                         -- gdelt_doc | google_news | rss
+  payload    JSONB NOT NULL
+);
+CREATE TABLE IF NOT EXISTS news_item (
+  id              SERIAL PRIMARY KEY,
+  url             TEXT UNIQUE NOT NULL,
+  title           TEXT NOT NULL,
+  source          TEXT,
+  published       TIMESTAMPTZ,
+  impact          TEXT NOT NULL,           -- delay | damage | outage | opposition | regulatory | supply_chain | security | funding | construction | other
+  affects_work    BOOLEAN NOT NULL DEFAULT FALSE,
+  summary         TEXT,
+  confidence      REAL NOT NULL,
+  org_ids         TEXT[] NOT NULL,
+  job_ids         TEXT[] NOT NULL DEFAULT '{}',
+  opportunity_ids INT[] NOT NULL DEFAULT '{}',
+  verified        BOOLEAN NOT NULL DEFAULT FALSE,
+  evidence        JSONB NOT NULL DEFAULT '{}',
+  classified_by   TEXT,                    -- rules | gemini
+  fetched_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS news_item_published_idx ON news_item (published DESC);
+CREATE INDEX IF NOT EXISTS news_item_orgs_idx ON news_item USING GIN (org_ids);
+CREATE INDEX IF NOT EXISTS news_item_opps_idx ON news_item USING GIN (opportunity_ids);
