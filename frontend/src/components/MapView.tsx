@@ -184,9 +184,9 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
           "circle-radius": ["interpolate", ["linear"], ["get", "score"], 0, 7, 1.3, 13],
           "circle-color": tierColor, "circle-opacity": 1, "circle-stroke-color": "#ffffff", "circle-stroke-width": 3,
         } });
-      m.addLayer({ id: "opp-count-bg", type: "circle", source: "opps", filter: ["all", ["has", "marker"], [">", ["get", "count"], 1]],
+      m.addLayer({ id: "opp-count-bg", type: "circle", source: "opps", minzoom: 8, filter: ["all", ["has", "marker"], [">", ["get", "count"], 1]],  // counts only once zoomed in
         paint: { "circle-radius": 9, "circle-color": "#1b2447", "circle-stroke-color": "#fff", "circle-stroke-width": 2, "circle-translate": [11, -11] } });
-      m.addLayer({ id: "opp-count", type: "symbol", source: "opps", filter: ["all", ["has", "marker"], [">", ["get", "count"], 1]],
+      m.addLayer({ id: "opp-count", type: "symbol", source: "opps", minzoom: 8, filter: ["all", ["has", "marker"], [">", ["get", "count"], 1]],
         layout: { "text-field": ["to-string", ["get", "count"]], "text-size": 11, "text-font": ["Montserrat Medium"], "text-offset": [0.95, -0.95], "text-allow-overlap": true, "text-ignore-placement": true },
         paint: { "text-color": "#ffffff" } });  // how many pairs share this bubble
       m.addLayer({ id: "reports", type: "circle", source: "reports",
