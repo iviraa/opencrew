@@ -150,7 +150,8 @@ def main(schema_only=False, refs_only=False):
                 batch = []
             if ln is not None:
                 batch.append(ln)
-        if run(f"SELECT pg_get_serial_sequence('planner.{t}', 'id') AS s")[0]["s"]:  # keep serial ids ahead of the copied rows
+        has_id = run(f"SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'planner' AND table_name = '{t}' AND column_name = 'id') AS e")[0]["e"]
+        if has_id and run(f"SELECT pg_get_serial_sequence('planner.{t}', 'id') AS s")[0]["s"]:  # keep serial ids ahead of the copied rows
             run(f"SELECT setval(pg_get_serial_sequence('planner.{t}', 'id'), coalesce(max(id), 1)) FROM planner.{t};")
         print(t, "inserts", n, flush=True)
     print(run("SELECT (SELECT count(*) FROM planner.job) AS jobs, (SELECT count(*) FROM planner.opportunity) AS overlaps, "
