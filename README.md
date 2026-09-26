@@ -1,6 +1,6 @@
-# OpenCrew
+# Crewly
 
-OpenCrew helps electric utilities find opportunities to coordinate planned work, estimate shared savings, and respond to active weather and storm conditions. It combines utility filing data, geographic and grid layers, restoration plans, live feeds, and an operations interface for reviewing opportunities and preparing outreach.
+Crewly is the agent that finds, manages, and creates collaboration opportunities for electric utilities. It helps teams coordinate planned work, estimate shared savings, and respond to active weather and storm conditions. It combines utility filing data, geographic and grid layers, restoration plans, live feeds, and an operations interface for reviewing opportunities and preparing outreach.
 
 ## Stack
 
