@@ -14,12 +14,13 @@ import { GoalPanel, GoalsList } from "./GoalPanel";
 import { HistoryPanel, OverlapDetailPanel, OverlapList, ProjectList, RequestPanel, sides } from "./panels";
 import { NewsTab, Split } from "./tabs";
 import HazardsTab, { type HazardFocus } from "./hazards/HazardsTab";
+import PlanTab, { type PlanFocus } from "./plan/PlanTab";
 
 const Beaver = lazy(() => import("./Beaver"));
 
-type Tab = "overlaps" | "weather" | "news";
+type Tab = "overlaps" | "plan" | "weather" | "news";
 type Panel = { kind: "overlap"; id: number } | { kind: "request"; id: number } | { kind: "history" } | { kind: "chat" } | { kind: "goal"; id: number } | { kind: "goals" };
-const TABS: { id: Tab; label: string }[] = [{ id: "overlaps", label: "Overlaps" }, { id: "weather", label: "Hazards" }, { id: "news", label: "News & damage" }];
+const TABS: { id: Tab; label: string }[] = [{ id: "overlaps", label: "Overlaps" }, { id: "plan", label: "Plan" }, { id: "weather", label: "Hazards" }, { id: "news", label: "News & damage" }];
 const SCAN_MS = 3200;
 const SCAN_STEPS = ["Reading your project plans", "Looking for neighbors within 25 miles", "Measuring drive times", "Comparing build windows", "Estimating savings"];
 
@@ -58,6 +59,7 @@ export default function Shell() {
   const [notes, setNotes] = useState<Notice[]>([]);
   const [pop, setPop] = useState<"bell" | "profile" | null>(null);
   const [hazardFocus, setHazardFocus] = useState<HazardFocus | null>(null);  // an overlap asking for its weather cost on the hazards tab
+  const [planFocus, setPlanFocus] = useState<PlanFocus | null>(null);  // crewly built or explained a plan
   const [toast, setToast] = useState<{ text: string; request: number } | null>(null);
   const [chat, setChat] = useState<ChatMsg[]>([]);
   const [chatBusy, setChatBusy] = useState(false);
@@ -216,6 +218,8 @@ export default function Shell() {
       else say(ids && ids.length > 1 ? `I put ${ids.length} overlaps on the map.` : openId != null ? `Here's overlap #${openId}.` : "Here's what I found!");
       if (ids?.length) await showIds(ids);
       if (openId != null) setSelected(openId);
+      const planned = r.ui_actions.filter((a) => a.type === "plan").pop();
+      if (planned) { setPlanFocus({ horizon: planned.horizon as string | undefined, item: planned.item as string | undefined, at: Date.now() }); setTab("plan"); }
       const fly = r.ui_actions.filter((a) => a.type === "fly").pop();
       if (fly?.bbox && !ids?.length) setFit({ bbox: fly.bbox, key: `y${Date.now()}`, maxZoom: 10 });
     } catch {
@@ -237,6 +241,7 @@ export default function Shell() {
     if (a.type === "open_request" && a.id != null) { setTab("overlaps"); openRequest(a.id); }
     else if (a.type === "open_overlap" && a.id != null) openOverlap(a.id);
     else if (a.type === "weather") setTab("weather");
+    else if (a.type === "plan") { setPlanFocus({ horizon: a.horizon, at: Date.now() }); setTab("plan"); }
     else if (a.type === "chat" && a.prompt) { push({ kind: "chat" }); sendChat(a.prompt); }
   };
 
@@ -382,6 +387,7 @@ export default function Shell() {
             </MapPane>
           } />
         )}
+        {me && tab === "plan" && <PlanTab me={me} side={roomy(panel)} focus={planFocus} onOpenOverlap={openOverlap} onOpenGoal={(id) => push({ kind: "goal", id })} />}
         {me && tab === "weather" && <HazardsTab me={me} projects={projects} side={roomy(panel)} focus={hazardFocus} />}
         {me && tab === "news" && <NewsTab projects={projects} side={roomy(panel)} />}
         {!me && !err && <div className="grid flex-1 place-items-center text-muted"><span className="dots">Getting your projects</span></div>}
