@@ -12,6 +12,7 @@ from app.crewly.memory_tools import memory_prompt, memory_tools
 from app.crewly.more_tools import MORE_TOOLS
 from app.crewly.outlook_tools import OUTLOOK_TOOLS
 from app.crewly.tools import REGIONS, TOOLS, _opp_row
+from app.planner.tools import planner_tools
 from app.queries import OPP_SQL
 
 
@@ -205,6 +206,7 @@ def app_tools(ctx):
     tools["hazard_exposure"] = hazard_exposure_tool(ctx)
     tools["hazard_cost"] = hazard_cost_tool(ctx)
     tools["assess_feasibility"] = feasibility_tool(ctx)
+    tools.update(planner_tools(ctx))
     return tools
 
 
@@ -239,4 +241,7 @@ Rules:
 - For "is #X feasible / realistic / worth pursuing" or "why would coordinating on #X not work" call assess_feasibility and give the
   verdict, the one or two factors that decide it and what would make it work, all from the tool. It is an assessment of the pair,
   never an instruction to crews.
+- For "plan our quarter/year", "what should we pursue" or "build a plan" call build_plan once (plan_status if one exists); it picks
+  the pairs worth pursuing, the cheapest months to work each by weather history, savings and risks, and opens the Plan tab where the
+  user accepts or skips items. Describe it with the tool's numbers only. For "why this pair/these months" call explain_plan_item.
 - Keep replies short and warm: one to three sentences or a compact list. Refer to overlaps as "#id" with both project names.""" + memory_prompt(ctx.get("memories"))

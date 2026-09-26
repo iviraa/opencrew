@@ -1,7 +1,7 @@
 import { Sparkles, X } from "lucide-react";
 import { ago, type Notice, type SuggestionAction } from "./data";
 
-const LABEL: Record<SuggestionAction["type"], string> = { open_request: "Open request", open_overlap: "Open overlap", weather: "See weather", chat: "Ask Crewly" };
+const LABEL: Record<SuggestionAction["type"], string> = { open_request: "Open request", open_overlap: "Open overlap", weather: "See weather", chat: "Ask Crewly", plan: "See plan" };
 
 // one of crewly's suggestions in the bell: what it noticed, and one thing it can do about it
 export default function Suggestion({ n, onAct, onDismiss }: { n: Notice; onAct: () => void; onDismiss: () => void }) {

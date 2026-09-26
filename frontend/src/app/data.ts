@@ -47,7 +47,7 @@ export type CollabRequest = {
   created_at: string; responded_at: string | null;
 };
 
-export type SuggestionAction = { type: "open_request" | "open_overlap" | "weather" | "chat"; id?: number; prompt?: string };
+export type SuggestionAction = { type: "open_request" | "open_overlap" | "weather" | "chat" | "plan"; id?: number; prompt?: string; horizon?: string };
 
 export type Notice = {
   id: number; company_id: CompanyId; request_id: number | null; kind: "request" | "approved" | "declined" | "suggestion"; created_at: string; read_at: string | null;
@@ -57,6 +57,7 @@ export type Notice = {
 export type ChatAction = {  // what the chat asks the screen to do
   type: string; ids?: number[]; id?: number; opportunity_id?: number; opportunity_ids?: number[]; bbox?: [number, number, number, number];
   action?: "send_request" | "respond"; note?: string; label?: string; title?: string; request_id?: number; decision?: "approved" | "declined"; feedback?: string;
+  horizon?: string; item?: string;
 };
 
 export type ChatReply = { reply: string; ui_actions: ChatAction[]; unsourced: string[]; offline?: boolean };
@@ -75,6 +76,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   get: <T,>(path: string) => call<T>(path),  // any logged-in endpoint
+  send: <T,>(path: string, method: "POST" | "PATCH" | "DELETE", body?: unknown) => call<T>(path, { method, body: body === undefined ? undefined : JSON.stringify(body) }),
   me: () => call<Me>("/api/app/me"),
   companies: () => call<Company[]>("/api/app/companies"),
   projects: () => call<Jobs>("/api/app/projects"),

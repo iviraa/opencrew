@@ -14,6 +14,7 @@ from app.config import ASSUMPTIONS, MAX_DRIVE_MIN, STATUSES
 from app import app_api, outreach, vendors, weather_api
 from app.feasibility import api as feasibility_api
 from app.hazards import api as hazards_api
+from app.planner import api as planner_api
 from app.companies import companies
 from app.crewly import agent, brief, proactive
 from app.db import ROOT, connect, get_conn
@@ -77,8 +78,21 @@ async def lifespan(_app):
             await asyncio.sleep(nudge * 60)
 
     nudger = asyncio.create_task(suggest()) if nudge > 0 else None
+    plan_minutes = float(os.environ.get("PLANNER_MINUTES") or 0)  # nightly coordination plans, off unless set
+
+    async def plans():
+        from app.planner import nightly
+        while True:
+            for company in companies():
+                try:
+                    await asyncio.to_thread(nightly.refresh, company)
+                except Exception as e:  # one company's plan must not stop the others
+                    print("plan refresh failed:", company, e)
+            await asyncio.sleep(plan_minutes * 60)
+
+    planner_task = asyncio.create_task(plans()) if plan_minutes > 0 else None
     yield
-    for t in (task, hazard_task, nudger):
+    for t in (task, hazard_task, nudger, planner_task):
         if t:
             t.cancel()
 
@@ -528,6 +542,7 @@ app.include_router(app_api.router)
 app.include_router(weather_api.router)
 app.include_router(hazards_api.router)
 app.include_router(feasibility_api.router)
+app.include_router(planner_api.router)
 
 @app.get("/config.js", include_in_schema=False)
 def web_config():
