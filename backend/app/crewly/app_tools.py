@@ -207,7 +207,33 @@ def app_tools(ctx):
     tools["hazard_cost"] = hazard_cost_tool(ctx)
     tools["assess_feasibility"] = feasibility_tool(ctx)
     tools.update(planner_tools(ctx))
+    tools["news_for"] = news_tool(ctx)
     return tools
+
+
+def news_for(ctx, conn, company_or_overlap=None, days=90, impact=None):
+    """Recent stories about us, a neighbor, or an overlap, with how each could affect the work."""
+    from app.news import feed
+    q = str(company_or_overlap or "").strip()
+    m = re.fullmatch(r"#?(\d+)", q)
+    if m:
+        items, about = feed.for_overlap(conn, int(m.group(1)), days), f"overlap #{m.group(1)}"
+    else:
+        who = find_company(q) if q else ctx["company"]
+        if not who:
+            return {"error": f"no utility called {q!r}", "utilities": sorted(c["name"] for c in companies().values())}, []
+        items, about = feed.for_org(conn, who, days, impact), name(who)
+    rows = [{"title": i["title"], "source": i["source"], "date": (i["published"] or "")[:10], "impact": i["impact"], "affects_work": i["affects_work"],
+             "summary": i["summary"], "linked_projects": len(i["job_ids"]), "linked_overlaps": i["opportunity_ids"][:5], "verified": i["verified"], "url": i["url"]}
+            for i in items[:12]]
+    return {"about": about, "days": days, "count": len(items), "stories": rows}, []
+
+
+def news_tool(ctx):
+    return (_bind(ctx, news_for), "Recent news about our company, a neighboring utility, or an overlap (#id): outages, damage, delays, "
+            "opposition, regulatory decisions, supply chain, security. Each story says how it could affect the work and which projects it touches.", {
+        "company_or_overlap": {"type": "string", "description": "a utility name, or an overlap id like #18; empty means our company"},
+        "days": {"type": "integer"}, "impact": {"type": "string", "enum": ["delay", "damage", "outage", "opposition", "regulatory", "supply_chain", "security", "funding", "construction", "other"]}}, [])
 
 
 def app_system(ctx):
@@ -236,6 +262,8 @@ Rules:
 - Weather and storm questions use outlook, weather_alerts or site_hazards; damage news uses incidents_near.
 - For "how exposed is site/overlap X in <period>" call hazard_exposure. Report affected days as an assessment of the period
   (exposure, risk, likely affected days); never tell crews whether to work or send anyone anywhere.
+- For "any news about X", "what is going on at <neighbor>", or "anything that could disrupt overlap #N" call news_for and report it as an
+  assessment: what happened, how it could affect the work, and the source name. Never invent stories or details beyond the tool's summary.
 - For "what does weather cost us in <period>" or "what do we save by coordinating with X in <period>" call hazard_cost and quote its
   low to high ranges as estimates; numbers only from the tool, never computed by you.
 - For "is #X feasible / realistic / worth pursuing" or "why would coordinating on #X not work" call assess_feasibility and give the

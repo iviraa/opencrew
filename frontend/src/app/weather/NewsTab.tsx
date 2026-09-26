@@ -1,8 +1,8 @@
-import { ExternalLink, HardHat, Newspaper } from "lucide-react";
+import { AlertTriangle, ExternalLink, HardHat, MapPin, Newspaper } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { say, type Mood } from "../mascot";
 import type { NewsPin } from "../../api";
-import { ago, publicApi, type Jobs } from "../data";
+import { ago, api, publicApi, type Jobs } from "../data";
 import MapPane, { bboxOf, esc, type Fit, type Scene } from "../MapPane";
 import { PanelHeader } from "../panels";
 import { ScenarioSwitch, SectionTitle, Split, around, fc, nearestProject, splitGeoms, when, type Scenario } from "./shared";
@@ -13,7 +13,23 @@ type Incident = { id: number; ts: string; kind: string; where_text: string; veri
 type Source = { type: string; name: string; url?: string; title?: string; quote_evidence?: string; ts?: string };
 type IncidentDetail = Incident & { lat: number; lon: number; sources: Source[] };
 type LiveFrame = { incidents: GeoJSON.FeatureCollection<GeoJSON.Point, Incident>; news: GeoJSON.FeatureCollection<GeoJSON.Point, NewsPin> };
-type Open = { kind: "incident"; detail: IncidentDetail } | { kind: "news"; idx: number } | null;
+type Open = { kind: "incident"; detail: IncidentDetail } | { kind: "news"; idx: number } | { kind: "story"; item: Story } | null;
+
+// a story the news pipeline linked to us or a neighbor (see backend/app/news)
+type Story = {
+  id: number; title: string; source: string | null; url: string; published: string | null; impact: string; affects_work: boolean; summary: string | null;
+  confidence: number; org_ids: string[]; job_ids: string[]; opportunity_ids: number[]; verified: boolean; mine: boolean; direct: boolean; about: string[];
+  evidence: { org?: string[]; station?: string[]; county?: string[]; keyword?: string; verified_by?: Record<string, string>; provider?: string };
+};
+type NewsFeed = { items: Story[]; partners: string[]; impacts: string[] };
+
+const IMPACT: Record<string, { label: string; color: string }> = {
+  delay: { label: "Delay", color: "#ff9f1c" }, damage: { label: "Damage", color: "#c9184a" }, outage: { label: "Outage", color: "#1b2447" },
+  opposition: { label: "Opposition", color: "#e84393" }, regulatory: { label: "Regulatory", color: "#3a86ff" }, supply_chain: { label: "Supply chain", color: "#8e5cf7" },
+  security: { label: "Security", color: "#ef476f" }, funding: { label: "Funding", color: "#12a36b" }, construction: { label: "Construction", color: "#00b8a9" },
+  other: { label: "Other", color: "#8a94b0" },
+};
+const impactOf = (k: string) => IMPACT[k] ?? IMPACT.other;
 
 const KIND: Record<string, { label: string; color: string }> = {
   wind_damage: { label: "Wind damage", color: "#ff9f1c" },
@@ -45,8 +61,18 @@ function newsLine(f: LiveFrame): [string, Mood] {
   return [`${n} damage report${n === 1 ? "" : "s"} found, ${v} verified.`, "surprised"];
 }
 
-export default function NewsTab({ projects, side }: { projects: Jobs | null; side: React.ReactNode | null }) {
+export default function NewsTab({ projects, side, onOpenOverlap }: { projects: Jobs | null; side: React.ReactNode | null; onOpenOverlap?: (id: number) => void }) {
   const [scenario, setScenario] = useState<Scenario>("now");
+  const [stories, setStories] = useState<Story[] | null>(null);
+  const [impact, setImpact] = useState<string | null>(null);
+
+  useEffect(() => { api.get<NewsFeed>("/api/app/news?days=90").then((f) => setStories(f.items)).catch(() => setStories([])); }, []);
+  const forUs = useMemo(() => (stories ?? []).filter((s) => !impact || s.impact === impact), [stories, impact]);
+  const impacts = useMemo(() => {
+    const n = new Map<string, number>();
+    (stories ?? []).forEach((s) => n.set(s.impact, (n.get(s.impact) ?? 0) + 1));
+    return [...n.entries()].sort((a, b) => b[1] - a[1]);
+  }, [stories]);
   const [frame, setFrame] = useState<LiveFrame | null>(null);
   const [open, setOpen] = useState<Open>(null);
   const [hidden, setHidden] = useState<Set<string>>(new Set());  // kinds switched off in the legend
@@ -130,6 +156,33 @@ export default function NewsTab({ projects, side }: { projects: Jobs | null; sid
             ))}
           </div>
         )}
+        {!replay && stories && stories.length > 0 && (
+          <>
+            <SectionTitle><AlertTriangle size={13} /> For us · {forUs.length}</SectionTitle>
+            <div className="mb-1 flex flex-wrap gap-1 px-2">
+              {impacts.map(([k, n]) => (
+                <button key={k} onClick={() => setImpact(impact === k ? null : k)} aria-pressed={impact === k}
+                  className={`flex items-center gap-1 rounded-full border-2 px-2 py-0.5 text-[11px] font-semibold ${impact === k ? "border-pen bg-grape-soft" : "border-line bg-white hover:border-ink"}`}>
+                  <span className="h-2 w-2 rounded-full" style={{ background: impactOf(k).color }} />{impactOf(k).label}<span className="text-faint">{n}</span>
+                </button>
+              ))}
+            </div>
+            {forUs.slice(0, 40).map((s) => (
+              <button key={s.id} onClick={() => setOpen({ kind: "story", item: s })} className="flex gap-2.5 rounded-2xl px-2 py-1.5 text-left hover:bg-soft">
+                <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: impactOf(s.impact).color, opacity: s.affects_work ? 1 : 0.45 }} />
+                <span className="min-w-0">
+                  <span className="line-clamp-2 block text-sm font-semibold leading-snug">{s.title}</span>
+                  <span className="block text-xs text-muted">
+                    {impactOf(s.impact).label} · {s.about.join(", ")}{s.opportunity_ids.length ? ` · overlap #${s.opportunity_ids[0]}` : s.job_ids.length ? " · one of our projects" : ""}
+                    {s.published ? ` · ${ago(s.published)}` : ""}
+                  </span>
+                </span>
+              </button>
+            ))}
+            {!forUs.length && <p className="px-2 py-2 text-xs text-muted">No stories with that impact.</p>}
+          </>
+        )}
+        {!replay && stories && !stories.length && <p className="px-2 py-1 text-xs text-muted">No recent stories about us or our neighbors yet.</p>}
         {news.length > 0 && <SectionTitle><Newspaper size={13} /> In the news</SectionTitle>}
         {news.slice(0, 12).map((f, i) => {
           const a = f.properties.articles[0];
@@ -163,7 +216,40 @@ export default function NewsTab({ projects, side }: { projects: Jobs | null; sid
   );
 
   let detail: React.ReactNode = null;
-  if (open?.kind === "incident") {
+  if (open?.kind === "story") {
+    const s = open.item;
+    const ev = s.evidence ?? {};
+    detail = (
+      <>
+        <PanelHeader title={impactOf(s.impact).label} sub={`${s.source ?? "News"}${s.published ? ` · ${ago(s.published)}` : ""}`} onBack={() => setOpen(null)} />
+        <div className="thin-scroll -mr-2 flex flex-1 flex-col gap-2 overflow-y-auto pr-2">
+          <div className="text-sm font-semibold leading-snug">{s.title}</div>
+          <div className="flex flex-wrap gap-1.5 text-xs font-semibold">
+            <span className={`rounded-full px-2 py-0.5 ${s.affects_work ? "bg-warn-soft text-warn" : "bg-soft text-muted"}`}>{s.affects_work ? "Could affect the work" : "Background"}</span>
+            <span className={`rounded-full px-2 py-0.5 ${s.verified ? "bg-save-soft text-save" : "bg-soft text-muted"}`}>{s.verified ? "Matches an official report" : "Unverified"}</span>
+            <span className="rounded-full bg-soft px-2 py-0.5">{Math.round(s.confidence * 100)}% link confidence</span>
+          </div>
+          {s.summary && <p className="rounded-2xl rounded-tl-sm bg-soft px-3 py-2 text-sm">{s.summary}</p>}
+          <div className="rounded-xl border-2 border-line px-2.5 py-2 text-xs">
+            <div className="mb-0.5 font-semibold text-muted">Why it is linked</div>
+            <div>About {s.about.join(" and ")}{ev.org?.length ? ` (named: ${ev.org.join(", ")})` : ""}.</div>
+            {ev.station?.length ? <div>Stations named: {ev.station.join(", ")}.</div> : null}
+            {ev.county?.length ? <div>Counties named: {ev.county.join(", ")}.</div> : null}
+            {ev.keyword ? <div>Impact word: "{ev.keyword}".</div> : null}
+            {ev.verified_by ? <div>Official report nearby: {Object.values(ev.verified_by).join(", ")}.</div> : null}
+          </div>
+          {s.opportunity_ids.length > 0 && onOpenOverlap && (
+            <div className="flex flex-wrap gap-1.5">
+              {s.opportunity_ids.slice(0, 4).map((id) => (
+                <button key={id} onClick={() => onOpenOverlap(id)} className="flex items-center gap-1 rounded-full border-2 border-pen bg-white px-2.5 py-1 text-xs font-semibold hover:bg-grape-soft"><MapPin size={12} /> Open overlap #{id}</button>
+              ))}
+            </div>
+          )}
+          <a href={s.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-grape hover:underline">Read the story <ExternalLink size={11} /></a>
+        </div>
+      </>
+    );
+  } else if (open?.kind === "incident") {
     const d = open.detail;
     detail = (
       <>
