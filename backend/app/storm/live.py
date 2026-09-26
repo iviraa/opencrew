@@ -8,8 +8,8 @@ from zoneinfo import ZoneInfo
 import httpx
 from shapely.geometry import shape
 
-from app.storm import incidents, news
-from app.storm.helene import DAMAGE
+from app.storm import incidents, news, replay
+from app.storm.helene import DAMAGE, LANDFALL, REPLAY
 
 HEADERS = {"User-Agent": "opencrew/0.1 (hackathon)", "Accept": "application/geo+json"}  # NWS requires a User-Agent
 ALERTS = "https://api.weather.gov/alerts/active?area=GA,SC"
@@ -81,8 +81,18 @@ def zone_outline(url, cache={}):
     return cache[url]
 
 
-def store(conn, rows, kind):
-    conn.execute("DELETE FROM storm_event WHERE kind = %s AND payload->>'mode' = 'live'", (kind,))
+HISTORY_DAYS = 30  # live history kept for the time bar
+
+
+def store(conn, rows, kind, since=None):
+    """Append live rows, replacing only what this poll covers, so older history stays scrubbable."""
+    ids = [p["id"] for *_, p in rows if p.get("id")]
+    if ids:
+        conn.execute("DELETE FROM storm_event WHERE kind = %s AND payload->>'mode' = 'live' AND payload->>'id' = ANY(%s)", (kind, ids))
+    if since:
+        conn.execute("DELETE FROM storm_event WHERE kind = %s AND payload->>'mode' = 'live' AND ts >= %s", (kind, since))
+    conn.execute("DELETE FROM storm_event WHERE kind = %s AND payload->>'mode' = 'live' AND ts < now() - make_interval(days => %s)",
+                 (kind, HISTORY_DAYS))
     with conn.cursor() as cur:
         cur.executemany("""INSERT INTO storm_event (ts, kind, geom, payload, confidence, verified)
                            VALUES (%s, %s, ST_GeogFromText(%s), %s, 1.0, TRUE)""", [(t, k, w, json.dumps(p)) for t, k, w, p in rows])
@@ -98,12 +108,12 @@ def poll(conn):
         out["alerts_error"] = str(e)[:120]
     try:
         spc = [row for kind in ("wind", "torn") for row in parse_spc(get(SPC_TODAY.format(kind=kind)).text, kind, now)]
-        out["spc_reports"] = store(conn, spc, "spc_report")
+        out["spc_reports"] = store(conn, spc, "spc_report", since=now - timedelta(hours=24))
     except httpx.HTTPError as e:
         out["spc_error"] = str(e)[:120]
     try:
         lsr = get(LSR, params={"sts": f"{now - timedelta(hours=24):%Y-%m-%dT%H:%MZ}", "ets": f"{now:%Y-%m-%dT%H:%MZ}", "states": "GA,SC"}).json()
-        out["lsr_reports"] = store(conn, parse_lsr(lsr), "lsr")
+        out["lsr_reports"] = store(conn, parse_lsr(lsr), "lsr", since=now - timedelta(hours=24))
     except httpx.HTTPError as e:
         out["lsr_error"] = str(e)[:120]
     items = []
@@ -112,9 +122,131 @@ def poll(conn):
             items += news.items_for(row, news.fetch_article(row["url"]).get("text"))
     except httpx.HTTPError as e:
         out["news_error"] = str(e)[:120]
-    out["news_items"] = len(items)
-    out["incidents"] = dict(incidents.rebuild(conn, "live", items))
+    out["news_items"] = store_news(conn, items)
+    out["incidents"] = dict(incidents.rebuild(conn, "live", news_history(conn)))  # rebuilt from the whole kept history
     out["phase_risks"] = phase_risks(conn)
+    return out
+
+
+def store_news(conn, items):
+    """Keep each structured news item so incidents can be rebuilt for any past time."""
+    by_url = {}
+    for it in items:
+        by_url.setdefault(it["sources"][0]["url"], []).append(it)
+    for url, group in by_url.items():
+        conn.execute("DELETE FROM storm_event WHERE kind = 'news_item' AND payload->>'url' = %s", (url,))
+        with conn.cursor() as cur:
+            cur.executemany("INSERT INTO storm_event (ts, kind, geom, payload) VALUES (%s, 'news_item', ST_GeogFromText(%s), %s)",
+                            [(it["ts"], f"POINT({it['lon']} {it['lat']})", json.dumps({"mode": "live", "url": url, "item": it}, default=str)) for it in group])
+    return len(items)
+
+
+def news_history(conn, days=HISTORY_DAYS):
+    rows = conn.execute("""SELECT payload->'item' AS item FROM storm_event WHERE kind = 'news_item' AND payload->>'mode' = 'live'
+                           AND ts >= now() - make_interval(days => %s)""", (days,)).fetchall()
+    out = []
+    for r in rows:
+        it = r["item"]
+        it["ts"] = datetime.fromisoformat(str(it["ts"]))
+        out.append(it)
+    return out
+
+
+# ---------- live and scenario frames ----------
+
+NEWS_NEAR_M = 10000  # news pins only near a project or utility substation
+DAMAGE_KINDS = {"downed_line", "substation_damage", "tree_on_line", "wind_damage", "tornado", "flooding"}
+WORK_WORDS = ("construction", "project", "upgrade", "rebuild", "new line", "substation", "transmission line", "right-of-way")
+
+NEWS_SQL = """
+WITH n AS (
+  SELECT DISTINCT ON (s->>'url') i.id AS incident_id, i.ts, i.kind, i.verified, i.geom, s->>'title' AS title, s->>'name' AS source,
+         s->>'url' AS url, coalesce(s->>'quote_evidence', '') AS quote, s->>'ts' AS published
+  FROM incident i CROSS JOIN LATERAL jsonb_array_elements(i.sources) s
+  WHERE i.mode = %(mode)s AND s->>'type' = 'news' AND i.ts <= %(t)s AND i.ts >= %(t0)s
+  ORDER BY s->>'url', i.ts DESC
+)
+SELECT n.incident_id, n.ts, n.kind, n.verified, n.title, n.source, n.url, n.quote, n.published, near.name AS near_name, near.mi AS near_mi,
+       ST_AsGeoJSON(n.geom, 5)::json AS geometry
+FROM n CROSS JOIN LATERAL (
+  SELECT x.name, round((ST_Distance(x.geom, n.geom) / 1609.344)::numeric, 1) AS mi FROM (
+    SELECT name, geom FROM job WHERE horizon = 'long'
+    UNION ALL SELECT coalesce(name, 'utility substation'), geom FROM asset) x
+  WHERE ST_DWithin(x.geom, n.geom, %(near_m)s) ORDER BY ST_Distance(x.geom, n.geom) LIMIT 1) near
+"""  # the lateral join drops news that is not near any site
+
+ACTIVE_AT_SQL = """
+SELECT j.id, j.name, j.phase, j.org_id, o.name AS org_name, o.color, j.parent_job_id, lower(j.work_window) AS start_at, upper(j.work_window) AS end_at,
+       ST_AsGeoJSON(j.geom, 5)::json AS geometry, ST_AsGeoJSON(ST_PointOnSurface(j.geom::geometry), 5)::json AS label
+FROM job j JOIN org o ON o.id = j.org_id WHERE j.horizon = 'near' AND j.work_window @> %(t)s::timestamptz
+"""
+
+
+def topic(kind, title):
+    if kind == "outage":
+        return "outage"
+    if kind in DAMAGE_KINDS:
+        return "damage"
+    return "work" if any(w in (title or "").lower() for w in WORK_WORDS) else "other"
+
+
+SEVERITY = ["damage", "outage", "work", "other"]
+
+
+def news_pins(rows):
+    """One pin per place: syndicated copies of a story collapse into one article with a copy count."""
+    pins = {}
+    for r in rows:
+        lon, lat = r["geometry"]["coordinates"]
+        pin = pins.setdefault((round(lon, 3), round(lat, 3)), {"geometry": r["geometry"], "articles": {}, "near_name": r["near_name"],
+                                                                "near_mi": float(r["near_mi"]), "verified": False, "ts": r["ts"]})
+        key = " ".join((r["title"] or "").lower().split())[:80]
+        art = pin["articles"].setdefault(key, {"title": r["title"], "source": r["source"], "url": r["url"], "quote": (r["quote"] or "")[:240],
+                                               "published": r["published"], "topic": topic(r["kind"], r["title"]), "copies": 0})
+        art["copies"] += 1
+        pin["verified"] = pin["verified"] or bool(r["verified"])
+        pin["ts"] = max(pin["ts"], r["ts"])
+    out = []
+    for pin in pins.values():
+        arts = sorted(pin.pop("articles").values(), key=lambda a: SEVERITY.index(a["topic"]))
+        out.append({"type": "Feature", "geometry": pin.pop("geometry"),
+                    "properties": {**pin, "ts": pin["ts"].isoformat(), "topic": arts[0]["topic"], "count": len(arts), "articles": arts}})
+    return out
+
+
+def _fc(features):
+    return {"type": "FeatureCollection", "features": features}
+
+
+def frame(conn, t=None, scenario="none"):
+    """Everything the map shows at time t: live feeds by default, or a planted storm scenario."""
+    now = datetime.now(timezone.utc)
+    if scenario == "helene":
+        mode, rng = "replay", REPLAY
+        t = min(max(t or LANDFALL - timedelta(hours=12), REPLAY[0]), REPLAY[1])
+    else:
+        mode, rng = "live", (now - timedelta(days=HISTORY_DAYS), now)
+        t = min(t or now, now)
+    out = replay.frame(conn, t, mode)
+    for f in out["incidents"]["features"]:  # older incidents fade on the map
+        f["properties"]["age_h"] = round((t - datetime.fromisoformat(f["properties"]["ts"])).total_seconds() / 3600, 1)
+    t0 = REPLAY[0] if mode == "replay" else t - timedelta(hours=72)
+    news_rows = conn.execute(NEWS_SQL, {"mode": mode, "t": t, "t0": t0, "near_m": NEWS_NEAR_M}).fetchall()
+    out_news = news_pins(news_rows)
+    active, labels = [], []
+    for r in conn.execute(ACTIVE_AT_SQL, {"t": t}).fetchall():
+        label = r.pop("label")
+        feat = replay.feature(r)
+        active.append(feat)
+        labels.append({"type": "Feature", "geometry": label, "properties": {"phase": r["phase"], "color": r["color"], "id": r["id"]}})
+    risks = []
+    if mode == "live" and now - t < timedelta(days=2):  # wind forecasts only describe the coming week
+        risks = conn.execute("SELECT job_id, site, day, gust_mph, work, alert FROM phase_risk ORDER BY day, gust_mph DESC").fetchall()
+    out.update({
+        "scenario": scenario, "range": [rng[0].isoformat(), rng[1].isoformat()], "is_live": mode == "live" and now - t < timedelta(minutes=10),
+        "storm_active": bool(out["cone"]["features"]), "news": _fc(out_news), "active_phases": _fc(active), "active_labels": _fc(labels),
+        "wind_risks": risks,
+    })
     return out
 
 

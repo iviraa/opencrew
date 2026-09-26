@@ -1,4 +1,6 @@
+import asyncio
 import os
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 
 import httpx
@@ -9,7 +11,7 @@ from pydantic import BaseModel
 from app.config import ASSUMPTIONS, MAX_DRIVE_MIN, STATUSES
 from app import outreach, vendors
 from app.crewly import agent, brief
-from app.db import ROOT, get_conn
+from app.db import ROOT, connect, get_conn
 from app.engine.cost import savings
 from app.engine.overlap import recompute
 from app.engine import equipment, plan
@@ -19,7 +21,30 @@ from app.ingest import filing
 from app.queries import JOB_SQL, OPP_SQL, shareable
 from app.storm import live, replay
 
-app = FastAPI(title="OpenCrew")
+def poll_once():
+    with connect() as conn:
+        return live.poll(conn)
+
+
+@asynccontextmanager
+async def lifespan(_app):
+    minutes = float(os.environ.get("LIVE_POLL_MINUTES") or 0)  # off unless set, so tests never hit live feeds
+
+    async def loop():
+        while True:
+            try:
+                await asyncio.to_thread(poll_once)
+            except Exception as e:  # a bad poll must not kill the loop
+                print("live poll failed:", e)
+            await asyncio.sleep(minutes * 60)
+
+    task = asyncio.create_task(loop()) if minutes > 0 else None
+    yield
+    if task:
+        task.cancel()
+
+
+app = FastAPI(title="OpenCrew", lifespan=lifespan)
 api = APIRouter(prefix="/api")
 
 
@@ -273,6 +298,13 @@ def weather_alerts(conn=Depends(get_conn)):
 @api.get("/weather/phase_risks")
 def weather_phase_risks(conn=Depends(get_conn)):
     return conn.execute("SELECT job_id, site, day, gust_mph, work, alert, fetched_at FROM phase_risk ORDER BY day, gust_mph DESC").fetchall()
+
+
+@api.get("/live/frame")
+def live_frame(at: datetime | None = None, scenario: str = "none", conn=Depends(get_conn)):
+    if scenario not in ("none", "helene"):
+        raise HTTPException(400, "scenario must be none or helene")
+    return live.frame(conn, at, scenario)  # what the map shows at a moment: live feeds, or a planted storm
 
 
 @api.post("/live/poll")
