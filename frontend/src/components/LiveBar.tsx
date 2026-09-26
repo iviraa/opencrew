@@ -10,6 +10,7 @@ type Props = {
 };
 
 const HOUR = 3600e3;
+const FORECAST = 7 * 24 * HOUR;
 const LANDFALL = Date.parse("2024-09-27T03:10:00Z");
 const et = (t: number | string, withDay = true) => new Date(t).toLocaleString("en-US", {
   timeZone: "America/New_York", ...(withDay ? { weekday: "short" } : {}), month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
@@ -19,6 +20,12 @@ function rel(t: number) {
   if (h === 0) return "Landfall";
   const n = Math.abs(h);
   return `${n} ${n === 1 ? "hour" : "hours"} ${h > 0 ? "after" : "before"} landfall`;
+}
+
+function ahead(t: number, now: number) {
+  const h = Math.round((t - now) / HOUR);
+  if (h < 48) return `In ${h} ${h === 1 ? "hour" : "hours"}`;
+  return `In ${Math.round(h / 24)} days`;
 }
 
 function ago(t: number, now: number) {
@@ -33,8 +40,10 @@ export default function LiveBar({ frame, scenario, at, onAt, loading, onScenario
   const [polling, setPolling] = useState(false);
   const helene = scenario === "helene";
   const [start, end] = frame ? frame.range.map((x) => Date.parse(x)) : [Date.now() - 30 * 24 * HOUR, Date.now()];
+  const fEnd = end + FORECAST;  // the shaded stretch after now shows forecasts, not observations
   const value = at ?? end;
   const live = !helene && at == null;
+  const future = value > end;
   const valueRef = useRef(value);
   valueRef.current = value;
 
@@ -57,7 +66,8 @@ export default function LiveBar({ frame, scenario, at, onAt, loading, onScenario
   const work = frame?.active_phases.features.length ?? 0;
   const risks = frame?.wind_risks ?? [];
   const poll = () => { setPolling(true); onPoll().finally(() => setPolling(false)); };
-  const landfallPct = ((LANDFALL - start) / (end - start)) * 100;
+  const landfallPct = ((LANDFALL - start) / (fEnd - start)) * 100;
+  const nowPct = ((end - start) / (fEnd - start)) * 100;
 
   return (
     <div className="thin-scroll flex h-full flex-col overflow-y-auto px-5 py-3">
@@ -75,9 +85,12 @@ export default function LiveBar({ frame, scenario, at, onAt, loading, onScenario
         )}
         <div className="min-w-0">
           <div className="display text-[20px] font-semibold leading-tight">
-            {helene ? rel(value) : live ? "Right now" : ago(value, end)}
+            {helene ? rel(value) : live ? "Right now" : future ? ahead(value, end) : ago(value, end)}
           </div>
-          <div className="text-[13px] text-muted">{helene ? `${et(value)} ET, Hurricane Helene, September 2024` : `${et(value)} ET`}</div>
+          <div className="text-[13px] text-muted">
+            {future ? `${et(value)} ET, forecast from outlooks issued by ${helene ? "the end of the replay" : "now"}`
+              : helene ? `${et(value)} ET, Hurricane Helene, September 2024` : `${et(value)} ET`}
+          </div>
         </div>
         {(loading || !frame) && <span className="text-[13px] text-faint" aria-live="polite">{frame ? "Updating…" : "Loading the map…"}</span>}
         <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -100,13 +113,17 @@ export default function LiveBar({ frame, scenario, at, onAt, loading, onScenario
       </div>
 
       <div className="mt-2">
-        <input type="range" min={start} max={end} step={HOUR} value={value} aria-label={helene ? "Scenario time" : "Map time"}
-          onChange={(e) => { setPlaying(false); const t = Number(e.target.value); onAt(!helene && t >= end - HOUR ? null : t); }}
-          className={`w-full ${helene ? "accent-[#ff5d5d]" : "accent-[#1b2447]"}`} />
+        <div className="relative flex items-center">
+          <span aria-hidden className="pointer-events-none absolute h-3 rounded-full bg-warn/20 ring-1 ring-warn/30" style={{ left: `${nowPct}%`, right: 0 }} />
+          <input type="range" min={start} max={fEnd} step={HOUR} value={value} aria-label={helene ? "Scenario time" : "Map time"}
+            onChange={(e) => { setPlaying(false); const t = Number(e.target.value); onAt(!helene && Math.abs(t - end) <= HOUR ? null : t); }}
+            className={`relative w-full ${helene ? "accent-[#ff5d5d]" : "accent-[#1b2447]"}`} />
+        </div>
         <div className="relative h-4 text-[12px] text-faint">
           <span className="absolute left-0">{helene ? "3 days before" : "30 days ago"}</span>
           {helene && <span className="absolute -translate-x-1/2 font-semibold text-gpc" style={{ left: `${landfallPct}%` }}>landfall</span>}
-          <span className="absolute right-0">{helene ? "1 day after" : "Now"}</span>
+          <span className="absolute -translate-x-1/2 font-semibold text-ink" style={{ left: `${nowPct}%` }}>{helene ? "1 day after" : "Now"}</span>
+          <span className="absolute right-0 font-semibold text-warn">Next 7 days, forecast</span>
         </div>
       </div>
 

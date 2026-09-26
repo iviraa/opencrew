@@ -16,6 +16,8 @@ import OpportunityList from "./components/OpportunityList";
 import ReviewPanel from "./components/ReviewPanel";
 import LiveBar from "./components/LiveBar";
 import NewsCard from "./components/NewsCard";
+import OutlookPanel from "./components/OutlookPanel";
+import { outlookApi, type HeadsUp, type OutlookFrame } from "./api-outlook";
 import Timeline from "./components/Timeline";
 
 const LANDFALL = Date.parse("2024-09-27T03:10:00Z");
@@ -65,6 +67,7 @@ export default function App() {
   const [stormTick, setStormTick] = useState(0);
   const [drawer, setDrawer] = useState(false);
   const [menu, setMenu] = useState(false);
+  const [outlook, setOutlook] = useState<OutlookFrame | null>(null);  // forecast risk areas and the heads-up list
 
   useEffect(() => {
     setLoading(true);
@@ -81,6 +84,17 @@ export default function App() {
       .catch((e) => setError(String(e))).finally(() => setStormLoading(false)), 120);
     return () => clearTimeout(id);
   }, [horizon, liveAt, scenario, stormTick]);
+
+  const outlookAt = liveAt ?? (scenario === "helene" && storm ? Date.parse(storm.at) : null);
+  useEffect(() => {
+    if (horizon !== "emergency") { setOutlook(null); return; }
+    const id = setTimeout(() => outlookApi.frame(outlookAt, scenario).then(setOutlook).catch(() => setOutlook(null)), 150);
+    return () => clearTimeout(id);
+  }, [horizon, outlookAt, scenario, stormTick]);
+  const pickOutlook = (h: HeadsUp) => {
+    if (h.bbox) setFly({ bbox: h.bbox, at: Date.now() });
+    if (outlook && Date.parse(h.when) - Date.parse(outlook.known) > 3600e3) setLiveAt(Date.parse(h.when));  // scrub ahead so its area shows
+  };
 
   useEffect(() => {
     if (horizon !== "emergency" || scenario !== "none" || liveAt != null) return;
@@ -164,6 +178,10 @@ export default function App() {
       if (a.type === "select") { if (a.horizon) setHorizon(a.horizon); setSelectedId(a.opportunity_id); }
       if (a.type === "storm") { setHorizon("emergency"); setScenario("helene"); setLiveAt(Date.parse(a.at)); }
       if (a.type === "live") { setHorizon("emergency"); setScenario("none"); setLiveAt(null); }
+      if ((a as { type: string }).type === "outlook") {
+        const o = a as unknown as { at: string; scenario: "none" | "helene" };
+        setHorizon("emergency"); setScenario(o.scenario); setLiveAt(o.scenario === "helene" ? Date.parse(o.at) : null);
+      }
       if (a.type === "fly") setFly({ bbox: a.bbox, at: Date.now() });
       if (a.type === "reload") setReload((n) => n + 1);
       if (a.type === "status") { setOpps((xs) => xs.map((o) => (o.id === a.opportunity_id ? { ...o, status: a.status } : o))); setDetail((d) => (d && d.id === a.opportunity_id ? { ...d, status: a.status } : d)); }
@@ -252,7 +270,8 @@ export default function App() {
         </aside>
         <section className="relative min-w-0 flex-1 overflow-hidden rounded-[var(--radius-bubble)] shadow-float">
           <MapView jobs={visibleJobs} opportunities={shown} selected={selected} onSelect={setSelectedId} fly={fly} storm={storm} zone={zone} onMapClick={placingId != null ? placeAt : null}
-            hoverKey={hover?.key ?? null} onHover={(key) => setHover(key ? { key, from: "map" } : null)} onIncident={setIncidentId} onNews={(p) => { setIncidentId(null); setNewsPin(p); }} />
+            hoverKey={hover?.key ?? null} onHover={(key) => setHover(key ? { key, from: "map" } : null)} onIncident={setIncidentId} onNews={(p) => { setIncidentId(null); setNewsPin(p); }}
+            outlooks={horizon === "emergency" ? outlook?.outlooks ?? null : null} />
           {placingId != null && (
             <div className="absolute left-1/2 top-4 z-20 -translate-x-1/2 rounded-full bg-crew px-5 py-2 text-[14px] font-semibold text-ink shadow-float">Click the map where this project is</div>
           )}
@@ -266,6 +285,11 @@ export default function App() {
           {horizon === "emergency" && storm?.storm_active && !sheetOpen && (
             <StormSlot at={new Date(liveAt ?? Date.now()).toISOString()} scenario={scenario} landfall={scenario === "helene" ? LANDFALL : null}
               onFly={(bbox) => setFly({ bbox, at: Date.now() })} />
+          )}
+          {horizon === "emergency" && (
+            <div className={`pointer-events-none absolute left-3 top-3 z-10 flex items-start ${scenario === "helene" ? "bottom-[296px]" : "bottom-[236px]"}`}>
+              <div className="pointer-events-auto flex max-h-full"><OutlookPanel data={outlook} scenario={scenario} onPick={pickOutlook} /></div>
+            </div>
           )}
           {newsPin != null && incidentId == null && (
             <div className="absolute bottom-[236px] left-3 top-16 z-30 w-[360px]"><NewsCard pin={newsPin} onClose={() => setNewsPin(null)} /></div>

@@ -4,6 +4,7 @@ import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { useEffect, useRef, useState } from "react";
 import { api, type JobCollection, type LiveFrame, type NewsPin, type Opportunity } from "../api";
 import { NEWS_TOPIC } from "../format";
+import { RISK_COLOR } from "../api-outlook";
 import { Layers, X } from "lucide-react";
 import { DESC_COLOR, FAR_COLOR, GPC_COLOR, QUALITY_LABEL, TIER_COLOR, TIER_LABEL, monthYear, title } from "../format";
 import { kindColorExpression } from "./IncidentCard";
@@ -21,6 +22,7 @@ type Props = {
   onHover: (key: string | null) => void;
   zone?: GeoJSON.Feature | null;
   onIncident?: (id: number) => void;
+  outlooks?: GeoJSON.FeatureCollection | null;  // forecast risk areas valid at the map time
 };
 
 maplibregl.setWorkerUrl(workerUrl); // v6 needs an explicit worker once bundled
@@ -122,7 +124,7 @@ function coordsOf(g: GeoJSON.Geometry): number[][] {
   return [];
 }
 
-export default function MapView({ jobs, opportunities, selected, onSelect, fly, storm, onMapClick, hoverKey, onHover, zone, onIncident, onNews }: Props) {
+export default function MapView({ jobs, opportunities, selected, onSelect, fly, storm, onMapClick, hoverKey, onHover, zone, onIncident, onNews, outlooks }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -159,6 +161,13 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
       m.addLayer({ id: "grid", type: "line", source: "grid", layout: { visibility: "none" },
         paint: { "line-color": "#94a3b8", "line-opacity": 0.7,
           "line-width": ["interpolate", ["linear"], ["coalesce", ["get", "voltage"], 115], 115, 0.6, 230, 1.2, 500, 2.2] } });
+      m.addSource("outlooks", { type: "geojson", data: EMPTY });
+      const riskFill = ["match", ["get", "rank"], 1, RISK_COLOR[0], 2, RISK_COLOR[1], 3, RISK_COLOR[2], 4, RISK_COLOR[3], RISK_COLOR[4]] as unknown as maplibregl.ExpressionSpecification;
+      m.addLayer({ id: "outlook-fill", type: "fill", source: "outlooks", paint: { "fill-color": riskFill, "fill-opacity": 0.12 } });
+      m.addLayer({ id: "outlook-line", type: "line", source: "outlooks", filter: ["!=", ["get", "product"], "nhc_gtwo"],
+        paint: { "line-color": riskFill, "line-width": 1.5, "line-opacity": 0.9 } });
+      m.addLayer({ id: "outlook-tropical", type: "line", source: "outlooks", filter: ["==", ["get", "product"], "nhc_gtwo"],
+        paint: { "line-color": riskFill, "line-width": 2, "line-dasharray": [3, 2] } });  // dashed: where a storm may form
       for (const src of ["cone", "track", "warnings", "reports", "staging", "incidents"]) m.addSource(src, { type: "geojson", data: EMPTY });
       m.addLayer({ id: "cone-fill", type: "fill", source: "cone", paint: { "fill-color": "#f43f5e", "fill-opacity": 0.12 } });
       m.addLayer({ id: "cone-line", type: "line", source: "cone", paint: { "line-color": "#e11d48", "line-width": 1.5, "line-dasharray": [2, 2] } });
@@ -346,6 +355,12 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
     m.on("zoom", size);
     return () => { m.off("zoom", size); };
   }, [storm, loaded]);
+
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !loaded) return;
+    (m.getSource("outlooks") as GeoJSONSource).setData(outlooks ?? EMPTY);
+  }, [outlooks, loaded]);
 
   useEffect(() => {
     if (map.current) map.current.getCanvas().style.cursor = onMapClick ? "crosshair" : "";
