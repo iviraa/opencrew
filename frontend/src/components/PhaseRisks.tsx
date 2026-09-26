@@ -1,5 +1,7 @@
+import { RefreshCw, Wind } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, type PhaseRisk } from "../api";
+import { CloseButton } from "./ui";
 
 export default function PhaseRisks() {
   const [risks, setRisks] = useState<PhaseRisk[] | null>(null);
@@ -15,21 +17,33 @@ export default function PhaseRisks() {
   };
 
   if (!open) {
-    return <button onClick={() => setOpen(true)} className="rounded-md bg-white/95 px-2 py-1 text-[11px] font-medium shadow ring-1 ring-slate-200">Wind risk</button>;
+    return (
+      <button onClick={() => setOpen(true)} className="inline-flex items-center gap-1.5 rounded-full bg-surface px-3.5 py-2 text-[13px] font-semibold shadow-float">
+        <Wind size={15} className="text-desc" /> Wind at work sites{risks?.length ? ` (${risks.length})` : ""}
+      </button>
+    );
   }
   return (
-    <div className="w-[360px] rounded-lg bg-white/95 px-3 py-2 text-[11px] shadow-md ring-1 ring-slate-200">
-      <div className="flex items-center justify-between">
-        <span className="font-semibold">Wind risk at active phases (NWS, next 7 days)</span>
-        <span className="flex gap-1">
-          <button onClick={poll} disabled={busy} className="rounded bg-slate-100 px-1.5 py-0.5 hover:bg-slate-200 disabled:opacity-50">{busy ? "Checking…" : "Check now"}</button>
-          <button onClick={() => setOpen(false)} className="rounded px-1.5 text-slate-400 hover:bg-slate-100">✕</button>
+    <div className="w-[360px] rounded-[20px] bg-surface px-4 py-3 shadow-float">
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex items-center gap-2 text-[15px] font-semibold"><Wind size={17} className="text-desc" /> Wind at work sites this week</span>
+        <span className="flex items-center gap-1">
+          <button onClick={poll} disabled={busy} aria-label="Check the forecast now" title="Check the forecast now"
+            className="grid h-8 w-8 place-items-center rounded-full text-muted hover:bg-soft hover:text-ink disabled:opacity-50">
+            <RefreshCw size={15} className={busy ? "animate-spin" : ""} />
+          </button>
+          <CloseButton onClick={() => setOpen(false)} />
         </span>
       </div>
-      {risks === null && <div className="mt-1 text-slate-400">Loading…</div>}
-      {risks?.length === 0 && <div className="mt-1 text-slate-500">No forecast gusts at or above 35 mph at sites with clearing, construction or energization this week.</div>}
-      <ul className="mt-1 max-h-28 space-y-1 overflow-y-auto">
-        {risks?.map((r) => <li key={`${r.job_id}${r.day}`} className="rounded bg-amber-50 px-2 py-1 text-amber-900 ring-1 ring-amber-200">{r.alert}</li>)}
+      {risks === null && <div className="mt-1 text-[13px] text-muted">Checking the forecast…</div>}
+      {risks?.length === 0 && <div className="mt-1 text-[13px] text-muted">No gusts of 35 mph or more forecast at any site with clearing, construction or energization this week.</div>}
+      <ul className="thin-scroll mt-2 max-h-32 space-y-1.5 overflow-y-auto">
+        {risks?.map((r) => (
+          <li key={`${r.job_id}${r.day}`} className="flex items-start gap-2 rounded-[14px] bg-crew-soft px-3 py-2 text-[13px] text-ink">
+            <span className="display shrink-0 rounded-full bg-crew px-2 py-0.5 text-[12px] font-semibold text-white">{r.gust_mph} mph</span>
+            <span>{r.alert}</span>
+          </li>
+        ))}
       </ul>
     </div>
   );
