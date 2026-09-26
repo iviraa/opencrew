@@ -10,7 +10,8 @@ load_dotenv(ROOT / ".env")
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://postgres:opencrew@localhost:5433/opencrew")
 
 
-SEARCH_PATH = os.environ.get("DB_SEARCH_PATH")  # e.g. "planner, extensions, public" on supabase, where the planner tables live in their own schema
+SUPABASE_SEARCH_PATH = "planner, extensions, public"  # on supabase the planner tables live in their own schema
+SEARCH_PATH = os.environ.get("DB_SEARCH_PATH") or (SUPABASE_SEARCH_PATH if "supabase.com" in DATABASE_URL else None)
 
 
 def connect():
