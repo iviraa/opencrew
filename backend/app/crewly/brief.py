@@ -91,8 +91,10 @@ def build(conn, opp_id):
     lines += ["", "## What could be shared", *[f"- {r}" for r in shareable(o["tier"], o["a_phase"], o["b_phase"], o["drive_min"])], "",
               "## Savings estimate", f"**{usd(s['low'])} to {usd(s['high'])}**, assuming the work is scheduled together.", "",
               "| Item | Low | High |", "|---|---|---|", *[f"| {k} | {usd(v['low'])} | {usd(v['high'])} |" for k, v in s["items"].items()], "",
-              "Assumptions: " + "; ".join(f"{v['label']} {v['low']:,}-{v['high']:,} {v['unit']}{'' if v['verified'] else ' (placeholder)'}"
-                                          for v in ASSUMPTIONS.values()), "",
+              "## Cost assumptions and sources",
+              *[f"- {v['label']}: {v['low']:,} to {v['high']:,} {v['unit']}{'' if v['verified'] else ' (estimate)'}. "
+                f"Source: [{v['source']}]({v['url']}), p.{v['page']}." if v["url"] else f"- {v['label']}: {v['source']}"
+                for v in ASSUMPTIONS.values() if v.get("scope") != "storm"], "",
               "## Proposed agenda for a first call", *[f"{i}. {t}" for i, t in enumerate(AGENDA, 1)], "",
               "## Data notes",
               "- Distances, overlaps and dollar ranges are computed by deterministic code, not AI.",
