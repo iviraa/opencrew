@@ -144,3 +144,28 @@ def test_drive_time_rules():
     assert near["high"] > 0 and far["high"] == 0  # crews and yards need a 45 min drive
     assert "crews" not in shareable("crew", drive_min=60) and "crews" in shareable("crew", drive_min=20)
     assert score("site", 0.8, drive_min=60) == score("site", 0.8) * 0.5
+
+
+def test_pair_from_reads_a_real_row():
+    """The dict pair_from gets is whatever the two pair queries select, so pin the shape and the edge cases."""
+    from decimal import Decimal
+    from app.engine.cost import pair_from
+    row = {"a_kv": 230, "b_kv": 115, "a_cost": Decimal("12000000"), "b_cost": Decimal("8000000"),
+           "a_start": datetime(2026, 1, 1), "a_end": datetime(2027, 6, 1), "b_start": datetime(2026, 4, 1), "b_end": datetime(2028, 1, 1)}
+    p = pair_from(row)
+    assert p["kv"] == 115 and p["cost_usd"] == 8e6  # the smaller job on both counts
+    assert p["gap_days"] == 0 and p["shared_days"] == (datetime(2027, 6, 1) - datetime(2026, 4, 1)).days
+    apart = pair_from({**row, "b_start": datetime(2028, 1, 1), "b_end": datetime(2029, 1, 1)})
+    assert apart["shared_days"] == 0 and apart["gap_days"] == (datetime(2028, 1, 1) - datetime(2027, 6, 1)).days
+    blank = pair_from({**row, "a_cost": None, "b_cost": None, "a_kv": None, "b_kv": None})
+    assert blank["cost_usd"] is None and blank["kv"] is None  # filings without a cost or voltage still price the rest
+
+
+def test_both_pair_queries_select_every_field_pair_from_reads():
+    """pair_from is fed by two different queries; a missing alias would only show up as a KeyError against a live database."""
+    from app.engine.cost import PAIR_SQL
+    from app.engine.overlap import PAIRS_SQL
+    for sql in (PAIR_SQL, PAIRS_SQL):
+        for alias in ("a_kv", "b_kv", "a_cost", "b_cost", "a_start", "a_end", "b_start", "b_end"):
+            assert f"AS {alias}" in sql, alias
+    assert "cost_usd," in PAIRS_SQL.split("FROM job WHERE")[0]  # the CTE has to carry cost_usd for a.cost_usd to resolve
