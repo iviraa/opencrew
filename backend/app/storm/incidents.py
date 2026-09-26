@@ -91,12 +91,29 @@ def absorb(inc, it):
     inc["utility_mentioned"] = inc.get("utility_mentioned") or it.get("utility_mentioned")
 
 
+def independent(sources):
+    """Count independent sources: same outlet or the same quoted sentence (syndicated wire copy) is one source."""
+    groups = []
+    for s in sources:
+        if s["type"] == "context":
+            continue
+        quote = re.sub(r"\W+", " ", (s.get("quote_evidence") or "").lower()).strip()[:120]
+        for g in groups:
+            if s["name"] in g["names"] or (quote and quote in g["quotes"]):
+                g["names"].add(s["name"])
+                g["quotes"].add(quote)
+                break
+        else:
+            groups.append({"names": {s["name"]}, "quotes": {quote} if quote else set()})
+    return len(groups)
+
+
 def score(inc, official_nearby=False):
-    names = {s["name"] for s in inc["sources"] if s["type"] != "context"}
-    corroboration = min(0.3, 0.15 * (len(names) - 1)) + (0.1 if official_nearby and not official(inc) else 0)
+    n = independent(inc["sources"])
+    corroboration = min(0.3, 0.15 * (n - 1)) + (0.1 if official_nearby and not official(inc) else 0)
     base = max(trust(s) for s in inc["sources"])
     conf = round(min(1.0, (base + corroboration) * PRECISION.get(inc["precision"], 0.7)), 2)
-    verified = official(inc) or len(names) >= 2  # official source or two independent sources
+    verified = official(inc) or n >= 2  # official source or two independent sources
     return conf, verified
 
 

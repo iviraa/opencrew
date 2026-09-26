@@ -166,16 +166,33 @@ def llm_extract(row, text):
     return ok, rejected
 
 
+SPECULATIVE = re.compile(r"\b(?:will|could|may|might|expect\w*|forecast\w*|prepar\w*|ahead of|possible|likely|potential)\b", re.I)
+ADVICE = re.compile(r"stay away|always assume|outage map|\breport\b[^.]{0,30}\boutages?|real-time|safety tips?|\bcall\b|never touch", re.I)
+BROAD = re.compile(r"\bmillions?\b|\bstatewide\b|across (?:the )?(?:southeast|region|south|states?)|several states|\bnationwide\b", re.I)
+STATES = re.compile(r"\b(?:Georgia|South Carolina|North Carolina|Florida|Tennessee|Virginia|Alabama)\b")
+
+
+def broad(sentence):
+    return bool(BROAD.search(sentence)) or len(set(STATES.findall(sentence))) >= 2  # multi-state tallies are not local
+
+
+def named(place, text):
+    return re.search(rf"\b{re.escape(place['name'])}\b", text or "", re.I)
+
+
 def rule_extract(row, text):
-    """No-key fallback: keep a sentence only if it names a region town from GDELT and states power damage."""
+    """No-key fallback: a region town from GDELT named in the sentence or the article lede, plus a sentence reporting (not forecasting) power damage."""
+    sentences = SENTENCE.split(text or "") + [row["title"]]
+    lede = row["title"] + " " + " ".join(sentences[:3])
     out = []
-    for sentence in SENTENCE.split(text or "") + [row["title"]]:
+    for sentence in sentences:
         kind = classify(sentence)
-        if kind not in POWER_KINDS:
+        if kind not in POWER_KINDS or SPECULATIVE.search(sentence) or ADVICE.search(sentence):
             continue
-        for p in row["places"]:
-            if re.search(rf"\b{re.escape(p['name'])}\b", sentence):
-                out.append((p, kind, sentence.strip()[:300]))
+        places = [p for p in row["places"] if named(p, sentence)]
+        if not places and not broad(sentence):
+            places = [p for p in row["places"] if named(p, lede)][:1]  # a regional roundup line is not about the lede town
+        out += [(p, kind, sentence.strip()[:300]) for p in places]
     return list({(p["full"], k): (p, k, s) for p, k, s in out}.values())
 
 

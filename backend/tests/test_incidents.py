@@ -11,10 +11,10 @@ FIX = Path(__file__).parent / "fixtures"
 T0 = datetime(2024, 9, 27, 9, tzinfo=timezone.utc)
 
 
-def item(kind="downed_line", lon=-81.96, lat=33.47, hours=0.0, stype="news", name="wrdw.com", method="gemini", precision="town"):
+def item(kind="downed_line", lon=-81.96, lat=33.47, hours=0.0, stype="news", name="wrdw.com", method="gemini", precision="town", quote=None):
     return {"ts": T0 + timedelta(hours=hours), "kind": kind, "lon": lon, "lat": lat, "where_text": "Augusta, GA", "precision": precision,
             "utility_mentioned": None, "customers_affected": None,
-            "sources": [{"type": stype, "name": name, "url": f"https://{name}/a", "quote_evidence": "x", "method": method}]}
+            "sources": [{"type": stype, "name": name, "url": f"https://{name}/a", "quote_evidence": quote or f"report from {name}", "method": method}]}
 
 
 def test_classify():
@@ -61,6 +61,14 @@ def test_confidence_and_verified():
     assert incidents.score(one, official_nearby=True)[0] > c1
 
 
+def test_syndicated_copies_are_not_independent():
+    wire = "Police escorted an ambulance around downed power lines."
+    syndicated = incidents.merge([item(name="wlky.com", quote=wire), item(name="kmbc.com", quote=wire, hours=1)])[0]
+    same_outlet = incidents.merge([item(name="wrdw.com", quote="a"), item(name="wrdw.com", quote="b", hours=1)])[0]
+    assert incidents.independent(syndicated["sources"]) == 1 and not incidents.score(syndicated)[1]
+    assert incidents.independent(same_outlet["sources"]) == 1
+
+
 def test_precision_mapping():
     assert nominatim.precision({"addresstype": "road"}) == "road"
     assert nominatim.precision({"addresstype": "town"}) == "town"
@@ -95,11 +103,18 @@ def test_llm_items_are_geocoded_by_code(monkeypatch):
     assert len(items) == 1 and items[0]["precision"] == "road" and items[0]["sources"][0]["method"] == "gemini"
 
 
-def test_rule_fallback_needs_town_and_power_words():
+def test_rule_fallback_needs_town_and_reported_power_damage():
     items = news.items_for(ROW, TEXT, use_llm=False)
-    assert [(i["kind"], i["precision"]) for i in items] == [("downed_line", "town")]
+    assert [(i["kind"], i["precision"]) for i in items] == [("downed_line", "town"), ("outage", "town")]
     assert items[0]["sources"][0]["method"] == "rules" and "Hephzibah" in items[0]["sources"][0]["quote_evidence"]
+    assert items[1]["customers_affected"] == 1200
     assert news.items_for({**ROW, "title": "Storm recap"}, "Trees fell across town.", use_llm=False) == []
+    assert news.items_for(ROW, "Georgia Power expects outages in Hephzibah tonight.", use_llm=False) == []  # forecasts are not damage
+    assert news.items_for({**ROW, "title": "Storm recap"}, "Recap. Weather. Lines are down across the county.", use_llm=False) == []  # town never named
+    assert news.items_for(ROW, "Hephzibah update. Stay away from downed power lines.", use_llm=False) == []  # advice, not a report
+    assert news.items_for(ROW, "Hephzibah update. Millions are without power across the Southeast.", use_llm=False) == []  # roundup
+    assert news.items_for(ROW, "Hephzibah update. 900,000 customers in Georgia and 800,000 in Florida were without power.", use_llm=False) == []
+    assert news.items_for(ROW, "Hephzibah update. Customers can report and check the status of an outage online.", use_llm=False) == []
 
 
 def test_gkg_filter_keeps_region_power_articles():

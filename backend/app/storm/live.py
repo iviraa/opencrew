@@ -9,6 +9,7 @@ import httpx
 from shapely.geometry import shape
 
 from app.storm import incidents, news
+from app.storm.helene import DAMAGE
 
 HEADERS = {"User-Agent": "opencrew/0.1 (hackathon)", "Accept": "application/geo+json"}  # NWS requires a User-Agent
 ALERTS = "https://api.weather.gov/alerts/active?area=GA,SC"
@@ -19,6 +20,7 @@ GUST_LIMIT_MPH = 35  # crane lifts and line work stop above this
 WORK = {"construction": "crane lift", "clearing": "tree clearing", "energization": "line work"}
 ET = ZoneInfo("America/New_York")
 KMH_TO_MPH = 0.621371
+LSR_TYPES = DAMAGE | {"FLOOD", "FLASH FLOOD", "COASTAL FLOOD"}
 
 
 def get(url, **kw):
@@ -62,6 +64,8 @@ def parse_lsr(data):
     rows = []
     for f in data.get("features", []):
         p = f["properties"]
+        if p["typetext"] not in LSR_TYPES:
+            continue  # rain totals and hail are not grid damage
         ts = datetime.fromisoformat(p["valid"].replace("Z", "+00:00"))
         rows.append((ts, "lsr", f"POINT({p['lon']} {p['lat']})", {"mode": "live", "type": p["typetext"], "place": p["city"], "county": p["county"],
                                                                  "state": p["state"], "reported_by": p["source"], "remark": (p["remark"] or "")[:300]}))
