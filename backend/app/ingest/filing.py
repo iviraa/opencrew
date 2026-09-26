@@ -1,5 +1,8 @@
+import ipaddress
+import socket
 import time
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 import httpx
 
@@ -10,6 +13,7 @@ from app.geo.geolocate import Locator, register
 from app.ingest import desc, gpc, llm_extract, pdf, pipeline
 
 UPLOADS = ROOT / "data/raw/uploads"
+MAX_BYTES = 50 * 1024 * 1024
 
 
 def detect(pages):
@@ -28,10 +32,31 @@ def save(content, name):
     return path
 
 
+def public_url(url):
+    u = urlparse(url)
+    if u.scheme not in ("http", "https") or not u.hostname:
+        raise ValueError("need an http(s) link")
+    for info in socket.getaddrinfo(u.hostname, None):
+        ip = ipaddress.ip_address(info[4][0])
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+            raise ValueError("link points at a private address")  # no fetching the server's own network
+
+
 def download(url):
-    r = httpx.get(url, timeout=60, follow_redirects=True, headers={"User-Agent": "opencrew/0.1 (hackathon)"})
-    r.raise_for_status()
-    return save(r.content, url.rstrip("/").split("/")[-1][:60] or "filing.pdf")
+    for _ in range(5):  # follow redirects by hand so every hop is checked
+        public_url(url)
+        with httpx.stream("GET", url, timeout=60, follow_redirects=False, headers={"User-Agent": "opencrew/0.1 (hackathon)"}) as r:
+            if r.is_redirect:
+                url = str(r.url.join(r.headers["location"]))
+                continue
+            r.raise_for_status()
+            body = b""
+            for chunk in r.iter_bytes():
+                body += chunk
+                if len(body) > MAX_BYTES:
+                    raise ValueError("file is larger than 50 MB")
+            return save(body, url.rstrip("/").split("/")[-1][:60] or "filing.pdf")
+    raise ValueError("too many redirects")
 
 
 def ingest(conn, path, org=None, org_name=None, state="SC", color="#16a34a", url=None):

@@ -4,6 +4,7 @@ from datetime import datetime
 
 from app import outreach
 from app.config import MILE_M
+from app.ingest import filing
 from app.engine.cost import savings
 from app.queries import JOB_SQL, OPP_SQL, shareable
 from app.storm import replay
@@ -131,6 +132,15 @@ def draft_outreach(conn, opportunity_id, contact_id):
             [{"type": "select", "horizon": None, "opportunity_id": opportunity_id}])
 
 
+def ingest_filing(conn, url, utility_id=None, utility_name=None, state="SC"):
+    try:
+        out = filing.ingest(conn, filing.download(url), utility_id, utility_name, state, url=url)
+    except Exception as e:  # bad link, not a pdf, or no gemini key
+        conn.rollback()
+        return {"error": str(e)[:300]}, []
+    return out, ([] if "error" in out else [{"type": "reload"}])
+
+
 HORIZON = {"type": "string", "enum": ["long", "near", "emergency"], "description": "long = multi-year plans, near = derived monthly phases, emergency = Helene storm restoration"}
 TOOLS = {
     "find_overlaps": (find_overlaps, "List ranked cross-utility coordination opportunities. Filters the map and list in the UI.", {
@@ -151,6 +161,9 @@ TOOLS = {
     "find_contacts": (find_contacts, "Contacts at both utilities for an opportunity.", {"opportunity_id": {"type": "integer"}}, ["opportunity_id"]),
     "draft_outreach": (draft_outreach, "Draft (never send) an intro email to a contact about an opportunity.", {
         "opportunity_id": {"type": "integer"}, "contact_id": {"type": "integer"}}, ["opportunity_id", "contact_id"]),
+    "ingest_filing": (ingest_filing, "Ingest a public utility filing PDF from a link: CEII check, parse, place projects, recompute overlaps.", {
+        "url": {"type": "string"}, "utility_id": {"type": "string", "description": "short id for a new utility, e.g. santee"},
+        "utility_name": {"type": "string"}, "state": {"type": "string", "description": "two-letter home state"}}, ["url"]),
     "focus_map": (focus_map, "Fly the map to an opportunity or a named region.", {
         "opportunity_id": {"type": "integer"}, "region": {"type": "string"}}, []),
 }

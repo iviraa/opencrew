@@ -25,6 +25,7 @@ export type CrewlyAction =
   | { type: "filter"; horizon: string; tier: Tier | null; opportunity_ids: number[] }
   | { type: "select"; horizon: string | null; opportunity_id: number }
   | { type: "storm"; at: string }
+  | { type: "reload" }
   | { type: "fly"; bbox: [number, number, number, number] };
 
 export type CrewlyReply = { reply: string; ui_actions: CrewlyAction[]; tool_calls: { name: string; args: Record<string, unknown> }[]; unsourced: string[] };
@@ -50,10 +51,16 @@ export type ProcurementGroup = {
   voltage_kv: number; kind: string; desc: ProcurementItem; gpc: (ProcurementItem & { year_gap: number; reason: string })[];
 };
 
+export type IngestResult = {
+  org: string; method: string; pages: number; rows: number; placed?: number; unplaced?: number; ceii_page?: number; invalid?: number;
+  long: { pairs: number }; near: { pairs: number }; seconds: number;
+};
+
 export type JobCollection = GeoJSON.FeatureCollection<GeoJSON.Geometry, Job>;
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`/api${path}`, { headers: { "Content-Type": "application/json" }, ...init });
+  const json = typeof init?.body === "string";  // FormData sets its own multipart header
+  const res = await fetch(`/api${path}`, { ...init, headers: json ? { "Content-Type": "application/json" } : undefined });
   if (!res.ok) {
     const text = await res.text();
     let detail = text;
@@ -73,6 +80,7 @@ export const api = {
   brief: (id: number) => call<{ markdown: string; summary_source: string }>(`/opportunities/${id}/brief`, { method: "POST" }),
   tracts: () => call<GeoJSON.FeatureCollection>("/layers/tracts"),
   storm: (at: number) => call<StormFrame>(`/storm/frame?at=${new Date(at).toISOString()}`),
+  ingest: (form: FormData) => call<IngestResult>("/ingest", { method: "POST", body: form }),
   procurement: () => call<ProcurementGroup[]>("/procurement"),
   review: () => call<ReviewItem[]>("/review"),
   place: (id: number, lon: number, lat: number) => call<unknown>(`/review/${id}/place`, { method: "POST", body: JSON.stringify({ lon, lat }) }),

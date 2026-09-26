@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type Assumption, type CrewlyAction, type ReviewItem, type StormFrame, type JobCollection, type Opportunity, type OpportunityDetail, type Tier } from "./api";
 import Crewly from "./components/Crewly";
 import DetailPanel from "./components/DetailPanel";
+import IngestModal from "./components/IngestModal";
 import MapView from "./components/MapView";
 import OpportunityList from "./components/OpportunityList";
 import ReviewPanel from "./components/ReviewPanel";
@@ -33,6 +34,7 @@ export default function App() {
   const [reviewOpen, setReviewOpen] = useState(false);
   const [placingId, setPlacingId] = useState<number | null>(null);
   const [reload, setReload] = useState(0);
+  const [ingestOpen, setIngestOpen] = useState(false);
   const [stormAt, setStormAt] = useState(LANDFALL - 12 * 3600e3);
   const [storm, setStorm] = useState<StormFrame | null>(null);
   const [fly, setFly] = useState<{ bbox: [number, number, number, number]; at: number } | null>(null);
@@ -89,6 +91,7 @@ export default function App() {
       if (a.type === "select") { if (a.horizon) setHorizon(a.horizon); setSelectedId(a.opportunity_id); }
       if (a.type === "storm") { setHorizon("emergency"); setStormAt(Date.parse(a.at)); }
       if (a.type === "fly") setFly({ bbox: a.bbox, at: Date.now() });
+      if (a.type === "reload") setReload((n) => n + 1);
     }
   };
 
@@ -116,6 +119,9 @@ export default function App() {
             <button onClick={() => setReviewOpen((o) => !o)} className="rounded bg-amber-100 px-2 py-0.5 text-amber-800 hover:bg-amber-200"
               title="Projects parsed from filings but not yet placed on the map">{review.length} need location review</button>
           )}
+          <button onClick={() => setIngestOpen(true)} className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-200">
+            Add filing
+          </button>
           <button onClick={() => setCrewlyOpen((o) => !o)}
             className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${crewlyOpen ? "bg-slate-900 text-white" : "bg-blue-600 text-white hover:bg-blue-700"}`}>
             Ask Crewly
@@ -123,6 +129,7 @@ export default function App() {
         </div>
       </header>
       {error && <div className="bg-red-50 px-5 py-2 text-sm text-red-700">{error}</div>}
+      {ingestOpen && <IngestModal onClose={() => setIngestOpen(false)} onDone={() => setReload((n) => n + 1)} />}
       <main className="flex min-h-0 flex-1">
         <aside className="w-[380px] shrink-0 border-r border-slate-200 bg-white">
           {reviewOpen

@@ -1,6 +1,7 @@
 import os
 from datetime import datetime
 
+import httpx
 from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -183,6 +184,8 @@ def ingest(file: UploadFile | None = File(None), url: str | None = Form(None), o
         out = filing.ingest(conn, path, org, org_name, state, url=url)
     except RuntimeError as e:
         raise HTTPException(503, str(e))
+    except (ValueError, httpx.HTTPError) as e:
+        raise HTTPException(400, f"could not fetch filing: {e}")
     if "error" in out:
         raise HTTPException(422, out["error"])
     return out
