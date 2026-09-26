@@ -32,6 +32,7 @@ SELECT a.id AS job_a, b.id AS job_b, a.name AS a_name, b.name AS b_name, a.endpo
        COALESCE(t.risk, 0) AS risk, COALESCE(t.vulnerability, 0) AS vulnerability
 FROM j a JOIN j b
   ON a.id < b.id AND a.org_id <> b.org_id AND ST_DWithin(a.geom, b.geom, %(radius)s)
+  AND (%(only)s::text[] IS NULL OR a.id = ANY(%(only)s) OR b.id = ANY(%(only)s))  -- only_jobs: pairs touching these jobs
 LEFT JOIN LATERAL (
   SELECT risk, vulnerability FROM tract
   WHERE ST_Contains(tract.geom, ST_Centroid(ST_ShortestLine(a.geom::geometry, b.geom::geometry))) LIMIT 1
@@ -57,9 +58,10 @@ def link_ends(wkt):
     return [tuple(map(float, p.split())) for p in wkt[wkt.index("(") + 1:-1].split(",")]
 
 
-def recompute(conn, horizon="long"):
+def recompute(conn, horizon="long", only_jobs=None):
+    """Rebuild the opportunity table for a horizon; with only_jobs, just the pairs touching those jobs (a what-if overlay)."""
     t0 = time.perf_counter()
-    rows = conn.execute(PAIRS_SQL, {"horizon": horizon, "radius": OVERLAP_RADIUS_M}).fetchall()
+    rows = conn.execute(PAIRS_SQL, {"horizon": horizon, "radius": OVERLAP_RADIUS_M, "only": list(only_jobs) if only_jobs else None}).fetchall()
     kept = []
     for r in rows:
         tier = tier_for(r["distance_m"], r["touches"])
@@ -101,6 +103,10 @@ def recompute(conn, horizon="long"):
     with conn.cursor() as cur:
         cur.executemany(UPSERT_SQL, out)
     keys = [f"{o['job_a']}|{o['job_b']}" for o in out]
-    conn.execute("DELETE FROM opportunity WHERE horizon = %s AND status = 'not_contacted' AND job_a || '|' || job_b <> ALL(%s)",
-                 (horizon, keys))  # drop stale pairs nobody has acted on
+    if only_jobs:  # pairs touching these jobs that no longer qualify
+        conn.execute("DELETE FROM opportunity WHERE horizon = %s AND (job_a = ANY(%s) OR job_b = ANY(%s)) AND job_a || '|' || job_b <> ALL(%s)",
+                     (horizon, list(only_jobs), list(only_jobs), keys))
+    else:
+        conn.execute("DELETE FROM opportunity WHERE horizon = %s AND status = 'not_contacted' AND job_a || '|' || job_b <> ALL(%s)",
+                     (horizon, keys))  # drop stale pairs nobody has acted on
     return {"horizon": horizon, "pairs": len(out), "ms": round((time.perf_counter() - t0) * 1000)}

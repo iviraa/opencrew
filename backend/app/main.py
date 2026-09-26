@@ -17,6 +17,7 @@ from app.hazards import api as hazards_api
 from app.planner import api as planner_api
 from app.companies import companies
 from app.crewly import agent, brief, proactive, generate_api
+from app.scenario import api as scenario_api
 from app.db import ROOT, connect, get_conn
 from app.engine.cost import savings_for
 from app.engine.overlap import recompute
@@ -564,6 +565,7 @@ app.include_router(news_api.router)
 app.include_router(generate_api.router)
 from app.stormlab.api import router as stormlab_router  # noqa: E402
 app.include_router(stormlab_router)
+app.include_router(scenario_api.router)
 
 @app.get("/config.js", include_in_schema=False)
 def web_config():
