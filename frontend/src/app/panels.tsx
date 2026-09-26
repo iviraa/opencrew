@@ -164,10 +164,16 @@ function ProjectBlock({ who, color, name, start, end, extra }: { who: string; co
   );
 }
 
-export function OverlapDetailPanel({ me, id, requests, onBack, onSent, onOpenRequest }: {
+type WeatherCost = { cost?: { total: { low: number; high: number } }; coordination?: { savings: { low: number; high: number } } };
+const THIS_MONTH = new Date().getMonth() + 1;
+const MONTH_NAME = new Date().toLocaleDateString("en-US", { month: "long" });
+
+export function OverlapDetailPanel({ me, id, requests, onBack, onSent, onOpenRequest, onHazards }: {
   me: Me; id: number; requests: CollabRequest[]; onBack: () => void; onSent: (r: CollabRequest) => void; onOpenRequest: (id: number) => void;
+  onHazards?: (id: number, month: number) => void;
 }) {
   const [d, setD] = useState<OverlapDetail | null>(null);
+  const [wx, setWx] = useState<WeatherCost | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [sending, setSending] = useState(false);
@@ -176,6 +182,8 @@ export function OverlapDetailPanel({ me, id, requests, onBack, onSent, onOpenReq
   useEffect(() => {
     setD(null); setErr(null); setJustSent(false); setNote("");
     api.overlap(id).then(setD).catch((e) => setErr(String(e.message ?? e)));
+    setWx(null);
+    api.get<WeatherCost>(`/api/app/hazards/exposure?kind=zone&id=${id}&period=month&month=${THIS_MONTH}&cost=1`).then(setWx).catch(() => setWx(null));  // this month's weather cost
   }, [id]);
 
   const req = latestFor(requests, id);
@@ -247,6 +255,12 @@ export function OverlapDetailPanel({ me, id, requests, onBack, onSent, onOpenReq
         </section>
         )}
 
+        {wx?.cost && wx.cost.total.high > 0 && (
+          <p className="-mt-2 flex flex-wrap items-center gap-x-1 rounded-2xl bg-warn-soft/60 px-3 py-2 text-xs">
+            <span>Weather in a typical {MONTH_NAME}: <b>+{usd(wx.cost.total.low)} to {usd(wx.cost.total.high)}</b>{wx.coordination && wx.coordination.savings.high > 0 && <>, coordinating saves <b>{usd(wx.coordination.savings.low)} to {usd(wx.coordination.savings.high)}</b></>}.</span>
+            {onHazards && <button onClick={() => onHazards(id, THIS_MONTH)} className="font-semibold text-grape underline">See hazards</button>}
+          </p>
+        )}
         {d.shareable.length > 0 && (
           <section>
             <h3 className="mb-1.5 text-sm font-semibold text-muted">What you could share</h3>

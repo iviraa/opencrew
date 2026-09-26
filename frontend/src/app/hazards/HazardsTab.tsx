@@ -1,7 +1,7 @@
 import { Activity, CloudLightning, Droplets, Flame, Mountain, Snowflake, Sun, Thermometer, Tornado, Wind } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { say } from "../mascot";
-import { api, colorFor, company, type Jobs, type Me, type Overlap } from "../data";
+import { api, colorFor, company, publicApi, usd, type Jobs, type Me, type Overlap } from "../data";
 import MapPane, { bboxOf, esc, type Fit, type Scene } from "../MapPane";
 import { PanelHeader } from "../panels";
 import { SectionTitle, Split, fc, splitGeoms } from "../weather/shared";
@@ -15,8 +15,18 @@ type Layers = {
             fires?: GeoJSON.FeatureCollection<GeoJSON.Geometry, LayerProps>; quakes?: GeoJSON.FeatureCollection<GeoJSON.Geometry, LayerProps>;
             climate?: GeoJSON.FeatureCollection<GeoJSON.Geometry, ClimateProps> };
 };
+type Range = { low: number; high: number };
+type CostItem = { hazard: string; label: string; days: Range; option: { low: string; high: string }; per_day: Range; premium: Range; total: Range; rules: string[] };
+type SiteCost = { kind: "site"; id: string; name: string; inside_window: boolean; per_day: Record<"low" | "high", { crew: number; equipment: number; standby: number }>; items: CostItem[]; total: Range; assumptions: string[]; method: string };
+type ZoneCost = { kind: "zone"; id: number; sites: SiteCost[]; total: Range; assumptions: string[]; method: string };
+type Coordination = {
+  partners: string[]; separate: Range; coordinated: Range; savings: Range; items: { name: string; low: number; high: number; shared_days: Range }[];
+  one_off: { name: string; low: number; high: number }[]; best_months: { month: number; label: string; cost_per_30d: Range; days: Range; saves_vs_period: Range }[];
+};
+type Sourced = { low: number; high: number; unit: string; label: string; source: string; url?: string | null; page?: string; verified: boolean; note?: string };
+export type HazardFocus = { kind: "site" | "zone"; id: string; period?: Period; month?: number; at: number };
 type Exposure = {
-  kind: "site" | "zone"; id: string; names: string[]; partners: string[]; period: string; start: string; end: string; days: number; counties: number;
+  kind: "site" | "zone"; id: string; cost?: SiteCost | ZoneCost; coordination?: Coordination; names: string[]; partners: string[]; period: string; start: string; end: string; days: number; counties: number;
   hazards: { hazard: string; label: string; why: string; affected_days: { forecast: number; low: number; high: number }; leans: string[]; live: { id: number; layer: string; product: string; label: string; rank: number; from: string; to: string }[] }[];
   affected_days: { forecast: number; low: number; high: number }; method: string;
 };
@@ -35,6 +45,8 @@ const GREY = "#c3cad9";
 const day = (s: string) => new Date(s.length === 10 ? `${s}T12:00:00` : s).toLocaleDateString("en-US", { month: "short", day: "numeric" });  // date-only strings stay on their day
 const PAD = 1.5;  // degrees around our sites that count as "near"
 const range = (a: number, b: number) => (a === b ? `${a}` : `${a} to ${b}`);
+const money = (r: Range) => (r.low === r.high ? usd(r.low) : `${usd(r.low)} to ${usd(r.high)}`);
+const when = (p: Period, m: number) => (p === "now7" ? "this week" : p === "weeks" ? "over the next weeks" : p === "season" ? "next season" : `in a typical ${MONTHS[m - 1]}`);
 
 // one line for the beaver about what the map shows
 function mapLine(l: Layers): string {
@@ -46,9 +58,11 @@ function mapLine(l: Layers): string {
   return `${parts.join(", ")} on the map nationwide.`;
 }
 
-export default function HazardsTab({ me, projects, side }: { me: Me; projects: Jobs | null; side: React.ReactNode | null }) {
-  const [period, setPeriod] = useState<Period>("now7");
-  const [month, setMonth] = useState(new Date().getMonth() + 1);
+export default function HazardsTab({ me, projects, side, focus }: { me: Me; projects: Jobs | null; side: React.ReactNode | null; focus?: HazardFocus | null }) {
+  const [period, setPeriod] = useState<Period>(focus?.period ?? "now7");
+  const [month, setMonth] = useState(focus?.month ?? new Date().getMonth() + 1);
+  const [sourced, setSourced] = useState<Record<string, Sourced>>({});
+  const [showSources, setShowSources] = useState(false);
   const [on, setOn] = useState<Set<string>>(new Set(Object.keys(HAZARD)));
   const [data, setData] = useState<Layers | null>(null);
   const [ov, setOv] = useState<{ overlaps: Overlap[]; jobs: Jobs } | null>(null);
@@ -57,7 +71,13 @@ export default function HazardsTab({ me, projects, side }: { me: Me; projects: J
   const [fit, setFit] = useState<Fit | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  useEffect(() => { api.overlaps().then(setOv).catch(() => {}); }, []);
+  useEffect(() => { api.overlaps().then(setOv).catch(() => {}); publicApi.get<Record<string, Sourced>>("/api/assumptions").then(setSourced).catch(() => {}); }, []);
+  useEffect(() => {  // another tab asked to assess one site or overlap here
+    if (!focus) return;
+    if (focus.period) setPeriod(focus.period);
+    if (focus.month) setMonth(focus.month);
+    setOpen({ kind: focus.kind, id: focus.id });
+  }, [focus?.at]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setData(null); setErr(null);
@@ -69,12 +89,19 @@ export default function HazardsTab({ me, projects, side }: { me: Me; projects: J
   useEffect(() => {
     if (!open) { setExp(null); return; }
     setExp(null);
-    api.get<Exposure>(`/api/app/hazards/exposure?kind=${open.kind}&id=${encodeURIComponent(open.id)}&period=${period}&month=${month}&hazards=${[...on].join(",")}`)
+    api.get<Exposure>(`/api/app/hazards/exposure?kind=${open.kind}&id=${encodeURIComponent(open.id)}&period=${period}&month=${month}&hazards=${[...on].join(",")}&cost=1`)
       .then((e) => {
         setExp(e);
         const top = e.hazards[0];
         const who = open.kind === "zone" ? `Overlap #${e.id}` : "This site";
         const active = period === "now7" && !e.affected_days.forecast;
+        const partner = e.partners.find((p) => p !== me.company);
+        if (e.cost && e.cost.total.high > 0) {
+          say(e.coordination && e.coordination.savings.high > 0
+            ? `${who} ${when(period, month)} adds about ${money(e.cost.total)}; coordinating with ${company(partner ?? "")?.short ?? "the neighbor"} saves ${money(e.coordination.savings)}.`
+            : `${who} ${when(period, month)} adds about ${money(e.cost.total)} of weather cost.`, "talking");
+          return;
+        }
         say(!top ? `${who} has no hazard exposure in this period.`
           : active ? `${who}: nothing active over the works this week. A typical week here sees ${range(e.affected_days.low, e.affected_days.high)} affected days.`
           : `${who}: ${top.label.toLowerCase()} is the main exposure, ${period === "now7" ? `${top.affected_days.forecast} forecast day${top.affected_days.forecast === 1 ? "" : "s"}` : `about ${range(top.affected_days.low, top.affected_days.high)} affected days`}.`,
@@ -274,6 +301,59 @@ export default function HazardsTab({ me, projects, side }: { me: Me; projects: J
           );
         })}
         {exp && !exp.hazards.length && <p className="rounded-2xl bg-save-soft/70 px-3 py-2 text-sm text-save">No work-affecting hazard touches this in the period.</p>}
+        {exp?.cost && exp.cost.total.high > 0 && (
+          <div className="rounded-2xl bg-warn-soft/60 px-3 py-2.5">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-faint">Expected extra cost</span>
+              <span className="rounded-full bg-white px-1.5 text-[10px] font-semibold text-warn">estimate</span>
+            </div>
+            <div className="font-logo text-2xl font-semibold text-warn">{money(exp.cost.total)}</div>
+            <div className="text-xs text-muted">idle crew and equipment on affected days {when(period, month)}, plus storm-rate labor after big events</div>
+            <div className="mt-2 flex flex-col gap-1">
+              {(exp.cost.kind === "zone" ? exp.cost.sites.flatMap((s) => s.items.map((i) => ({ ...i, site: s.name }))) : exp.cost.items.map((i) => ({ ...i, site: "" })))
+                .sort((a, b) => b.total.high - a.total.high).slice(0, 6).map((i, n) => (
+                <div key={n} className="flex items-center gap-2 text-xs">
+                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: HAZARD[i.hazard]?.color ?? GREY }} />
+                  <span className="min-w-0 flex-1 truncate">{i.label}{i.site ? ` · ${i.site.slice(0, 28)}` : ""} · {range(i.days.low, i.days.high)} d · {i.option.high === "demob" ? "demobilize and return" : "hold on standby"}</span>
+                  <span className="font-semibold">{money(i.total)}</span>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => setShowSources((v) => !v)} className="mt-2 text-[11px] font-semibold text-grape underline">{showSources ? "Hide sources" : "Sources and assumptions"}</button>
+            {showSources && (
+              <div className="mt-1 flex flex-col gap-1">
+                {exp.cost.assumptions.map((k) => sourced[k]).filter(Boolean).map((a) => (
+                  <div key={a.label} className="rounded-xl bg-white px-2 py-1 text-[11px]">
+                    <span className="font-semibold">{a.label}</span> {a.low === a.high ? usd(a.low) : `${usd(a.low)} to ${usd(a.high)}`} <span className="text-muted">{a.unit}</span>
+                    {!a.verified && <span className="ml-1 rounded-full bg-warn-soft px-1.5 text-[10px] font-semibold text-warn">estimate</span>}
+                    <div className="text-faint">{a.url ? <a href={a.url} target="_blank" rel="noreferrer" className="underline">{a.source}</a> : a.source}{a.page ? `, ${a.page.slice(0, 80)}` : ""}</div>
+                  </div>
+                ))}
+                <p className="px-1 text-[11px] text-faint">{exp.cost.method}</p>
+              </div>
+            )}
+          </div>
+        )}
+        {exp?.coordination && (
+          <div className="rounded-2xl bg-save-soft/70 px-3 py-2.5">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-faint">Coordinating with {company(exp.coordination.partners.find((p) => p !== me.company) ?? "")?.short ?? "the neighbor"}</div>
+            <div className="font-logo text-2xl font-semibold text-save">{exp.coordination.savings.high > 0 ? `saves ${money(exp.coordination.savings)}` : "no shared weather days"}</div>
+            <div className="mt-1 grid grid-cols-2 gap-1 text-xs">
+              <span className="text-muted">Separately</span><span className="text-right font-semibold">{money(exp.coordination.separate)}</span>
+              <span className="text-muted">Together</span><span className="text-right font-semibold">{money(exp.coordination.coordinated)}</span>
+            </div>
+            <p className="mt-1 text-xs text-muted">one standby crew and yard covers both sites on {range(exp.coordination.items[0]?.shared_days.low ?? 0, exp.coordination.items[0]?.shared_days.high ?? 0)} shared affected days</p>
+            {exp.coordination.one_off.length > 0 && (
+              <p className="mt-1 text-xs text-muted">Plus one-off, per project: {exp.coordination.one_off.map((o) => `${o.name} ${usd(o.low)} to ${usd(o.high)}`).join("; ")}.</p>
+            )}
+            {exp.coordination.best_months.length > 0 && (
+              <p className="mt-1.5 text-xs">
+                <span className="font-semibold">Cheapest months to work the pair:</span> {exp.coordination.best_months.map((m) => m.label).join(", ")}
+                {exp.coordination.best_months[0].saves_vs_period.high > 0 && ` (saves ${money(exp.coordination.best_months[0].saves_vs_period)} per 30 days vs ${when(period, month).replace("in a typical ", "")})`}
+              </p>
+            )}
+          </div>
+        )}
         {exp && <p className="px-1 text-[11px] text-faint">{exp.method}</p>}
       </div>
     </>

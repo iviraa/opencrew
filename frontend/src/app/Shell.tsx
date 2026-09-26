@@ -13,7 +13,7 @@ import Speech from "./Speech";
 import { GoalPanel, GoalsList } from "./GoalPanel";
 import { HistoryPanel, OverlapDetailPanel, OverlapList, ProjectList, RequestPanel, sides } from "./panels";
 import { NewsTab, Split } from "./tabs";
-import HazardsTab from "./hazards/HazardsTab";
+import HazardsTab, { type HazardFocus } from "./hazards/HazardsTab";
 
 const Beaver = lazy(() => import("./Beaver"));
 
@@ -57,6 +57,7 @@ export default function Shell() {
   const [reqs, setReqs] = useState<CollabRequest[]>([]);
   const [notes, setNotes] = useState<Notice[]>([]);
   const [pop, setPop] = useState<"bell" | "profile" | null>(null);
+  const [hazardFocus, setHazardFocus] = useState<HazardFocus | null>(null);  // an overlap asking for its weather cost on the hazards tab
   const [toast, setToast] = useState<{ text: string; request: number } | null>(null);
   const [chat, setChat] = useState<ChatMsg[]>([]);
   const [chatBusy, setChatBusy] = useState(false);
@@ -297,7 +298,8 @@ export default function Shell() {
       onDone={gotRequest} onOpenRequest={openRequest} onOpenGoal={(id) => push({ kind: "goal", id })}
       onClose={() => setStack((s) => s.filter((p) => p.kind !== "chat"))} onClear={clearChat} memoryTick={memoryTick} />
   ) : top.kind === "overlap" ? (
-    <OverlapDetailPanel me={me} id={top.id} requests={reqs} onBack={() => { back(); setSelected(null); }} onSent={gotRequest} onOpenRequest={openRequest} />
+    <OverlapDetailPanel me={me} id={top.id} requests={reqs} onBack={() => { back(); setSelected(null); }} onSent={gotRequest} onOpenRequest={openRequest}
+      onHazards={(id, m) => { back(); setSelected(null); setHazardFocus({ kind: "zone", id: String(id), period: "month", month: m, at: Date.now() }); setTab("weather"); }} />
   ) : top.kind === "goal" ? (
     <GoalPanel me={me} id={top.id} overlaps={ov?.overlaps ?? null} requests={reqs} onBack={back} onOpenOverlap={openOverlap} onSent={gotRequest} />
   ) : top.kind === "goals" ? (
@@ -380,7 +382,7 @@ export default function Shell() {
             </MapPane>
           } />
         )}
-        {me && tab === "weather" && <HazardsTab me={me} projects={projects} side={roomy(panel)} />}
+        {me && tab === "weather" && <HazardsTab me={me} projects={projects} side={roomy(panel)} focus={hazardFocus} />}
         {me && tab === "news" && <NewsTab projects={projects} side={roomy(panel)} />}
         {!me && !err && <div className="grid flex-1 place-items-center text-muted"><span className="dots">Getting your projects</span></div>}
 
