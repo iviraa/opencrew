@@ -1,5 +1,6 @@
 import { AlertTriangle, CloudLightning, Droplets, HardHat, ShieldCheck, Tornado, Wind, Zap } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { say, type Mood } from "../mascot";
 import type { HeadsUp } from "../../api-outlook";
 import { RISK_COLOR, riskColor } from "../../api-outlook";
 import { ago, month, publicApi, type Jobs } from "../data";
@@ -36,6 +37,17 @@ function worstByProject(day: Day | undefined) {
 
 const dayNum = (d: string) => Number(d.slice(8, 10));
 
+// one short line for the beaver about the week ahead
+function forecastLine(w: Weather, replay: boolean): [string, Mood] {
+  const lead = replay ? "Helene week: " : "";
+  const s = (n: number) => (n === 1 ? "" : "s");
+  const today = w.days[0]?.at_risk ?? 0;
+  const next = w.days.find((d) => d.at_risk > 0);
+  if (today) return [`${lead}heads up, ${today} of our project${s(today)} ${today === 1 ? "is" : "are"} in a risk area today.`, "surprised"];
+  if (next) return [`${lead}calm today. Watch ${next.label}: ${next.at_risk} project${s(next.at_risk)} at risk.`, "nod"];
+  return [replay ? "Helene week: none of our sites are in a risk area." : "The weather looks good for our sites this week!", "happy"];
+}
+
 export default function WeatherTab({ projects, side }: { projects: Jobs | null; side: React.ReactNode | null }) {
   const [scenario, setScenario] = useState<Scenario>("now");
   const [data, setData] = useState<Weather | null>(null);
@@ -48,12 +60,14 @@ export default function WeatherTab({ projects, side }: { projects: Jobs | null; 
   useEffect(() => {
     if (!projects) return;
     setData(null); setErr(null); setOpen(null);
+    say(scenario === "now" ? "Checking the forecast..." : "Loading the Helene week...", "thinking");
     const q = `scenario=${scenario === "now" ? "none" : "helene"}${org ? `&org=${org}` : ""}`;
     publicApi.get<Weather>(`/api/app/weather?${q}`).then((w) => {
       setData(w);
+      say(...forecastLine(w, scenario === "helene"));
       const first = w.days.findIndex((d) => d.max_rank > 0);  // open on the first day with something to see
       setDayIdx(first > 0 && !w.days[0].areas.features.length ? first : 0);
-    }).catch((e) => setErr(String(e)));
+    }).catch((e) => { setErr(String(e)); say("I couldn't get the forecast.", "sad"); });
   }, [scenario, org, projects]);
 
   const day = data?.days[dayIdx];

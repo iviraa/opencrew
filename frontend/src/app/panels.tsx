@@ -4,7 +4,7 @@ import {
   COMPANY, TIER_LABEL, ago, api, miles, month, requests as requestsApi, usd,
   type CollabRequest, type Jobs, type Me, type Overlap, type OverlapDetail,
 } from "./data";
-import { beaver } from "./mascot";
+import { say } from "./mascot";
 
 export function PanelHeader({ title, sub, onBack, right }: { title: string; sub?: React.ReactNode; onBack?: () => void; right?: React.ReactNode }) {
   return (
@@ -165,9 +165,9 @@ export function OverlapDetailPanel({ me, id, requests, onBack, onSent, onOpenReq
     setSending(true); setErr(null);
     try {
       onSent(await requestsApi.send(me, d, note));
-      setJustSent(true); setNote(""); beaver("happy");
+      setJustSent(true); setNote(""); say(`Request sent to ${me.other_name}!`, "happy");
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e)); beaver("sad");
+      setErr(e instanceof Error ? e.message : String(e)); say("That request didn't go through.", "sad");
     } finally { setSending(false); }
   };
 
@@ -289,7 +289,7 @@ export function RequestPanel({ me, id, requests, onBack, onOpenOverlap, onRespon
     setBusy(decision); setErr(null);
     try {
       onResponded(await requestsApi.respond(r.id, decision, feedback));
-      beaver(decision === "approved" ? "happy" : "nod");
+      say(decision === "approved" ? "Approved! I'll let them know." : "Declined. I'll pass on your feedback.", decision === "approved" ? "happy" : "nod");
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(null); }
   };

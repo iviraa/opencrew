@@ -135,3 +135,14 @@ button, a, input, label { touch-action: manipulation; }
 @keyframes wiggle { 0%, 100% { transform: rotate(0); } 20% { transform: rotate(-14deg); } 40% { transform: rotate(12deg); } 60% { transform: rotate(-8deg); } 80% { transform: rotate(5deg); } }
 .wiggle { animation: wiggle .7s ease; transform-origin: 50% 10%; }
 }
+
+/* the beaver's speech bubble, tail pointing back at him */
+.speech { position: relative; max-width: min(46vw, 460px); padding: 8px 16px; border: 2.5px solid var(--color-pen); border-radius: 18px 20px 18px 16px / 18px 16px 20px 18px;
+  background: #fff; color: var(--color-ink); font: 600 15px/1.35 var(--font-sans); box-shadow: 3px 3px 0 var(--color-pen); }
+.speech::before, .speech::after { content: ""; position: absolute; left: -13px; bottom: 7px; border-style: solid; }
+.speech::before { border-width: 8px 14px 8px 0; border-color: transparent var(--color-pen) transparent transparent; }
+.speech::after { left: -8.5px; bottom: 9.5px; border-width: 5.5px 10px 5.5px 0; border-color: transparent #fff transparent transparent; }
+@keyframes speech-in { from { opacity: 0; transform: translateX(-8px) scale(.9); } to { opacity: 1; transform: none; } }
+@keyframes speech-out { to { opacity: 0; transform: translateY(4px) scale(.96); } }
+.speech-in { animation: speech-in .22s cubic-bezier(.2, .9, .3, 1.3) both; transform-origin: left bottom; }
+.speech-out { animation: speech-out .25s ease both; }

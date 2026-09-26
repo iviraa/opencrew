@@ -2,11 +2,12 @@ import { Bell, Clock3, LogOut, Radar, UserRound } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Chat, { type ChatMsg } from "./Chat";
 import {
-  COMPANY, TIER_LABEL, ago, api, notices as noticesApi, requests as requestsApi, supabase,
+  COMPANY, TIER_LABEL, ago, api, miles, usd, notices as noticesApi, requests as requestsApi, supabase,
   type CollabRequest, type Jobs, type Me, type Notice, type Overlap,
 } from "./data";
 import MapPane, { bboxOf, esc, type Fit, type Scene } from "./MapPane";
-import { beaver } from "./mascot";
+import { beaver, say } from "./mascot";
+import Speech from "./Speech";
 import { HistoryPanel, OverlapDetailPanel, OverlapList, ProjectList, RequestPanel, sides } from "./panels";
 import { NewsTab, Split, WeatherTab } from "./tabs";
 
@@ -58,7 +59,7 @@ export default function Shell() {
 
   // who am I, my projects, requests and notifications
   useEffect(() => {
-    api.me().then((m) => { setMe(m); beaver("wave"); }).catch((e) => setErr(String(e.message ?? e)));
+    api.me().then((m) => { setMe(m); say(`Hi ${m.name}! Want me to find overlaps?`, "wave"); }).catch((e) => setErr(String(e.message ?? e)));
     api.projects().then((p) => {
       setProjects(p);
       const b = bboxOf([p]);
@@ -84,7 +85,8 @@ export default function Shell() {
         const who = COMPANY[meRef.current!.other].name;
         setToast({ request: n.request_id, text: n.kind === "request" ? `${who} sent you a collaboration request` : `${who} ${n.kind} your request` });
         setRing((x) => x + 1);
-        beaver(n.kind === "declined" ? "sad" : n.kind === "approved" ? "happy" : "surprised");
+        say(n.kind === "request" ? `${who} wants to team up!` : n.kind === "approved" ? `${who} approved our request!` : `${who} declined our request.`,
+          n.kind === "declined" ? "sad" : n.kind === "approved" ? "happy" : "surprised");
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "collab_request" }, () => { requestsApi.list().then(setReqs).catch(() => {}); })
       .subscribe();
@@ -100,11 +102,11 @@ export default function Shell() {
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 7000); return () => clearTimeout(t); }, [toast]);
 
   const loadOverlaps = useCallback(async (animate: boolean) => {
-    if (animate) { setMode("scanning"); setScanStep(0); beaver("thinking"); }
+    if (animate) { setMode("scanning"); setScanStep(0); say("I'm looking for overlapping projects.", "thinking"); }
     const [data] = await Promise.all([ov ? Promise.resolve(ov) : api.overlaps(), animate ? wait(SCAN_MS) : null]);
     setOv(data); setMode("overlaps");
     if (animate) {
-      beaver("happy");
+      say(data.overlaps.length ? `Found ${data.overlaps.length} overlaps with ${COMPANY[meRef.current!.other].name}!` : "No overlaps nearby right now.", "happy");
       const b = bboxOf([data.jobs]);
       if (b) setFit({ bbox: b, key: `all${Date.now()}` });
     }
@@ -117,7 +119,7 @@ export default function Shell() {
     return () => clearInterval(t);
   }, [mode]);
 
-  const scan = () => loadOverlaps(true).catch((e) => { setErr(String(e.message ?? e)); setMode("projects"); beaver("sad"); });
+  const scan = () => loadOverlaps(true).catch((e) => { setErr(String(e.message ?? e)); setMode("projects"); say("Hmm, I couldn't finish the scan.", "sad"); });
 
   const openOverlap = useCallback(async (id: number) => {
     setTab("overlaps");
@@ -126,6 +128,7 @@ export default function Shell() {
     setSelected(id);
     push({ kind: "overlap", id });
     const o = data.overlaps.find((x) => x.id === id);
+    if (o) say(o.savings_high > 0 ? `Overlap #${id}: ${miles(o.distance_m)} apart, could save ${usd(o.savings_low)} to ${usd(o.savings_high)}.` : `Overlap #${id}: close by, but built in different years.`, "nod");
     if (o) {
       const jobs = data.jobs.features.filter((f) => f.id === o.job_a || f.id === o.job_b || f.properties.id === o.job_a || f.properties.id === o.job_b);
       const b = bboxOf([{ type: "FeatureCollection", features: [...jobs, { type: "Feature", geometry: o.link, properties: {} }] }]);
@@ -146,7 +149,7 @@ export default function Shell() {
 
   const sendChat = async (text: string) => {
     const next = [...chat, { role: "user" as const, text }];
-    setChat(next); setChatBusy(true); beaver("thinking");
+    setChat(next); setChatBusy(true); say("Let me check...", "thinking");
     try {
       const r = await api.chat(next.map(({ role, text }) => ({ role, text })));
       const lists = r.ui_actions.map((a) => a.ids ?? a.opportunity_ids).filter((x): x is number[] => !!x?.length);  // last non-empty list wins
@@ -154,15 +157,15 @@ export default function Shell() {
       const openId = open ? (open.id ?? open.opportunity_id) : undefined;
       const ids = lists.pop() ?? (openId != null ? [openId] : undefined);
       setChat([...next, { role: "model", text: r.reply || "Done.", ids, offline: r.offline }]);
-      if (r.offline) beaver("sad");
-      else { beaver("talking"); setTimeout(() => beaver("idle"), Math.min(4000, 800 + r.reply.length * 25)); }
+      if (r.offline) say("I'm out of energy for today, sorry!", "sad");
+      else say(ids && ids.length > 1 ? `I put ${ids.length} overlaps on the map.` : openId != null ? `Here's overlap #${openId}.` : "Here's what I found!");
       if (ids?.length) await showIds(ids);
       if (openId != null) setSelected(openId);
       const fly = r.ui_actions.filter((a) => a.type === "fly").pop();
       if (fly?.bbox && !ids?.length) setFit({ bbox: fly.bbox, key: `y${Date.now()}`, maxZoom: 10 });
     } catch {
       setChat([...next, { role: "model", text: "Sorry, I couldn't reach the server just now. Please try again.", offline: true }]);
-      beaver("sad");
+      say("I couldn't reach the server.", "sad");
     } finally { setChatBusy(false); }
   };
 
@@ -213,6 +216,7 @@ export default function Shell() {
     const f = projects?.features.find((x) => x.properties.id === id);
     const b = f && bboxOf([{ type: "FeatureCollection", features: [f] }]);
     if (b) setFit({ bbox: b, key: `p${id}${Date.now()}`, maxZoom: 11 });
+    if (f) say(`Here's ${f.properties.name.length > 40 ? `${f.properties.name.slice(0, 40)}...` : f.properties.name}.`, "nod");
   };
 
   // ---------- right quarter ----------
@@ -229,7 +233,7 @@ export default function Shell() {
 
   const overlapsSide = !me ? null : mode === "overlaps" && ov ? (
     <OverlapList me={me} overlaps={visible} requests={reqs} selected={selected} focused={!!focus} onOpen={openOverlap}
-      onClearFocus={() => { setFocus(null); const b = bboxOf([ov.jobs]); if (b) setFit({ bbox: b, key: `all${Date.now()}` }); }} />
+      onClearFocus={() => { setFocus(null); say("Showing all our overlaps again.", "nod"); const b = bboxOf([ov.jobs]); if (b) setFit({ bbox: b, key: `all${Date.now()}` }); }} />
   ) : (
     <ProjectList me={me} projects={projects} onPick={pickProject} />
   );
@@ -244,7 +248,7 @@ export default function Shell() {
         <div className="board-frame" />
         <nav className="relative z-10 mb-3 flex items-center gap-6">
           {TABS.map((t) => (
-            <button key={t.id} onClick={() => setTab(t.id)} className={`relative font-logo text-lg font-semibold ${tab === t.id ? "text-ink" : "text-faint hover:text-muted"}`}>
+            <button key={t.id} onClick={() => { if (t.id === tab) return; setTab(t.id); if (t.id === "overlaps") say(mode === "overlaps" ? "Back to our overlaps." : "Tap the purple button and I'll look for overlaps.", "nod"); }} className={`relative font-logo text-lg font-semibold ${tab === t.id ? "text-ink" : "text-faint hover:text-muted"}`}>
               {t.label}
               {tab === t.id && (
                 <svg className="scribble" viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden>
@@ -319,14 +323,15 @@ export default function Shell() {
       {/* the beaver and the bottom bar */}
       <Suspense fallback={null}><Beaver className="absolute bottom-[1vh] left-[1vw] z-20 h-[24vh] min-h-[170px] w-[22vh] min-w-[155px]" /></Suspense>
       <div className="font-logo pointer-events-none absolute bottom-[5.5vh] left-[calc(1vw+max(22vh,155px)+8px)] text-[5vh] font-semibold leading-none text-white">crewly</div>
+      <Speech className="absolute bottom-[calc(10.5vh+12px)] left-[calc(1vw+max(22vh,155px)+2px)] z-30" />
 
       <div className="absolute bottom-[4vh] right-[5vw] z-30 flex items-center gap-7" onClick={(e) => e.stopPropagation()}>
-        <button onClick={() => { setStack((s) => [...s.filter((p) => p.kind !== "history"), { kind: "history" }]); setPop(null); }} aria-label="Request history"
+        <button onClick={() => { setStack((s) => [...s.filter((p) => p.kind !== "history"), { kind: "history" }]); setPop(null); say(reqs.length ? `Here are all ${reqs.length} of our requests.` : "No requests yet. Open an overlap to send one.", "nod"); }} aria-label="Request history"
           className="grid h-[7vh] min-h-11 w-[7vh] min-w-11 place-items-center rounded-full bg-[#ece2e6] text-grape transition hover:scale-105">
           <Clock3 className="h-[55%] w-[55%]" strokeWidth={2.5} />
         </button>
         <div className="relative">
-          <button onClick={() => setPop(pop === "bell" ? null : "bell")} aria-label={`Notifications${unread ? `, ${unread} unread` : ""}`} className="relative grid place-items-center text-white transition hover:scale-105">
+          <button onClick={() => { setPop(pop === "bell" ? null : "bell"); if (pop !== "bell") say(unread ? `You have ${unread} new update${unread === 1 ? "" : "s"}.` : "You're all caught up!", "nod"); }} aria-label={`Notifications${unread ? `, ${unread} unread` : ""}`} className="relative grid place-items-center text-white transition hover:scale-105">
             <Bell key={ring} className={`h-[7vh] min-h-11 w-[7vh] min-w-11 ${ring ? "wiggle" : ""}`} fill="white" strokeWidth={1.5} />
             {unread > 0 && <span className="pop-in absolute -right-1 -top-1 grid h-6 min-w-6 place-items-center rounded-full bg-[#ff1f3d] px-1 text-xs font-bold text-white">{unread}</span>}
           </button>

@@ -12,3 +12,19 @@ export function onBeaver(f: (m: Mood) => void) {
   listeners.add(f);
   return () => { listeners.delete(f); };
 }
+
+// short lines the beaver says in the bubble beside it
+export type Line = { text: string; id: number };
+const talkers = new Set<(l: Line) => void>();
+let lines = 0;
+
+export function say(text: string, mood: Mood = "talking") {
+  beaver(mood);
+  lines += 1;
+  talkers.forEach((f) => f({ text, id: lines }));
+}
+
+export function onSay(f: (l: Line) => void) {
+  talkers.add(f);
+  return () => { talkers.delete(f); };
+}

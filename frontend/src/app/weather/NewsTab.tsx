@@ -1,5 +1,6 @@
 import { ExternalLink, HardHat, Newspaper } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { say, type Mood } from "../mascot";
 import type { NewsPin } from "../../api";
 import { ago, publicApi, type Jobs } from "../data";
 import MapPane, { bboxOf, esc, type Fit, type Scene } from "../MapPane";
@@ -36,6 +37,14 @@ function Near({ projects, lon, lat }: { projects: Jobs | null; lon: number; lat:
   );
 }
 
+// one short line for the beaver about damage reports
+function newsLine(f: LiveFrame): [string, Mood] {
+  const n = f.incidents.features.length, v = f.incidents.features.filter((x) => x.properties.verified).length, a = f.news.features.length;
+  if (!n && !a) return ["No damage reports right now. All quiet!", "happy"];
+  if (!n) return [`${a} news story${a === 1 ? "" : "s"} near our area, no damage reports.`, "nod"];
+  return [`${n} damage report${n === 1 ? "" : "s"} found, ${v} verified.`, "surprised"];
+}
+
 export default function NewsTab({ projects, side }: { projects: Jobs | null; side: React.ReactNode | null }) {
   const [scenario, setScenario] = useState<Scenario>("now");
   const [frame, setFrame] = useState<LiveFrame | null>(null);
@@ -47,12 +56,14 @@ export default function NewsTab({ projects, side }: { projects: Jobs | null; sid
 
   useEffect(() => {
     setFrame(null); setOpen(null); setErr(null); setHidden(new Set());
+    say(replay ? "Pulling up reports from Helene..." : "Reading the latest news...", "thinking");
     const q = replay ? `scenario=helene&at=${HELENE_NEWS}` : "scenario=none";
     publicApi.get<LiveFrame>(`/api/live/frame?${q}`).then((f) => {
       setFrame(f);
+      say(...newsLine(f));
       const b = bboxOf([f.incidents, f.news]);
       if (b) setFit({ bbox: b, key: scenario + Date.now(), maxZoom: 9 });
-    }).catch((e) => setErr(String(e)));
+    }).catch((e) => { setErr(String(e)); say("I couldn't load the news.", "sad"); });
   }, [scenario, replay]);
 
   const all = useMemo(() => (frame?.incidents.features ?? []).map((f) => ({ ...f.properties, lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1] }))
