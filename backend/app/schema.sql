@@ -181,3 +181,5 @@ CREATE TABLE IF NOT EXISTS phase_risk (
   alert       TEXT,
   fetched_at  TIMESTAMPTZ DEFAULT now()
 );
+
+ALTER TABLE job ADD COLUMN IF NOT EXISTS located_via JSONB;  -- databases built before the column existed
