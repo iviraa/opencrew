@@ -348,12 +348,13 @@ export function RequestPanel({ me, id, requests, onBack, onOpenOverlap, onRespon
   );
 }
 
-export function HistoryPanel({ me, requests, onBack, onOpen }: { me: Me; requests: CollabRequest[]; onBack: () => void; onOpen: (id: number) => void }) {
+export function HistoryPanel({ me, requests, onBack, onOpen, onGoals }: { me: Me; requests: CollabRequest[]; onBack: () => void; onOpen: (id: number) => void; onGoals?: () => void }) {
   const [tab, setTab] = useState<"all" | "sent" | "received">("all");
   const rows = requests.filter((r) => tab === "all" || (tab === "sent") === (r.from_company === me.company));
   return (
     <>
-      <PanelHeader title="Request history" sub={`${requests.length} request${requests.length === 1 ? "" : "s"}`} onBack={onBack} />
+      <PanelHeader title="Request history" sub={`${requests.length} request${requests.length === 1 ? "" : "s"}`} onBack={onBack}
+        right={onGoals && <button onClick={onGoals} className="mt-1 rounded-full bg-grape-soft px-2.5 py-1 text-xs font-semibold text-grape hover:bg-grape hover:text-white">Goals</button>} />
       <div className="mb-2 flex gap-1 rounded-full bg-soft p-1 text-xs font-semibold">
         {(["all", "sent", "received"] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)} className={`flex-1 rounded-full py-1 capitalize ${tab === t ? "bg-white shadow-sm" : "text-muted"}`}>{t}</button>

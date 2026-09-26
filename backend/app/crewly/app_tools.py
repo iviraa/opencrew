@@ -4,6 +4,7 @@ from datetime import date
 
 import httpx
 
+from app.crewly.act_tools import act_tools
 from app.crewly.incident_tools import INCIDENT_TOOLS
 from app.crewly.more_tools import MORE_TOOLS
 from app.crewly.outlook_tools import OUTLOOK_TOOLS
@@ -109,6 +110,7 @@ def app_tools(ctx):
     for name in ("estimate_savings", "search_projects", "project_details", "compare_projects", "focus_map",
                  "outlook", "site_hazards", "weather_alerts", "incidents_near"):
         tools[name] = shared[name]
+    tools.update(act_tools(ctx))
     return tools
 
 
@@ -129,6 +131,10 @@ Rules:
 - When the user asks about one overlap, call open_overlap so the side panel opens.
 - Questions about requests use collab_requests: "my last request" is direction sent, limit 1; "anything waiting for me" is
   direction received, status pending. Say which overlap it was about, its status, and quote their feedback if there is any.
-- You cannot send or answer requests yourself; tell the user to use the Send request / Approve / Decline buttons.
+- To send, approve or decline a request call propose_request or propose_answer. They only show a Confirm button; nothing
+  happens until the user taps it, so say "Tap Confirm to send it" and never say it was sent, approved or declined.
+  Write a short friendly note yourself if the user gave none, with no numbers of your own.
+- For multi-step asks like "line up collaboration on our top 5 overlaps" call start_goal once; it drafts one request per
+  overlap into a goal panel where the user reviews and sends them. For "how is my goal going" call goal_status.
 - Weather and storm questions use outlook, weather_alerts or site_hazards; damage news uses incidents_near.
 - Keep replies short and warm: one to three sentences or a compact list. Refer to overlaps as "#id" with both project names."""

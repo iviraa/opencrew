@@ -2,16 +2,19 @@ import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { ArrowUp, CloudOff, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { CollabRequest, Me, Overlap } from "./data";
+import Confirm from "./Confirm";
+import type { ChatAction, CollabRequest, Me, Overlap } from "./data";
+import { GoalChip } from "./GoalPanel";
 import { OverlapCard, latestFor } from "./panels";
 
-export type ChatMsg = { role: "user" | "model"; text: string; ids?: number[]; offline?: boolean };
+export type ChatMsg = { role: "user" | "model"; text: string; ids?: number[]; offline?: boolean; confirm?: ChatAction[]; goal?: number };
 
 const html = (s: string) => DOMPurify.sanitize(marked.parse(s, { async: false }) as string);
 
-export default function Chat({ me, msgs, busy, overlaps, requests, onSend, onOpen, onClose }: {
+export default function Chat({ me, msgs, busy, overlaps, requests, onSend, onOpen, onClose, onDone, onOpenRequest, onOpenGoal }: {
   me: Me; msgs: ChatMsg[]; busy: boolean; overlaps: Overlap[] | null; requests: CollabRequest[];
   onSend: (text: string) => void; onOpen: (id: number) => void; onClose: () => void;
+  onDone: (r: CollabRequest) => void; onOpenRequest: (id: number) => void; onOpenGoal: (id: number) => void;
 }) {
   const [text, setText] = useState("");
   const end = useRef<HTMLDivElement>(null);
@@ -58,7 +61,11 @@ export default function Chat({ me, msgs, busy, overlaps, requests, onSend, onOpe
             ) : (
               <div className="crewly max-w-[95%] rounded-2xl rounded-tl-sm bg-soft px-3 py-2 text-sm" dangerouslySetInnerHTML={{ __html: html(m.text) }} />
             )}
-            {m.ids && m.ids.length > 0 && (
+            {m.confirm?.map((a, j) => (
+              <Confirm key={j} me={me} action={a} overlaps={overlaps} requests={requests} onDone={onDone} onOpenRequest={onOpenRequest} />
+            ))}
+            {m.goal != null && <GoalChip id={m.goal} onOpen={() => onOpenGoal(m.goal!)} />}
+            {m.ids && m.ids.length > 0 && m.goal == null && (
               <div className="flex flex-col gap-1 rounded-2xl border-2 border-line p-1">
                 <div className="px-2 pt-1 text-xs font-semibold text-faint">{m.ids.length} on the map · tap one for details</div>
                 {m.ids.map((id) => byId.get(id)).filter((o): o is Overlap => !!o).map((o) => (
