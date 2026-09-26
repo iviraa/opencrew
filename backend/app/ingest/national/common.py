@@ -44,11 +44,22 @@ def register_source(conn, org_id, title, url, path, planner, edition):
                         (org_id, title, url, str(path), planner, edition, sha)).fetchone()["id"]
 
 
+OPERATORS = re.compile(r"\b(fpl|duke|tva|apc|gpc|xcel|ameren|entergy|aep|ppl|pseg|pse&g|oncor|pge|pg&e|sce|nppd|opd|oppd|oge|og&e|sps|evergy|"
+                       r"atc|itc|metc|mec|nipsco|comed|bge|pepco|jcp&l|jcpl|velco|cmp|nyseg|coned|con ed|national grid|eversource|ekpc|lg&e|ku|"
+                       r"dominion|georgia power|alabama power|idaho power|pacificorp|aps|srp|tep|pnm|bpa|wapa|nv energy|basin|erec|grda)\b", re.I)
+
+
+def station_key(name):
+    """Comparable station name: no voltages, circuit or line suffixes, or utility tags like 'Quarry FPL'."""
+    s = re.sub(r"\b\d+(\.\d+)?\s*kv\b|\bckt\b.*|\bline\b.*", " ", str(name or ""), flags=re.I)
+    return norm(OPERATORS.sub(" ", s))
+
+
 @lru_cache
 def stations(state):
     path = ROOT / f"data/layers/osm_states/{state}.json"
     rows = json.loads(path.read_text()) if path.exists() else []
-    return [r for r in rows if r.get("name")], [norm(r["name"]) for r in rows if r.get("name")]
+    return [r for r in rows if r.get("name")], [station_key(r["name"]) for r in rows if r.get("name")]
 
 
 COMPASS = {"north", "south", "east", "west", "n", "s", "e", "w", "ne", "nw", "se", "sw", "northeast", "northwest", "southeast", "southwest", "upper", "lower", "new", "old"}
@@ -60,7 +71,7 @@ def same_compass(a, b):
 
 def find_station(name, states):
     """Best osm substation for a planner's station name in the given states, or None when unsure."""
-    key = norm(re.sub(r"\b\d+(\.\d+)?\s*kv\b|\bckt\b.*|\bline\b.*", " ", str(name), flags=re.I))  # "crooked lake 161kv" -> "crooked lake"
+    key = station_key(name)  # "crooked lake 161kv" -> "crooked lake"
     if len(key) < 3:
         return None
     best = None
