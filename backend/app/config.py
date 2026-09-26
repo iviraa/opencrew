@@ -54,6 +54,13 @@ ASSUMPTIONS = {
                  "note": "No public unit cost for temporary laydown yards. Proxy: MISO's site mobilization for an existing ($157,590) or new ($262,660) substation site."},
     "outage_usd": {"low": 28000, "high": 84000, "unit": "$", "label": "Coordinated outage", "verified": False, **cite("bls_ooh", "web page"),
                    "note": "Derived: one shared outage avoids 2 switching crews x 2 shifts x 10 hours at the storm crew-hour cost."},
+    "per_diem_usd_day": {"low": 68, "high": 181, "unit": "$/person-day", "label": "Crew per diem", "verified": True, **cite("gsa_per_diem_2027", "FY2027 standard CONUS rate"),
+                         "note": "Standard CONUS rate: $68 meals and incidentals, $113 lodging. Low end is a crew that sleeps at home and only claims M&IE; "
+                                 "high end is the full $181 for a travelling crew."},
+    "escalation_pct_yr": {"low": 3.2, "high": 5.12, "unit": "%/year", "label": "Construction escalation", "verified": False,
+                          **cite("bls_eci_construction", "CIU2012300000000I Q2 2016 = 124.6 to Q2 2025 = 165.4; WPUIP2300001 Aug 2016 = 209.5 to Aug 2025 = 328.3"),
+                          "note": "Nine-year compound growth from two BLS series: 3.20%/yr for construction total compensation (ECI) and 5.12%/yr for goods "
+                                  "going into construction (PPI). Labour-heavy work sits near the low end, material-heavy work near the high end."},
     **{},  # crew figures are merged below so /api/assumptions and the cost UI show them with their sources
     "crew_hour_usd": {"low": 700, "high": 2100, "unit": "$/crew-hour", "label": "Storm crew hour", "verified": False, "scope": "storm",
                       **cite("gpc_helene_cost", "web page"),
@@ -85,6 +92,41 @@ STOP_RULES = {k: {**r, "source": CREW["sources"][r["source_key"]]["title"], "url
 ASSUMPTIONS.update(CREW_ASSUMPTIONS)
 
 MOB_SHARE = {"general": 0.30, "heavy_haul": 0.15, "crane_lift": 0.20, "wire_stringing": 0.25, "commissioning": 0.10}  # our split of MISO's per-project mobilization
+
+# ---------- savings model: what a duplicated setup is made of ----------
+# ASSUMPTIONS hold prices; these hold quantities. A pair means (low, high); a number is fixed. docs/cost-savings-model.md shows the working.
+DRIVERS = {
+    "crew_size": (4, 6),                  # workers on a transmission line crew, the same range crew_day_usd is built on
+    "shift_hours": 10,                    # a normal, non-storm field shift
+    "crew_moves": (10, 18),               # crew-and-equipment round trips inside one project mobilization
+    "setup_crew_days": (14, 20),          # crew-days spent standing a site up and tearing it down
+    "survey_days_per_mile": (0.5, 1.5),   # crew-days of route survey and environmental walk-down per corridor mile
+    "row_shared_frac": (0.3, 0.6),        # share of one line's right-of-way width that co-locating actually avoids buying twice
+    "switch_crews": 2,                    # one crew at each end of a line to open it and close it again
+    "switch_shifts": 2,                   # out of service and back in
+    "gear_days": (10, 20),                # days a crane and a stringing set sit on one site per campaign
+    "gear_share": (0.15, 0.35),           # share of those days a single shared set can cover both sites
+    "crew_share": (0.10, 0.25),           # share of shared field days one crew genuinely covers both sites
+    "months_pulled_in": (1, 3),           # months the second project stops waiting on the corridor and the outage
+}
+
+# MISO publishes one mobilization figure per project; this is our split of what it pays for, so the table can name the cost type
+MOB_SPLIT = {"travel": 0.45, "labor": 0.35, "overhead": 0.20}
+
+CATEGORIES = [  # the cost types the savings table groups by, in the order it shows them
+    ("labor", "Labor", "Crew hours one side no longer has to pay for"),
+    ("equipment", "Equipment", "Machines that would otherwise be hired or held twice"),
+    ("travel", "Travel", "Hauling, lodging and per diem for a second crew"),
+    ("time", "Time", "What the calendar costs: months of waiting and a second outage window"),
+    ("land", "Land and permits", "Easements, surveys and environmental review bought once"),
+    ("overhead", "Site and overhead", "A second yard's setup, rent and temporary facilities"),
+]
+CATEGORY_LABEL = {k: (label, hint) for k, label, hint in CATEGORIES}
+
+
+def driver(key, end="low"):
+    v = DRIVERS[key]
+    return float(v[0 if end == "low" else 1]) if isinstance(v, tuple) else float(v)
 
 
 def mob_share(key):

@@ -32,15 +32,15 @@ def test_score():
 def test_savings_stack_and_range():
     crew, site = savings("crew", 0), savings("site", 0)
     assert crew["low"] < crew["high"]
-    assert set(site["items"]) == {"crew mobilization", "staging yard"}
+    assert set(site["items"]) - set(crew["items"]) == {"One laydown yard instead of two"}  # a yard needs the sites within 5 mi
     land = savings("land", 2000)
-    assert "shared right-of-way" in land["items"]
+    assert {"Width saved by sharing one corridor", "One route survey and environmental walk-down"} <= set(land["items"])
     assert savings("land", 0)["items"].keys() == site["items"].keys()  # no corridor, no land savings
 
 
 def test_savings_overrides():
     s = savings("crew", 0, {"mobilization_usd": {"low": 10000, "high": 20000}})
-    assert (s["low"], s["high"]) == (10000 * SHARE["low"], 20000)
+    assert (s["low"], s["high"]) == (10000 * SHARE["low"], 20000)  # the mobilization split covers one whole mobilization
 
 
 def test_savings_scale_per_pair():
@@ -51,6 +51,40 @@ def test_savings_scale_per_pair():
     assert half["high"] == full["high"] / 2 and small["high"] < full["high"] and commute["high"] < full["high"]
     assert savings("crew", 0, time_overlap=0.0, pair={"kv": 230, "gap_days": 90})["high"] > 0  # back-to-back crews can chain
     assert savings("crew", 0, time_overlap=0.0, pair={"kv": 230, "gap_days": 400})["high"] == 0  # years apart share nothing
+
+
+def test_savings_lines_add_up_and_name_a_cost_type():
+    from app.config import CATEGORY_LABEL
+    s = savings("crossing", 3000, drive_min=5, time_overlap=1.0, pair={"kv": 230, "gap_days": 0, "shared_days": 300, "cost_usd": 9e6})
+    for end in ("low", "high"):
+        assert sum(ln[end] for ln in s["lines"]) == s[end]  # the table has to add up to the headline
+        assert sum(c[end] for c in s["categories"]) == s[end]
+    assert all(ln["category"] in CATEGORY_LABEL for ln in s["lines"])
+    assert all(ln["qty"] and ln["basis"] for ln in s["lines"])  # every line says how many and where the price came from
+    assert [c["high"] for c in s["categories"]] == sorted((c["high"] for c in s["categories"]), reverse=True)
+
+
+def test_savings_recurring_lines_need_shared_days_and_a_budget():
+    base = dict(tier="site", overlap_m=0, drive_min=10, time_overlap=0.8)
+    bare = savings(**base, pair={"kv": 115, "gap_days": 0, "shared_days": 0, "cost_usd": None})
+    timed = savings(**base, pair={"kv": 115, "gap_days": 0, "shared_days": 400, "cost_usd": None})
+    budgeted = savings(**base, pair={"kv": 115, "gap_days": 0, "shared_days": 400, "cost_usd": 9e6})
+    assert not any(ln["over"] for ln in bare["lines"])  # nothing runs with the calendar without shared days
+    assert {"Per diem and lodging for one crew, not two", "Crane and stringing gear held once"} <= set(timed["items"])
+    assert "time" not in {c["key"] for c in timed["categories"]} and "time" in {c["key"] for c in budgeted["categories"]}
+    assert budgeted["share_of_budget"]["high"] < 0.15  # a coordination saving is a slice of the project, never most of it
+
+
+def test_mobilization_split_reconciles_with_crew_and_move_rates():
+    """MISO gives one mobilization figure; our split into hauling, crew and facilities has to survive a bottom-up check."""
+    from app.config import ASSUMPTIONS as A, MOB_SPLIT, driver
+    mob_low = A["mobilization_usd"]["low"]
+    crew_hour = A["lineworker_hourly_usd"]["low"] * A["labor_burden_factor"]["low"] * driver("crew_size", "low")
+    bottom_up_labor = driver("setup_crew_days", "low") * driver("shift_hours") * crew_hour
+    assert 0.5 <= bottom_up_labor / (mob_low * MOB_SPLIT["labor"]) <= 2.0  # crew-days x loaded crew-hour lands within 2x of the split
+    bottom_up_haul = driver("crew_moves", "low") * A["demob_remob_usd"]["low"]
+    assert 0.5 <= bottom_up_haul / (mob_low * MOB_SPLIT["travel"]) <= 2.0  # crew moves x the per-move rate does too
+    assert abs(sum(MOB_SPLIT.values()) - 1) < 1e-9
 
 
 def test_name_parsing():

@@ -33,5 +33,20 @@
     "title": "DESC Planned Transmission Projects $2M and above, 2024-2028 (organizer package)",
     "url": null,
     "file": "data/raw/desc_2024_2028_projects.pdf"
+  },
+  "gsa_per_diem_2027": {
+    "title": "GSA Per Diem Bulletin FTR 27-01, standard CONUS rate for FY2027 (Oct 1, 2026 - Sep 30, 2027)",
+    "url": "https://www.gsa.gov/policy-regulations/regulations/federal-travel-regulation/ftr-and-related-files/gsa-per-diem-bulletin-ftr-2701",
+    "file": null
+  },
+  "bls_eci_construction": {
+    "title": "BLS Employment Cost Index, total compensation, construction industry (series CIU2012300000000I, via BLS Public API v2)",
+    "url": "https://api.bls.gov/publicAPI/v2/timeseries/data/CIU2012300000000I",
+    "file": null
+  },
+  "bls_ppi_construction_inputs": {
+    "title": "BLS Producer Price Index, inputs to construction industries, goods (series WPUIP2300001, via BLS Public API v2)",
+    "url": "https://api.bls.gov/publicAPI/v2/timeseries/data/WPUIP2300001",
+    "file": null
   }
 }
