@@ -56,6 +56,8 @@ def download(url):
                 body += chunk
                 if len(body) > MAX_BYTES:
                     raise ValueError("file is larger than 50 MB")
+            if body[:4] != b"%PDF":
+                raise ValueError("link is not a PDF")
             return save(body, url.rstrip("/").split("/")[-1][:60] or "filing.pdf")
     raise ValueError("too many redirects")
 

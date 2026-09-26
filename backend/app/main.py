@@ -180,7 +180,13 @@ def ingest(file: UploadFile | None = File(None), url: str | None = Form(None), o
     if not file and not url:
         raise HTTPException(400, "send a PDF file or a url")
     try:
-        path = filing.save(file.file.read(), file.filename or "filing.pdf") if file else filing.download(url)
+        if file:
+            body = file.file.read()
+            if body[:4] != b"%PDF":
+                raise HTTPException(422, "not a PDF")  # never write non-pdf uploads to disk
+            path = filing.save(body, file.filename or "filing.pdf")
+        else:
+            path = filing.download(url)
         out = filing.ingest(conn, path, org, org_name, state, url=url)
     except RuntimeError as e:
         raise HTTPException(503, str(e))
