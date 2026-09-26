@@ -11,6 +11,7 @@ from app.crewly import agent, brief
 from app.db import ROOT, get_conn
 from app.engine.cost import savings
 from app.engine.overlap import recompute
+from app.engine import equipment
 from app.engine.phases import build_phases
 from app.queries import JOB_SQL, OPP_SQL, shareable
 from app.storm import replay
@@ -169,6 +170,11 @@ def tracts(conn=Depends(get_conn)):
     rows = conn.execute("SELECT geoid, risk, vulnerability, ST_AsGeoJSON(ST_SimplifyPreserveTopology(geom, 0.003), 4)::json AS g FROM tract").fetchall()
     return {"type": "FeatureCollection",
             "features": [{"type": "Feature", "geometry": r.pop("g"), "properties": r} for r in rows]}
+
+
+@api.get("/procurement")
+def procurement(conn=Depends(get_conn)):
+    return equipment.groups(conn)
 
 
 @api.get("/storm/frame")

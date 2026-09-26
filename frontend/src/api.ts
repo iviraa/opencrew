@@ -44,6 +44,12 @@ export type StormFrame = {
 
 export type ReviewItem = { id: number; org_id: string; reason: string; source_page: number; name: string; in_service: string; endpoints: string[] | null };
 
+export type ProcurementItem = { id: string; name: string; in_service: string; placed: boolean };
+
+export type ProcurementGroup = {
+  voltage_kv: number; kind: string; desc: ProcurementItem; gpc: (ProcurementItem & { year_gap: number; reason: string })[];
+};
+
 export type JobCollection = GeoJSON.FeatureCollection<GeoJSON.Geometry, Job>;
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
@@ -67,6 +73,7 @@ export const api = {
   brief: (id: number) => call<{ markdown: string; summary_source: string }>(`/opportunities/${id}/brief`, { method: "POST" }),
   tracts: () => call<GeoJSON.FeatureCollection>("/layers/tracts"),
   storm: (at: number) => call<StormFrame>(`/storm/frame?at=${new Date(at).toISOString()}`),
+  procurement: () => call<ProcurementGroup[]>("/procurement"),
   review: () => call<ReviewItem[]>("/review"),
   place: (id: number, lon: number, lat: number) => call<unknown>(`/review/${id}/place`, { method: "POST", body: JSON.stringify({ lon, lat }) }),
   contacts: (id: number) => call<Contact[]>(`/opportunities/${id}/contacts`),

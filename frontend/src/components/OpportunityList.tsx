@@ -1,4 +1,6 @@
+import { useState } from "react";
 import type { Opportunity, Tier } from "../api";
+import Procurement from "./Procurement";
 import { FLAG_LABEL, TIER_COLOR, TIER_LABEL, miles, pct, title, usd } from "../format";
 
 type Props = {
@@ -21,9 +23,22 @@ export function TierChip({ tier }: { tier: Tier }) {
 }
 
 export default function OpportunityList({ items, shown, crewlyFiltered, onClearCrewly, selectedId, tier, onTier, onSelect }: Props) {
+  const [tab, setTab] = useState<"overlaps" | "equipment">("overlaps");
+  const tabs = (
+    <div className="mb-2 flex gap-4 text-sm">
+      {(["overlaps", "equipment"] as const).map((t) => (
+        <button key={t} onClick={() => setTab(t)}
+          className={`border-b-2 pb-1 font-semibold capitalize ${tab === t ? "border-slate-900 text-slate-900" : "border-transparent text-slate-400"}`}>{t}</button>
+      ))}
+    </div>
+  );
+  if (tab === "equipment") {
+    return <div className="flex h-full flex-col"><div className="border-b border-slate-200 px-4 pt-3">{tabs}</div><Procurement /></div>;
+  }
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b border-slate-200 px-4 pb-3 pt-4">
+      <div className="border-b border-slate-200 px-4 pb-3 pt-3">
+        {tabs}
         <h2 className="text-sm font-semibold text-slate-900">Coordination opportunities</h2>
         <p className="mt-0.5 text-xs text-slate-500">{shown.length} of {items.length} cross-utility pairs within 25 mi, ranked by score</p>
         {crewlyFiltered && (
