@@ -140,12 +140,17 @@ def parse_gtwo(areas, stamp, mode="live", url=None):
     return rows
 
 
+def smooth(geom, r=0.2):
+    """Round off the staircase edges of merged grid cells."""
+    return geom.buffer(r).buffer(-2 * r).buffer(r)
+
+
 def parse_wsp(cells, stamp, mode="live", url=None):
     """NHC tropical-storm-force wind probabilities: half-degree grid points grown into cells, merged into nested bands."""
     rows = []
     for i, band in enumerate(WSP_BANDS):
         inside = [g.buffer(0.25, cap_style="square") if g.geom_type == "Point" else g for p, g in cells if p >= band]
-        geom = clip(unary_union(inside)) if inside else None
+        geom = clip(smooth(unary_union(inside))) if inside else None
         if geom is None:
             continue
         rows.append(row(mode, "nhc_wsp", None, stamp, stamp, stamp + timedelta(hours=120), f"{band}%", i + 1,
@@ -381,6 +386,8 @@ def exposure(sites, assets):
     """'12 active work sites and 40 substations (Georgia Power 30, DESC 10) inside'."""
     subs = sum(assets.values())
     parts = ", ".join(f"{UTILITY.get(k, k)} {n}" for k, n in sorted(assets.items(), key=lambda x: -x[1]) if n)
+    if not sites and not subs:
+        return "no active work sites or substations inside"
     s = plural(len(sites), "active work site") if sites else "no active work sites"
     return f"{s} and {plural(subs, 'substation')}{f' ({parts})' if parts else ''} inside"
 

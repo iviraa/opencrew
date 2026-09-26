@@ -93,7 +93,7 @@ def test_severe_sentence_with_work_sites_says_when_to_pause():
 def test_severe_sentence_without_sites_has_no_action():
     f = {"kind": "severe", "day": "Friday", "label": "SPC marginal risk", "city": "Florence", "known": KNOWN, "sites": [], "work_sites": [],
          "assets": {}, "pause_at": KNOWN + timedelta(days=2)}
-    assert outlook.describe(f) == "Friday: severe storms possible (SPC marginal risk) around Florence; no active work sites and 0 substations inside"
+    assert outlook.describe(f) == "Friday: severe storms possible (SPC marginal risk) around Florence; no active work sites or substations inside"
 
 
 def test_flood_wind_tropical_and_watch_sentences():
