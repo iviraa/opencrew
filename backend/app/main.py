@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.config import ASSUMPTIONS
-from app import outreach
+from app import outreach, vendors
 from app.crewly import agent, brief
 from app.db import ROOT, get_conn
 from app.engine.cost import savings
@@ -189,6 +189,24 @@ def ingest(file: UploadFile | None = File(None), url: str | None = Form(None), o
     if "error" in out:
         raise HTTPException(422, out["error"])
     return out
+
+
+@api.get("/vendors")
+def find_vendors(opportunity_id: int | None = None, lat: float | None = None, lon: float | None = None,
+                 service: str = "crane rental", radius_km: float = 40, conn=Depends(get_conn)):
+    if opportunity_id is not None:
+        mid = vendors.midpoint(conn, opportunity_id)
+        if not mid:
+            raise HTTPException(404, "opportunity not found")
+        lat, lon = mid["lat"], mid["lon"]
+    if lat is None or lon is None:
+        raise HTTPException(400, "give an opportunity_id or lat and lon")
+    try:
+        return {"lat": lat, "lon": lon, "service": service, "vendors": vendors.search(lat, lon, service, radius_km)}
+    except RuntimeError as e:
+        raise HTTPException(503, str(e))
+    except httpx.HTTPError as e:
+        raise HTTPException(502, f"places error: {e}")
 
 
 @api.get("/procurement")

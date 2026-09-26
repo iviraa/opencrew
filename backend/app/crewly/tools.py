@@ -2,7 +2,7 @@ from rapidfuzz import fuzz, process
 
 from datetime import datetime
 
-from app import outreach
+from app import outreach, vendors
 from app.config import MILE_M
 from app.ingest import filing
 from app.engine.cost import savings
@@ -132,6 +132,17 @@ def draft_outreach(conn, opportunity_id, contact_id):
             [{"type": "select", "horizon": None, "opportunity_id": opportunity_id}])
 
 
+def find_vendors(conn, opportunity_id, service="crane rental"):
+    mid = vendors.midpoint(conn, opportunity_id)
+    if not mid:
+        return {"error": f"no opportunity {opportunity_id}"}, []
+    try:
+        found = vendors.search(mid["lat"], mid["lon"], service)
+    except Exception as e:
+        return {"error": str(e)[:200]}, []
+    return {"service": service, "near_opportunity": opportunity_id, "vendors": found[:6]}, [{"type": "select", "horizon": None, "opportunity_id": opportunity_id}]
+
+
 def ingest_filing(conn, url, utility_id=None, utility_name=None, state="SC"):
     try:
         out = filing.ingest(conn, filing.download(url), utility_id, utility_name, state, url=url)
@@ -161,6 +172,8 @@ TOOLS = {
     "find_contacts": (find_contacts, "Contacts at both utilities for an opportunity.", {"opportunity_id": {"type": "integer"}}, ["opportunity_id"]),
     "draft_outreach": (draft_outreach, "Draft (never send) an intro email to a contact about an opportunity.", {
         "opportunity_id": {"type": "integer"}, "contact_id": {"type": "integer"}}, ["opportunity_id", "contact_id"]),
+    "find_vendors": (find_vendors, "Find vendors (crane rental, equipment rental, utility contractor) within 40 km of an opportunity.", {
+        "opportunity_id": {"type": "integer"}, "service": {"type": "string"}}, ["opportunity_id"]),
     "ingest_filing": (ingest_filing, "Ingest a public utility filing PDF from a link: CEII check, parse, place projects, recompute overlaps.", {
         "url": {"type": "string"}, "utility_id": {"type": "string", "description": "short id for a new utility, e.g. santee"},
         "utility_name": {"type": "string"}, "state": {"type": "string", "description": "two-letter home state"}}, ["url"]),
