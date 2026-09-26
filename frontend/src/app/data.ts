@@ -29,6 +29,7 @@ export type Notice = { id: number; company_id: CompanyId; request_id: number; ki
 
 export type ChatAction = {  // what the chat asks the screen to do
   type: string; ids?: number[]; id?: number; opportunity_id?: number; opportunity_ids?: number[]; bbox?: [number, number, number, number];
+  action?: "send_request" | "respond"; note?: string; label?: string; title?: string; request_id?: number; decision?: "approved" | "declined"; feedback?: string;
 };
 
 export type ChatReply = { reply: string; ui_actions: ChatAction[]; unsourced: string[]; offline?: boolean };
@@ -88,6 +89,30 @@ export const requests = {
     return data as CollabRequest;
   },
 };
+
+export type GoalStep = { opportunity_id: number; title: string; note: string; request_id: number | null; skipped: boolean };
+export type AgentTask = { id: number; goal: string; status: "active" | "done" | "cancelled"; steps: GoalStep[]; created_at: string; updated_at: string };
+
+export const goals = {
+  list: async () => {
+    const { data, error } = await supabase.from("agent_task").select("*").order("created_at", { ascending: false }).limit(20);
+    if (error) throw error;
+    return data as AgentTask[];
+  },
+  get: async (id: number) => {
+    const { data, error } = await supabase.from("agent_task").select("*").eq("id", id).single();
+    if (error) throw error;
+    return data as AgentTask;
+  },
+  save: async (id: number, patch: Partial<Pick<AgentTask, "steps" | "status">>) => {
+    const { data, error } = await supabase.from("agent_task").update({ ...patch, updated_at: new Date().toISOString() }).eq("id", id).select().single();
+    if (error) throw error;
+    return data as AgentTask;
+  },
+};
+
+// the overlap row from the loaded list, or from the api when the list isn't loaded yet
+export const overlapFor = async (id: number, list: Overlap[] | null) => list?.find((o) => o.id === id) ?? api.overlap(id);
 
 export const notices = {
   list: async () => {

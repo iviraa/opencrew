@@ -7,13 +7,14 @@ import {
 } from "./data";
 import MapPane, { bboxOf, esc, type Fit, type Scene } from "./MapPane";
 import { beaver } from "./mascot";
+import { GoalPanel, GoalsList } from "./GoalPanel";
 import { HistoryPanel, OverlapDetailPanel, OverlapList, ProjectList, RequestPanel, sides } from "./panels";
 import { NewsTab, Split, WeatherTab } from "./tabs";
 
 const Beaver = lazy(() => import("./Beaver"));
 
 type Tab = "overlaps" | "weather" | "news";
-type Panel = { kind: "overlap"; id: number } | { kind: "request"; id: number } | { kind: "history" } | { kind: "chat" };
+type Panel = { kind: "overlap"; id: number } | { kind: "request"; id: number } | { kind: "history" } | { kind: "chat" } | { kind: "goal"; id: number } | { kind: "goals" };
 const TABS: { id: Tab; label: string }[] = [{ id: "overlaps", label: "Overlaps" }, { id: "weather", label: "Weather" }, { id: "news", label: "News & damage" }];
 const SCAN_MS = 3200;
 const SCAN_STEPS = ["Reading your project plans", "Looking for neighbors within 25 miles", "Measuring drive times", "Comparing build windows", "Estimating savings"];
@@ -153,7 +154,8 @@ export default function Shell() {
       const open = r.ui_actions.filter((a) => a.type === "open_overlap" || a.type === "select").pop();
       const openId = open ? (open.id ?? open.opportunity_id) : undefined;
       const ids = lists.pop() ?? (openId != null ? [openId] : undefined);
-      setChat([...next, { role: "model", text: r.reply || "Done.", ids, offline: r.offline }]);
+      const confirm = r.ui_actions.filter((a) => a.type === "confirm"), goal = r.ui_actions.filter((a) => a.type === "goal").pop()?.id;
+      setChat([...next, { role: "model", text: r.reply || "Done.", ids, offline: r.offline, ...(confirm.length && { confirm }), ...(goal != null && { goal }) }]);
       if (r.offline) beaver("sad");
       else { beaver("talking"); setTimeout(() => beaver("idle"), Math.min(4000, 800 + r.reply.length * 25)); }
       if (ids?.length) await showIds(ids);
@@ -218,13 +220,18 @@ export default function Shell() {
   // ---------- right quarter ----------
   const panel = !me || !top ? null : top.kind === "chat" ? (
     <Chat me={me} msgs={chat} busy={chatBusy} overlaps={ov?.overlaps ?? null} requests={reqs} onSend={sendChat} onOpen={openOverlap}
+      onDone={gotRequest} onOpenRequest={openRequest} onOpenGoal={(id) => push({ kind: "goal", id })}
       onClose={() => setStack((s) => s.filter((p) => p.kind !== "chat"))} />
   ) : top.kind === "overlap" ? (
     <OverlapDetailPanel me={me} id={top.id} requests={reqs} onBack={() => { back(); setSelected(null); }} onSent={gotRequest} onOpenRequest={openRequest} />
+  ) : top.kind === "goal" ? (
+    <GoalPanel me={me} id={top.id} overlaps={ov?.overlaps ?? null} requests={reqs} onBack={back} onOpenOverlap={openOverlap} onSent={gotRequest} />
+  ) : top.kind === "goals" ? (
+    <GoalsList requests={reqs} onBack={back} onOpen={(id) => push({ kind: "goal", id })} />
   ) : top.kind === "request" ? (
     <RequestPanel me={me} id={top.id} requests={reqs} onBack={back} onOpenOverlap={openOverlap} onResponded={gotRequest} />
   ) : (
-    <HistoryPanel me={me} requests={reqs} onBack={back} onOpen={openRequest} />
+    <HistoryPanel me={me} requests={reqs} onBack={back} onOpen={openRequest} onGoals={() => push({ kind: "goals" })} />
   );
 
   const overlapsSide = !me ? null : mode === "overlaps" && ov ? (

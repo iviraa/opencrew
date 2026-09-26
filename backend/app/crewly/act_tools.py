@@ -57,7 +57,8 @@ def propose_request(ctx, conn, opportunity_id, note=None):
     if taken:
         t = taken[0]
         who = "we" if t["from_company"] == ctx["company"] else NAMES[ctx["other"]]
-        return {"blocked": True, "reason": f"{who} already have a {t['status']} request for #{o['id']}", "request_id": t["id"]}, []
+        return {"blocked": True, "reason": f"{who} already have {'an' if t['status'] == 'approved' else 'a'} {t['status']} request for #{o['id']}",
+                "request_id": t["id"]}, []
     ours, theirs = _sides(ctx, o)
     note = (note or "").strip() or draft_note(ctx, o)
     return ({"ready_to_confirm": True, "overlap_id": o["id"], "ours": ours, "theirs": theirs, "to": NAMES[ctx["other"]], "note": note,
