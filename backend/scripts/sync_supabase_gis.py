@@ -14,7 +14,7 @@ from app.db import ROOT
 TABLES = ["org", "source_doc", "job", "job_version", "job_review", "opportunity", "contact", "outreach", "tract", "asset", "grid_line",
           "job_hazard", "storm_event", "incident", "outlook", "phase_risk", "joint_plan", "storm_plan",
           "hazard_fetch", "hazard_layer", "hazard_climate", "hazard_nri"]  # parents first; everything the app reads
-CHUNK = 700_000  # bytes of sql per request
+CHUNK = 400_000  # bytes of sql per request; the management api rejects bigger bodies
 
 
 def run(sql):
@@ -52,7 +52,7 @@ def dump(table):
         subprocess.run(["psql", url, "-qc", f"DROP TABLE IF EXISTS public.{src}; CREATE TABLE public.{src} AS SELECT * FROM public.{table} {SNAPSHOT[table]};"],
                        check=True)
     try:
-        out = subprocess.run(["pg_dump", "--data-only", "--inserts", "--rows-per-insert=200", "--no-owner", "--no-privileges", "-t", f"public.{src}",
+        out = subprocess.run(["pg_dump", "--data-only", "--inserts", "--rows-per-insert=20", "--no-owner", "--no-privileges", "-t", f"public.{src}",
                               url], capture_output=True, text=True, check=True).stdout
     finally:
         if src != table:
