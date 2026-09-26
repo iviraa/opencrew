@@ -1,3 +1,5 @@
+import DOMPurify from "dompurify";
+import { marked } from "marked";
 import { useEffect, useRef, useState } from "react";
 import { api, type CrewlyAction } from "../api";
 
@@ -66,7 +68,9 @@ export default function Crewly({ onActions, onClose }: { onActions: (a: CrewlyAc
                   ))}
                 </div>
               )}
-              <div className="whitespace-pre-wrap leading-relaxed">{m.text}</div>
+              {m.role === "user"
+                ? <div className="whitespace-pre-wrap leading-relaxed">{m.text}</div>
+                : <div className="crewly leading-relaxed" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(m.text) as string) }} />}
               {m.unsourced && m.unsourced.length > 0 && (
                 <div className="rounded bg-amber-50 px-2 py-1 text-[11px] text-amber-800 ring-1 ring-amber-200">
                   Not found in tool results: {m.unsourced.join(", ")}. Treat these as unverified.
