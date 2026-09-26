@@ -7,6 +7,8 @@ import { makeMaterials } from "./materials";
 
 const INK = "#3a2213";
 const DOTS = [0.035, 0.05, 0.065];  // thinking dot sizes
+const CHIN = new THREE.Euler().setFromQuaternion(new THREE.Quaternion().setFromUnitVectors(  // left arm pointing from shoulder to chin
+  new THREE.Vector3(0, -1, 0), new THREE.Vector3(0.6, 0.34, 0.72).normalize()));
 const DUR: Partial<Record<Mood, number>> = { wave: 2.4, happy: 1.7, surprised: 1.6, sad: 2.6, nod: 1.3 };
 const HEAD = { a: 0.64 * 1.08, b: 0.64 * 0.94, c: 0.64 * 0.95 };
 const surf = (x: number, y: number) => HEAD.c * Math.sqrt(Math.max(0, 1 - (x / HEAD.a) ** 2 - (y / HEAD.b) ** 2));  // front of the head
@@ -160,10 +162,10 @@ export default function Model({ pointer, reduce }: { pointer: RefObject<Pointer>
     // arms
     const waving = is("wave") * Math.min(1, p * 5) * (p > 0.88 ? (1 - p) / 0.12 : 1);
     const cheer = is("happy") * (0.9 + Math.sin(p * Math.PI * 4) * 0.25) + is("surprised") * 0.8;
-    armR.current.rotation.z = go("ar", 0.42 + waving * 2.35 + cheer - is("sad") * 0.2, 9) + waving * Math.sin(t * 12) * 0.35 * k;
-    armR.current.rotation.x = go("arx", -waving * 0.2, 9);
-    armL.current.rotation.z = go("al", is("thinking") ? 2.35 : -0.42 - cheer + is("sad") * 0.2, 7);  // thinking: hand to chin
-    armL.current.rotation.x = go("alx", is("thinking") * -0.9, 7);
+    armR.current.rotation.z = go("ar", 0.42 + waving * 1.95 + cheer - is("sad") * 0.2, 9) + waving * Math.sin(t * 12) * 0.35 * k;
+    armR.current.rotation.x = go("arx", waving * 0.55, 9);  // forward so the hand shows beside the head
+    const think = is("thinking");  // thinking: hand to chin
+    armL.current.rotation.set(go("alx", think * CHIN.x, 7), go("aly", think * CHIN.y, 7), go("al", think ? CHIN.z : -0.42 - cheer + is("sad") * 0.2, 7));
 
     // ears, hat, tail
     const wig = fid("ear", 1.0) * Math.sin(f * 30) * 0.35 * k;
