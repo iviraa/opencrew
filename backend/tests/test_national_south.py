@@ -9,6 +9,7 @@ def test_station_cleanup():
     assert station("White Mule (fka Elmar)") == "White Mule"
     assert station("Pleasant Valley/Fisher Road") == "Pleasant Valley"
     assert station("Generator") is None
+    assert station("Expanse_x000D_\nTredway") == "Expanse"
 
 
 def test_ends_from_titles():
