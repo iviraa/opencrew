@@ -31,6 +31,7 @@ export type CrewlyAction =
   | { type: "view"; horizon: string | null; tier: Tier | null; tab: string | null }
   | { type: "timeline"; years: [number, number] | null; orgs: string[] | null }
   | { type: "brief"; opportunity_id: number; markdown: string; source: string }
+  | { type: "plan" }
   | { type: "fly"; bbox: [number, number, number, number] };
 
 export type CrewlyReply = { reply: string; ui_actions: CrewlyAction[]; tool_calls: { name: string; args: Record<string, unknown> }[]; unsourced: string[] };
@@ -64,6 +65,18 @@ export type IngestResult = {
 export type Vendor = { name: string; address: string; phone: string | null; website: string | null; rating: number | null; distance_km: number };
 
 export type JobCollection = GeoJSON.FeatureCollection<GeoJSON.Geometry, Job>;
+
+export type PlanLimits = { max_delay_months: number; max_drive_min: number; min_overlap_months: number };
+
+export type PlanDecisionItem = {
+  opportunity_id: number; a: string; b: string; decision: "share" | "no_share"; sentence: string; savings_mid: number;
+  drive_min: number | null; shift: { project: string; months: number } | null; overlap_months: number | null; reasons: { rule: string }[];
+};
+
+export type CrewPlanResult = {
+  plan_id: number; limits: PlanLimits; decisions: PlanDecisionItem[];
+  summary: { pairs: number; shared: number; savings_mid_total: number; rejected_by: Record<string, number> };
+};
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const json = typeof init?.body === "string";  // FormData sets its own multipart header
@@ -108,4 +121,7 @@ export const api = {
   crewly: (messages: { role: string; text: string }[]) => call<CrewlyReply>("/crewly", { method: "POST", body: JSON.stringify({ messages }) }),
   setStatus: (id: number, status: string) =>
     call<{ id: number; status: string }>(`/opportunities/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
+  plan: () => call<CrewPlanResult>("/plan"),
+  runPlan: (limits: PlanLimits) => call<CrewPlanResult>("/plan/run", { method: "POST", body: JSON.stringify(limits) }),
+  explainPlan: (id: number) => call<{ decisions: PlanDecisionItem[] }>(`/plan/explain?opportunity_id=${id}`),
 };
