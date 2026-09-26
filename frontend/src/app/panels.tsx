@@ -241,6 +241,7 @@ function savingsNote(s: Savings) {
   if (!f) return null;
   const bits = [`${Math.round(f.same_time * 100)}% time overlap`, `${Math.round(f.drive * 100)}% drive factor`];
   if (f.kv) bits.push(`${f.kv} kV job size`);
+  if (f.project_scale != null && f.project_scale < 1) bits.push(`setup sized to ${Math.round(f.project_scale * 100)}% of a $10M project`);
   const share = s.share_of_budget;
   return (
     <>Scaled by {bits.join(", ")}.{f.shared_days ? ` ${f.shared_days} days of shared build window.` : ""}
