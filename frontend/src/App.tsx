@@ -142,6 +142,7 @@ export default function App() {
   });
   const switchHorizon = (h: string) => {
     setHorizon(h); setSelectedId(null); setCrewlyIds(null);
+    if (h !== "emergency") setIncidentId(null);  // incident cards belong to the storm view
     if (h === "emergency") setFly({ bbox: [-85.2, 30.6, -79.0, 35.0], at: Date.now() });
   };
 
