@@ -70,7 +70,7 @@ export default function Login() {
                   className="flex items-center gap-2 rounded-full border-2 border-line bg-white px-3 py-1.5 text-sm hover:border-ink">
                   <span className="h-2.5 w-2.5 rounded-full" style={{ background: c.color || colorFor(c.id) }} />
                   <span className="font-semibold">{c.short || c.name}</span>
-                  <span className="text-muted">{c.login} / {DEMO_PASSWORD}</span>
+                  <span className="text-muted">{c.login} / ***</span>{/* the real password is filled on click, never shown */}
                 </button>
               ))}
             </div>
