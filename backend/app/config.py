@@ -23,6 +23,10 @@ PHASE_SHARE = {  # sorted phase pair -> (score factor, what concurrent phases ca
 }
 PHASE_MISMATCH = (0.4, ["schedule coordination"])
 
+MAX_DRIVE_MIN = 45  # a crew or yard serves both sites only within this road time
+DRIVE_FACTOR = 0.5  # score penalty when the sites are farther apart by road
+ROAD_BOUND = {"crews", "equipment", "cranes", "staging yards", "laydown yards", "deliveries"}
+
 ACRE_M2 = 4046.86
 
 ASSUMPTIONS = {

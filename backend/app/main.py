@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, Uplo
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app.config import ASSUMPTIONS
+from app.config import ASSUMPTIONS, MAX_DRIVE_MIN
 from app import outreach, vendors
 from app.crewly import agent, brief
 from app.db import ROOT, get_conn
@@ -14,6 +14,7 @@ from app.engine.cost import savings
 from app.engine.overlap import recompute
 from app.engine import equipment
 from app.engine.phases import build_phases
+from app.geo.drive import Drive
 from app.ingest import filing
 from app.queries import JOB_SQL, OPP_SQL, shareable
 from app.storm import replay
@@ -50,8 +51,8 @@ def opportunity(opp_id: int, conn=Depends(get_conn)):
         raise HTTPException(404, "opportunity not found")
     job_rows = conn.execute(JOB_SQL + " WHERE j.id IN (%s, %s)", (op["job_a"], op["job_b"])).fetchall()
     by_id = {j["id"]: j for j in job_rows}
-    return {**op, "a": by_id[op["job_a"]], "b": by_id[op["job_b"]], "shareable": shareable(op["tier"], op["a_phase"], op["b_phase"]),
-            "savings": savings(op["tier"], op["overlap_m"])}
+    return {**op, "a": by_id[op["job_a"]], "b": by_id[op["job_b"]], "shareable": shareable(op["tier"], op["a_phase"], op["b_phase"], op["drive_min"]),
+            "savings": savings(op["tier"], op["overlap_m"], drive_min=op["drive_min"])}
 
 
 class Recompute(BaseModel):
@@ -69,10 +70,10 @@ class Savings(BaseModel):
 
 @api.post("/opportunities/{opp_id}/savings")
 def estimate(opp_id: int, body: Savings, conn=Depends(get_conn)):
-    op = conn.execute("SELECT tier, overlap_m FROM opportunity WHERE id = %s", (opp_id,)).fetchone()
+    op = conn.execute("SELECT tier, overlap_m, drive_min FROM opportunity WHERE id = %s", (opp_id,)).fetchone()
     if not op:
         raise HTTPException(404, "opportunity not found")
-    return savings(op["tier"], op["overlap_m"], body.assumptions)
+    return savings(op["tier"], op["overlap_m"], body.assumptions, op["drive_min"])
 
 
 class Status(BaseModel):
@@ -213,6 +214,21 @@ def find_vendors(opportunity_id: int | None = None, lat: float | None = None, lo
         raise HTTPException(503, str(e))
     except httpx.HTTPError as e:
         raise HTTPException(502, f"places error: {e}")
+
+
+@api.get("/drive/zone")
+def drive_zone(opportunity_id: int, minutes: int = MAX_DRIVE_MIN, conn=Depends(get_conn)):
+    op = conn.execute("SELECT ST_X(ST_StartPoint(link::geometry)) AS lon, ST_Y(ST_StartPoint(link::geometry)) AS lat FROM opportunity WHERE id = %s",
+                      (opportunity_id,)).fetchone()
+    if not op:
+        raise HTTPException(404, "opportunity not found")
+    road = Drive()
+    ring = road.zone((op["lon"], op["lat"]), minutes)
+    road.save()
+    if not ring:
+        raise HTTPException(503, "routing service unavailable")
+    return {"type": "Feature", "properties": {"minutes": minutes, "from": [op["lon"], op["lat"]], "approx": True},
+            "geometry": {"type": "Polygon", "coordinates": [[list(p) for p in ring]]}}
 
 
 @api.get("/procurement")

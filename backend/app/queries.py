@@ -1,6 +1,6 @@
-from app.config import SHAREABLE, TIERS
+from app.config import ROAD_BOUND, SHAREABLE, TIERS
 from app.engine.cost import RANK
-from app.engine.scoring import phase_share
+from app.engine.scoring import phase_share, too_far
 
 JOB_SQL = """
 SELECT j.id, j.org_id, o.name AS org_name, o.color, j.name, j.ref, j.description, j.horizon, j.job_type, j.voltage_kv,
@@ -14,7 +14,7 @@ FROM job j JOIN org o ON o.id = j.org_id LEFT JOIN source_doc d ON d.id = j.sour
 """
 
 OPP_SQL = """
-SELECT op.id, op.job_a, op.job_b, op.horizon, op.distance_m, op.center_distance_m, op.overlap_m, op.tier,
+SELECT op.id, op.job_a, op.job_b, op.horizon, op.distance_m, op.center_distance_m, op.overlap_m, op.drive_min, op.drive_km, op.tier,
        op.time_overlap, op.time_gap_days, op.risk, op.vulnerability, op.score, op.flags, op.savings_low, op.savings_high,
        op.status, ST_AsGeoJSON(op.link)::json AS link,
        ja.name AS a_name, ja.phase AS a_phase, lower(ja.work_window) AS a_start, ja.org_id AS a_org, oa.color AS a_color, ja.confidence AS a_conf, ja.geom_quality AS a_quality,
@@ -25,9 +25,11 @@ JOIN job jb ON jb.id = op.job_b JOIN org ob ON ob.id = jb.org_id
 """
 
 
-def shareable(tier, a_phase=None, b_phase=None):
+def shareable(tier, a_phase=None, b_phase=None, drive_min=None):
     ps = phase_share(a_phase, b_phase)
     if not ps:
-        return [r for name, _ in TIERS if RANK[name] >= RANK[tier] for r in SHAREABLE[name]]  # closer tiers share everything further ones do
-    extra = SHAREABLE[tier] if tier in ("crossing", "land") else []  # physical overlap needs coordination in any phase
-    return ps[1] + [r for r in extra if r not in ps[1]]
+        out = [r for name, _ in TIERS if RANK[name] >= RANK[tier] for r in SHAREABLE[name]]  # closer tiers share everything further ones do
+    else:
+        extra = SHAREABLE[tier] if tier in ("crossing", "land") else []  # physical overlap needs coordination in any phase
+        out = ps[1] + [r for r in extra if r not in ps[1]]
+    return [r for r in out if r not in ROAD_BOUND] if too_far(drive_min) else out

@@ -3,7 +3,8 @@ import time
 from app.config import OVERLAP_RADIUS_M
 from app.engine.cost import savings
 from app.engine.flags import flags
-from app.engine.scoring import phase_share, score, tier_for, time_overlap
+from app.geo.drive import Drive
+from app.engine.scoring import phase_share, score, tier_for, time_overlap, too_far
 from app.geo import wetlands
 
 PAIRS_SQL = """
@@ -38,16 +39,20 @@ LEFT JOIN LATERAL (
 """
 
 UPSERT_SQL = """
-INSERT INTO opportunity (job_a, job_b, horizon, distance_m, center_distance_m, overlap_m, tier,
+INSERT INTO opportunity (job_a, job_b, horizon, distance_m, center_distance_m, overlap_m, drive_min, drive_km, tier,
                          time_overlap, time_gap_days, risk, vulnerability, score, flags, savings_low, savings_high, link)
-VALUES (%(job_a)s, %(job_b)s, %(horizon)s, %(distance_m)s, %(center_distance_m)s, %(overlap_m)s, %(tier)s,
+VALUES (%(job_a)s, %(job_b)s, %(horizon)s, %(distance_m)s, %(center_distance_m)s, %(overlap_m)s, %(drive_min)s, %(drive_km)s, %(tier)s,
         %(time_overlap)s, %(time_gap_days)s, %(risk)s, %(vulnerability)s, %(score)s, %(flags)s, %(savings_low)s, %(savings_high)s, ST_GeogFromText(%(link)s))
 ON CONFLICT (job_a, job_b) DO UPDATE SET
   distance_m = EXCLUDED.distance_m, center_distance_m = EXCLUDED.center_distance_m,
-  overlap_m = EXCLUDED.overlap_m, tier = EXCLUDED.tier, time_overlap = EXCLUDED.time_overlap,
+  overlap_m = EXCLUDED.overlap_m, drive_min = EXCLUDED.drive_min, drive_km = EXCLUDED.drive_km, tier = EXCLUDED.tier, time_overlap = EXCLUDED.time_overlap,
   time_gap_days = EXCLUDED.time_gap_days, risk = EXCLUDED.risk, vulnerability = EXCLUDED.vulnerability, score = EXCLUDED.score, flags = EXCLUDED.flags,
   savings_low = EXCLUDED.savings_low, savings_high = EXCLUDED.savings_high, link = EXCLUDED.link
 """
+
+
+def link_ends(wkt):
+    return [tuple(map(float, p.split())) for p in wkt[wkt.index("(") + 1:-1].split(",")]
 
 
 def recompute(conn, horizon="long"):
@@ -67,16 +72,23 @@ def recompute(conn, horizon="long"):
         ids = sorted({j for r, _, _ in kept for j in (r["job_a"], r["job_b"])})
         geoms = conn.execute("SELECT id, ST_AsGeoJSON(ST_Simplify(geom::geometry, 0.0005), 5)::json AS g FROM job WHERE id = ANY(%s)", (ids,)).fetchall()
         wet = wetlands.lookup({g["id"]: g["g"] for g in geoms})  # NWI wetlands each job touches
-    out = []
+    out, road = [], Drive()
     for r, tier, ov in kept:
-        sav = savings(tier, r["overlap_m"])
+        a, b = link_ends(r["link"])
+        drive = {"min": 0.0, "km": 0.0} if r["distance_m"] < 100 else road.between(a, b)  # same spot needs no drive
+        drive_min = drive and drive["min"]
+        sav = savings(tier, r["overlap_m"], drive_min=drive_min)
         fl = flags({"name": r["a_name"], "endpoints": r["a_endpoints"]}, {"name": r["b_name"], "endpoints": r["b_endpoints"]},
                    r["risk"], r["a_start"], r["a_end"], r["b_start"], r["b_end"],
                    (wet.get(r["job_a"]), wet.get(r["job_b"])))
+        if too_far(drive_min):
+            fl.append("over_45_min_drive")
         ps = phase_share(r["a_phase"], r["b_phase"])
         out.append({**r, "horizon": horizon, "tier": tier, "time_overlap": ov, "flags": fl,
-                    "score": score(tier, ov, r["risk"], r["vulnerability"], ps[0] if ps else 1.0),
+                    "drive_min": drive_min, "drive_km": drive and drive["km"],
+                    "score": score(tier, ov, r["risk"], r["vulnerability"], ps[0] if ps else 1.0, drive_min),
                     "savings_low": sav["low"], "savings_high": sav["high"]})
+    road.save()
     with conn.cursor() as cur:
         cur.executemany(UPSERT_SQL, out)
     keys = [f"{o['job_a']}|{o['job_b']}" for o in out]

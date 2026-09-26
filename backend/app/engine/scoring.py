@@ -1,4 +1,4 @@
-from app.config import PHASE_MISMATCH, PHASE_SHARE, TIER_WEIGHT, TIERS
+from app.config import DRIVE_FACTOR, MAX_DRIVE_MIN, PHASE_MISMATCH, PHASE_SHARE, TIER_WEIGHT, TIERS
 
 
 def tier_for(distance_m, touches=False):
@@ -30,5 +30,10 @@ def phase_share(a_phase, b_phase):
     return PHASE_SHARE.get(tuple(sorted((a_phase, b_phase))), PHASE_MISMATCH)
 
 
-def score(tier, overlap, risk=0.0, vulnerability=0.0, phase_factor=1.0):
-    return TIER_WEIGHT[tier] * time_factor(overlap) * (1 + risk + vulnerability) * phase_factor
+def too_far(drive_min):
+    return drive_min is not None and drive_min > MAX_DRIVE_MIN
+
+
+def score(tier, overlap, risk=0.0, vulnerability=0.0, phase_factor=1.0, drive_min=None):
+    drive = DRIVE_FACTOR if too_far(drive_min) else 1.0
+    return TIER_WEIGHT[tier] * time_factor(overlap) * (1 + risk + vulnerability) * phase_factor * drive

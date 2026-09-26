@@ -3,7 +3,7 @@ from datetime import date
 
 from google import genai
 
-from app.config import ASSUMPTIONS, MILE_M
+from app.config import ASSUMPTIONS, MAX_DRIVE_MIN, MILE_M
 from app.llm import MODEL, unsourced
 from app.engine.cost import savings
 from app.queries import JOB_SQL, OPP_SQL, shareable
@@ -12,7 +12,8 @@ QUALITY = {"straight_line": "approximate route (straight line between endpoints)
            "matched_point": "substation located", "existing_path": "follows existing line"}
 BASIS = {"filed": "start date from filing", "spend_years": "start from budget years", "default_duration": "start derived from typical duration",
          "derived": "derived phase"}
-FLAGS = {"hurricane_season_high_risk": "Shared work falls in hurricane season in a high-risk area: plan joint storm staging",
+FLAGS = {"over_45_min_drive": "More than a 45 minute drive apart by road, so crews and yards cannot be shared",
+         "hurricane_season_high_risk": "Shared work falls in hurricane season in a high-risk area: plan joint storm staging",
          "tie_line": "Involves an interstate tie line, which both utilities operate",
          "shared_endpoint": "Both projects touch the same substation",
          "shared_wetland": "Both projects touch the same mapped wetland (USFWS NWI): coordinate permits and environmental review"}
@@ -34,12 +35,12 @@ def facts(conn, opp_id):
     if not o:
         return None
     jobs = {j["id"]: j for j in conn.execute(JOB_SQL + " WHERE j.id IN (%s, %s)", (o["job_a"], o["job_b"])).fetchall()}
-    return o, jobs[o["job_a"]], jobs[o["job_b"]], savings(o["tier"], o["overlap_m"])
+    return o, jobs[o["job_a"]], jobs[o["job_b"]], savings(o["tier"], o["overlap_m"], drive_min=o["drive_min"])
 
 
 def template_summary(o, a, b):
     return (f"{a['org_name']} and {b['org_name']} plan work close together: {a['name']} and {b['name']}. "
-            f"They fall in the {o['tier']} tier, so the utilities could share {', '.join(shareable(o['tier'], o['a_phase'], o['b_phase'])[:3])}.")
+            f"They fall in the {o['tier']} tier, so the utilities could share {', '.join(shareable(o['tier'], o['a_phase'], o['b_phase'], o['drive_min'])[:3])}.")
 
 
 def llm_summary(o, a, b):
@@ -48,7 +49,7 @@ def llm_summary(o, a, b):
         return None
     prompt = (f"Write two plain sentences for utility planners explaining why these two projects should coordinate. "
               f"Do not include any numbers, dates or dollar amounts.\nProject A: {a['name']} ({a['org_name']}): {a['description']}\n"
-              f"Project B: {b['name']} ({b['org_name']}): {b['description']}\nShareable: {', '.join(shareable(o['tier'], o['a_phase'], o['b_phase']))}")
+              f"Project B: {b['name']} ({b['org_name']}): {b['description']}\nShareable: {', '.join(shareable(o['tier'], o['a_phase'], o['b_phase'], o['drive_min']))}")
     try:
         text = genai.Client(api_key=key).models.generate_content(model=MODEL, contents=prompt).text.strip()
     except Exception:
@@ -82,12 +83,15 @@ def build(conn, opp_id):
         f"- Build windows overlap: {round(o['time_overlap'] * 100)}% of the shorter window",
         f"- In-service dates are {o['time_gap_days']} days apart" if o["time_gap_days"] is not None else "- In-service gap: unknown",
     ]
+    if o["drive_min"] is not None:
+        lines.append(f"- By road: {o['drive_min']:.0f} min ({o['drive_km']:.0f} km) between the closest points; crews and yards "
+                     f"count only within {MAX_DRIVE_MIN} min" + (" (this pair is too far)" if o["drive_min"] > MAX_DRIVE_MIN else ""))
     lines.append(f"- Area context: hurricane risk {round(o['risk'] * 100)}/100 (FEMA NRI), social vulnerability "
                  f"{ordinal(round(o['vulnerability'] * 100))} percentile (CDC SVI), at the midpoint between the projects")
     lines += [f"- {FLAGS.get(f, f)}" for f in o["flags"]]
     if o["overlap_m"] > 0:
         lines.append(f"- Parallel corridor within 1 mile: {o['overlap_m'] / MILE_M:.1f} mi")
-    lines += ["", "## What could be shared", *[f"- {r}" for r in shareable(o["tier"], o["a_phase"], o["b_phase"])], "",
+    lines += ["", "## What could be shared", *[f"- {r}" for r in shareable(o["tier"], o["a_phase"], o["b_phase"], o["drive_min"])], "",
               "## Savings estimate", f"**{usd(s['low'])} to {usd(s['high'])}**, assuming the work is scheduled together.", "",
               "| Item | Low | High |", "|---|---|---|", *[f"| {k} | {usd(v['low'])} | {usd(v['high'])} |" for k, v in s["items"].items()], "",
               "Assumptions: " + "; ".join(f"{v['label']} {v['low']:,}-{v['high']:,} {v['unit']}{'' if v['verified'] else ' (placeholder)'}"

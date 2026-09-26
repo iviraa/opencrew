@@ -90,3 +90,13 @@ def test_phase_score_and_shareable():
     assert shareable("crew") == ["crews", "equipment"]  # long horizon unchanged
     assert shareable("crew", "energization", "energization") == ["coordinated outage windows"]
     assert shareable("crossing", "survey & permitting", "construction") == ["schedule coordination", "outage timing", "crossing structures"]
+
+
+def test_drive_time_rules():
+    from app.engine.scoring import too_far
+    from app.queries import shareable
+    assert not too_far(None) and not too_far(45) and too_far(46)
+    near, far = savings("site", 0, drive_min=30), savings("site", 0, drive_min=60)
+    assert near["high"] > 0 and far["high"] == 0  # crews and yards need a 45 min drive
+    assert "crews" not in shareable("crew", drive_min=60) and "crews" in shareable("crew", drive_min=20)
+    assert score("site", 0.8, drive_min=60) == score("site", 0.8) * 0.5

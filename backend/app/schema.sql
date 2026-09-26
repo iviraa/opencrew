@@ -112,6 +112,8 @@ CREATE TABLE IF NOT EXISTS opportunity (
   distance_m         REAL NOT NULL,      -- closest points
   center_distance_m  REAL NOT NULL,      -- organizer rule: midpoint to midpoint
   overlap_m          REAL NOT NULL DEFAULT 0,
+  drive_min          REAL,               -- road minutes between the closest points (osrm)
+  drive_km           REAL,
   tier               TEXT NOT NULL,      -- crossing | land | site | crew
   time_overlap       REAL NOT NULL,
   time_gap_days      INT,

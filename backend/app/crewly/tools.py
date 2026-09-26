@@ -25,6 +25,8 @@ def _opp_row(o):
         "id": o["id"], "a": f"{o['a_name']}{' (' + o['a_phase'] + ')' if o['a_phase'] else ''} [{o['a_org']}]",
         "b": f"{o['b_name']}{' (' + o['b_phase'] + ')' if o['b_phase'] else ''} [{o['b_org']}]",
         "tier": o["tier"], "closest_mi": _mi(o["distance_m"]), "center_to_center_mi": _mi(o["center_distance_m"]),
+        "drive_minutes": o["drive_min"], "drive_km": o["drive_km"],
+        "crew_shareable_by_road": None if o["drive_min"] is None else o["drive_min"] <= 45,
         "build_window_overlap_pct": round(o["time_overlap"] * 100), "in_service_gap_days": o["time_gap_days"],
         "flags": o["flags"], "hurricane_risk_pct": round(o["risk"] * 100), "social_vulnerability_pct": round(o["vulnerability"] * 100),
         "savings_usd": f"${int(o['savings_low']):,} to ${int(o['savings_high']):,}", "score": round(o["score"], 2), "status": o["status"],
@@ -57,17 +59,17 @@ def get_opportunity(conn, opportunity_id):
                 "location_confidence_pct": round(j["confidence"] * 100), "source": f"{j['source_title']}, page {j['source_page']}",
                 "description": j["description"]}
 
-    s = savings(o["tier"], o["overlap_m"])
-    return ({**_opp_row(o), "job_a": job(jobs[o["job_a"]]), "job_b": job(jobs[o["job_b"]]), "shareable": shareable(o["tier"], o["a_phase"], o["b_phase"]),
+    s = savings(o["tier"], o["overlap_m"], drive_min=o["drive_min"])
+    return ({**_opp_row(o), "job_a": job(jobs[o["job_a"]]), "job_b": job(jobs[o["job_b"]]), "shareable": shareable(o["tier"], o["a_phase"], o["b_phase"], o["drive_min"]),
              "savings_breakdown": {k: f"${int(v['low']):,} to ${int(v['high']):,}" for k, v in s["items"].items()}},
             [{"type": "select", "horizon": o["horizon"], "opportunity_id": o["id"]}])
 
 
 def estimate_savings(conn, opportunity_id, assumptions=None):
-    o = conn.execute("SELECT id, tier, overlap_m, horizon FROM opportunity WHERE id = %s", (opportunity_id,)).fetchone()
+    o = conn.execute("SELECT id, tier, overlap_m, horizon, drive_min FROM opportunity WHERE id = %s", (opportunity_id,)).fetchone()
     if not o:
         return {"error": f"no opportunity {opportunity_id}"}, []
-    s = savings(o["tier"], o["overlap_m"], assumptions)
+    s = savings(o["tier"], o["overlap_m"], assumptions, o["drive_min"])
     return ({"opportunity_id": o["id"], "savings_usd": f"${int(s['low']):,} to ${int(s['high']):,}",
              "breakdown": {k: f"${int(v['low']):,} to ${int(v['high']):,}" for k, v in s["items"].items()},
              "assumption_overrides": assumptions or {}},
