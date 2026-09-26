@@ -42,6 +42,14 @@ export function StatusChip({ status }: { status: CollabRequest["status"] }) {
   return <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS[status].cls}`}>{STATUS[status].label}</span>;
 }
 
+// why an overlap has no savings: crews can only be shared when both builds run at once and within a 45 min drive
+export function noSavings(o: Overlap | OverlapDetail) {
+  if (o.savings_high > 0) return null;
+  if (o.time_overlap === 0) return { short: "different build years", long: `These builds don't run at the same time${o.time_gap_days ? ` (in service about ${Math.round(o.time_gap_days / 30)} months apart)` : ""}, so crews and equipment can't be shared.` };
+  if (o.drive_min != null && o.drive_min > 45) return { short: "over 45 min drive", long: `The sites are ${Math.round(o.drive_min)} minutes apart by road, too far to share crews and yards day to day.` };
+  return { short: "no shared savings", long: "Nothing here can be shared at the same time." };
+}
+
 export const latestFor = (reqs: CollabRequest[], id: number) => reqs.find((r) => r.opportunity_id === id);  // list is newest first
 
 // ours first: every overlap is shown from the logged-in company's side
@@ -79,6 +87,7 @@ export function ProjectList({ me, projects, onPick }: { me: Me; projects: Jobs |
 
 export function OverlapCard({ me, o, req, active, onClick }: { me: Me; o: Overlap; req?: CollabRequest; active?: boolean; onClick: () => void }) {
   const s = sides(me, o);
+  const none = noSavings(o);
   return (
     <button onClick={onClick}
       className={`w-full rounded-2xl border-2 px-3 py-2.5 text-left transition ${active ? "border-pen bg-grape-soft" : "border-transparent hover:border-line hover:bg-soft"}`}>
@@ -89,7 +98,9 @@ export function OverlapCard({ me, o, req, active, onClick }: { me: Me; o: Overla
       <div className="line-clamp-2 text-sm font-semibold leading-snug">{s.ours.name}</div>
       <div className="line-clamp-1 text-xs text-muted">with {s.theirs.name}</div>
       <div className="mt-1 text-xs text-muted">
-        {miles(o.distance_m)} apart{o.drive_min != null && ` · ${Math.round(o.drive_min)} min drive`} · <span className="font-semibold text-save">save {usd(o.savings_low)} to {usd(o.savings_high)}</span>
+        {miles(o.distance_m)} apart{o.drive_min != null && ` · ${Math.round(o.drive_min)} min drive`} · {none
+          ? <span className="text-faint">{none.short}</span>
+          : <span className="font-semibold text-save">save {usd(o.savings_low)} to {usd(o.savings_high)}</span>}
       </div>
     </button>
   );
@@ -154,7 +165,7 @@ export function OverlapDetailPanel({ me, id, requests, onBack, onSent, onOpenReq
     setSending(true); setErr(null);
     try {
       onSent(await requestsApi.send(me, d, note));
-      setJustSent(true); beaver("happy");
+      setJustSent(true); setNote(""); beaver("happy");
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e)); beaver("sad");
     } finally { setSending(false); }
@@ -167,11 +178,12 @@ export function OverlapDetailPanel({ me, id, requests, onBack, onSent, onOpenReq
   const budget = (ourJob.cost_usd ?? 0) + (theirJob.cost_usd ?? 0);
   const items = Object.entries(d.savings.items);
   const maxItem = Math.max(...items.map(([, v]) => v.high), 1);
+  const none = noSavings({ ...d, savings_high: d.savings.high });
 
   return (
     <>
       <PanelHeader title={`Overlap #${d.id}`} sub={<TierChip tier={d.tier} />} onBack={onBack} />
-      <div className="thin-scroll -mr-2 flex flex-1 flex-col gap-4 overflow-y-auto pr-2 pb-16">
+      <div className="thin-scroll -mr-2 flex flex-1 flex-col gap-4 overflow-y-auto pr-2">
         <div className="grid grid-cols-2 gap-2">
           <Stat label="Closest" value={miles(d.distance_m)} hint="Closest distance between the two projects" />
           <Stat label="Drive" value={d.drive_min != null ? `${Math.round(d.drive_min)} min` : "n/a"} hint="Road drive time between the sites" />
@@ -187,6 +199,14 @@ export function OverlapDetailPanel({ me, id, requests, onBack, onSent, onOpenReq
             extra={[theirJob.voltage_kv && `${theirJob.voltage_kv} kV`, theirJob.cost_usd && usd(theirJob.cost_usd)].filter(Boolean).join(" · ")} />
         </section>
 
+        {none ? (
+          <section className="rounded-2xl bg-soft px-3 py-3">
+            <h3 className="text-sm font-semibold text-muted">Cost analysis</h3>
+            <div className="font-logo text-xl font-semibold">No savings right now</div>
+            <p className="mt-1 text-xs text-muted">{none.long}</p>
+            {budget > 0 && <p className="mt-1 text-xs text-muted">Combined budget {usd(budget)}. Worth a heads up if either schedule moves.</p>}
+          </section>
+        ) : (
         <section className="rounded-2xl bg-save-soft/70 px-3 py-3">
           <h3 className="text-sm font-semibold text-muted">Cost analysis</h3>
           <div className="font-logo text-2xl font-semibold text-save">{usd(d.savings.low)} to {usd(d.savings.high)}</div>
@@ -205,6 +225,7 @@ export function OverlapDetailPanel({ me, id, requests, onBack, onSent, onOpenReq
             </p>
           )}
         </section>
+        )}
 
         {d.shareable.length > 0 && (
           <section>
@@ -215,7 +236,7 @@ export function OverlapDetailPanel({ me, id, requests, onBack, onSent, onOpenReq
 
         <section className="rounded-2xl border-2 border-pen px-3 py-3">
           <h3 className="mb-1 flex items-center gap-1.5 font-logo text-base font-semibold"><Handshake size={17} /> Collaborate</h3>
-          {justSent || (req?.status === "pending" && req.from_company === me.company) ? (
+          {(justSent && !req) || (req?.status === "pending" && req.from_company === me.company) ? (  // the live status wins once it arrives
             <div className="pop-in">
               <p className="flex items-center gap-1.5 text-sm font-semibold text-save"><Check size={16} /> Collaboration request sent</p>
               <p className="mt-0.5 text-xs text-muted">We'll let you know when {me.other_name} answers.</p>
@@ -278,12 +299,12 @@ export function RequestPanel({ me, id, requests, onBack, onOpenOverlap, onRespon
       <PanelHeader title={incoming ? "Collaboration request" : "Your request"} onBack={onBack}
         sub={<span className="flex items-center gap-1.5">{incoming ? <ArrowDownLeft size={14} /> : <ArrowUpRight size={14} />}
           {incoming ? `from ${them.name}` : `to ${them.name}`} · {ago(r.created_at)}</span>} />
-      <div className="thin-scroll -mr-2 flex flex-1 flex-col gap-3 overflow-y-auto pr-2 pb-16">
+      <div className="thin-scroll -mr-2 flex flex-1 flex-col gap-3 overflow-y-auto pr-2">
         <div className="rounded-2xl border-2 border-line px-3 py-2.5">
           <div className="mb-1 flex items-center gap-2"><TierChip tier={r.summary.tier} /><span className="text-xs text-faint">#{r.opportunity_id}</span><span className="flex-1" /><StatusChip status={r.status} /></div>
           <div className="text-sm font-semibold leading-snug">{incoming ? r.summary.theirs : r.summary.ours}</div>
           <div className="text-xs text-muted">with {incoming ? r.summary.ours : r.summary.theirs}</div>
-          <div className="mt-1 text-xs font-semibold text-save">save {usd(r.summary.savings_low)} to {usd(r.summary.savings_high)}</div>
+          {r.summary.savings_high > 0 && <div className="mt-1 text-xs font-semibold text-save">save {usd(r.summary.savings_low)} to {usd(r.summary.savings_high)}</div>}
           <button onClick={() => onOpenOverlap(r.opportunity_id)} className="mt-2 flex items-center gap-1 text-xs font-semibold text-grape hover:underline"><MapPin size={13} /> View overlap</button>
         </div>
 

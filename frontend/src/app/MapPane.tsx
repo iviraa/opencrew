@@ -100,7 +100,7 @@ export default function MapPane({ scene, fit, onPick, children }: {
 
   return (
     <div className="pen-box relative h-full w-full overflow-hidden bg-soft">
-      <div ref={box} className="absolute inset-0" />
+      <div ref={box} style={{ position: "absolute", inset: 0 }} />{/* inline: maplibre css would make it relative */}
       {children}
     </div>
   );
