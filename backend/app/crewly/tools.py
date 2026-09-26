@@ -70,7 +70,10 @@ def estimate_savings(conn, opportunity_id, assumptions=None):
     if not o:
         return {"error": f"no opportunity {opportunity_id}"}, []
     s = savings(o["tier"], o["overlap_m"], assumptions, o["drive_min"])
+    far = o["drive_min"] is not None and o["drive_min"] > 45
     return ({"opportunity_id": o["id"], "savings_usd": f"${int(s['low']):,} to ${int(s['high']):,}",
+             "drive_minutes": o["drive_min"], "crews_and_yards_shareable": not far,
+             "note": "The sites are more than a 45 minute drive apart, so crew and yard savings do not apply." if far else None,
              "breakdown": {k: f"${int(v['low']):,} to ${int(v['high']):,}" for k, v in s["items"].items()},
              "assumption_overrides": assumptions or {}},
             [{"type": "select", "horizon": o["horizon"], "opportunity_id": o["id"]}])

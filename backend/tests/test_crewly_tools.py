@@ -49,13 +49,20 @@ def test_find_and_explain(conn):
     assert "error" in call(conn, "get_opportunity", opportunity_id=-1)[0]
 
 
+def okatie_kraft(conn):
+    return conn.execute("""SELECT op.id FROM opportunity op JOIN job a ON a.id = op.job_a JOIN job b ON b.id = op.job_b
+                           WHERE op.horizon = 'long' AND a.name LIKE 'Okatie-Bluffton%%' AND b.name LIKE '%%KRAFT%%'""").fetchone()["id"]
+
+
 def test_savings_what_ifs(conn):
-    oid = jasper(conn)
     yard = {"yard_usd": {"low": 500000, "high": 800000}}
-    assert call(conn, "estimate_savings", opportunity_id=oid, assumptions=yard)[0]["savings_usd"] == "$550,000 to $950,000"
-    r, ui = call(conn, "set_assumptions", overrides=yard, opportunity_id=oid)
-    assert r["opportunities"][0]["new_savings_usd"] == "$550,000 to $950,000" and not r["saved"]
-    assert ui[0]["type"] == "assumptions" and ui[0]["values"]["yard_usd"] == {"low": 500000.0, "high": 800000.0}
+    r = call(conn, "estimate_savings", opportunity_id=jasper(conn), assumptions=yard)[0]
+    assert r["savings_usd"] == "$0 to $0" and not r["crews_and_yards_shareable"] and r["drive_minutes"] > 45  # 3 mi apart, an hour by road
+    mob = {"mobilization_usd": {"low": 100000, "high": 200000}}
+    assert call(conn, "estimate_savings", opportunity_id=okatie_kraft(conn), assumptions=mob)[0]["savings_usd"] == "$100,000 to $200,000"
+    r, ui = call(conn, "set_assumptions", overrides=mob, opportunity_id=okatie_kraft(conn))
+    assert r["opportunities"][0]["new_savings_usd"] == "$100,000 to $200,000" and not r["saved"]
+    assert ui[0]["type"] == "assumptions" and ui[0]["values"]["mobilization_usd"] == {"low": 100000.0, "high": 200000.0}
     assert "error" in call(conn, "set_assumptions", overrides={"bogus": {"low": 1, "high": 2}})[0]
     assert "error" in call(conn, "set_assumptions", overrides={"yard_usd": {"low": 9, "high": 1}})[0]
 
