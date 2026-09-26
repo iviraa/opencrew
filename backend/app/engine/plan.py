@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import json
 import math
 import re
@@ -793,16 +794,23 @@ def saved_constraints(c):
 
 def run(conn, constraints=None):
     conn.execute(TABLE_SQL)
+    conn.execute("ALTER TABLE joint_plan ADD COLUMN IF NOT EXISTS fingerprint TEXT")
+    constraints = dict(constraints or {})
+    force = bool(constraints.pop("force", False))
     c = merge(constraints)
     data = load(conn, c["yard_km"])
     ids = [j["id"] for j in data["jobs"]]
     if not ids:
         return {"status": "empty", "problem": "no long-range opportunities to plan"}
-    res, origin, tasks, near, crews = solve_all(data, c)
     saved = saved_constraints(c)
+    fp = hashlib.sha1(json.dumps([saved, data], sort_keys=True, default=str).encode()).hexdigest()
+    hit = None if force else conn.execute("SELECT * FROM joint_plan WHERE fingerprint = %s ORDER BY id DESC LIMIT 1", (fp,)).fetchone()
+    if hit:
+        return {**as_result(hit), "cached": True}  # same rules and data: same plan, so demo numbers never wobble
+    res, origin, tasks, near, crews = solve_all(data, c)
     if res["status"] == "infeasible":
-        row = conn.execute("INSERT INTO joint_plan (constraints, job_ids, status, problem) VALUES (%s, %s, 'infeasible', %s) RETURNING id",
-                           (json.dumps(saved), ids, res["problem"])).fetchone()
+        row = conn.execute("INSERT INTO joint_plan (constraints, job_ids, status, problem, fingerprint) VALUES (%s, %s, 'infeasible', %s, %s) RETURNING id",
+                           (json.dumps(saved), ids, res["problem"], fp)).fetchone()
         return {"plan_id": row["id"], "status": "infeasible", "problem": res["problem"], "constraints": saved}
     sched = res["sched"]
     for r in sched.values():
@@ -814,10 +822,10 @@ def run(conn, constraints=None):
     head = {**res["headline"], "crews": crew_table, "joint_contracting": jc["headline"] if jc else None}
     head["solver"] = {"separate": res["base_status"], "coordinated": res["status"], "coordinated_gap_k": res["gap_k"]}
     out = {"status": res["status"], "baseline": res["baseline"], "coordinated": res["coordinated"], "headline": head}
-    row = conn.execute("""INSERT INTO joint_plan (constraints, job_ids, status, baseline, coordinated, headline, schedule, decisions)
-                          VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id, run_at""",
+    row = conn.execute("""INSERT INTO joint_plan (constraints, job_ids, status, baseline, coordinated, headline, schedule, decisions, fingerprint)
+                          VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id, run_at""",
                        (json.dumps(saved), ids, res["status"], json.dumps(res["baseline"]), json.dumps(res["coordinated"]),
-                        json.dumps(head), json.dumps(rows), json.dumps(decs))).fetchone()
+                        json.dumps(head), json.dumps(rows), json.dumps(decs), fp)).fetchone()
     return {"plan_id": row["id"], "run_at": row["run_at"], "constraints": saved, **out, "schedule": rows, "decisions": decs}
 
 
