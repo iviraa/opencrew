@@ -5,7 +5,7 @@ import pandas as pd
 
 from app.db import ROOT
 from app.ingest.national.common import clean
-from app.ingest.national.west_common import kv_of, pick_ends, run, start_org, year_end
+from app.ingest.national.west_common import kv_of, pick_ends, run, start_org, title_ends, year_end
 
 FILE = "data/raw/national/westconnect-tppl/02_10_26_wc_tppl_project_list_public.xlsm"
 SPONSORS = {"CO": "Public Service Company of Colorado/ Xcel Energy", "WY": "Cheyenne Light Fuel and Power"}
@@ -27,7 +27,8 @@ def rows(df, state):
             continue
         length = pd.to_numeric(r["Length"], errors="coerce")
         text = f"{clean(r['Description']) or ''} {clean(r['Purpose']) or ''}".strip()
-        ends = [e for e in (station(r["Origin"]), station(r["Termination"])) if e]
+        ends = [e for v in (station(r["Origin"]), station(r["Termination"])) if v
+                for e in (title_ends(v) if re.search(r"\bline\b|\s[–-]\s", v, re.I) else [v])][:2]  # a hookup on a line: that line's two ends
         if len(ends) == 2 and ends[0] == ends[1]:
             ends = ends[:1]  # a substation project lists itself as both ends
         states = list(dict.fromkeys([state] + [STATE_NAMES[s.strip()] for s in str(r["StateTraversed"]).split(",") if s.strip() in STATE_NAMES]))
