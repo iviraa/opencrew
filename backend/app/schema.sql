@@ -57,6 +57,14 @@ CREATE TABLE IF NOT EXISTS tract (
 );
 CREATE INDEX IF NOT EXISTS tract_geom_idx ON tract USING GIST (geom);
 
+CREATE TABLE IF NOT EXISTS asset (
+  id      TEXT PRIMARY KEY,               -- osm id
+  org_id  TEXT NOT NULL,
+  name    TEXT,
+  geom    GEOGRAPHY(Point, 4326) NOT NULL
+);
+CREATE INDEX IF NOT EXISTS asset_geom_idx ON asset USING GIST (geom);
+
 CREATE TABLE IF NOT EXISTS job_review (
   id             SERIAL PRIMARY KEY,
   org_id         TEXT REFERENCES org(id),
