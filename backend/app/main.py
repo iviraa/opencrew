@@ -19,7 +19,7 @@ from app.engine.phases import build_phases
 from app.geo.drive import Drive
 from app.ingest import filing
 from app.queries import JOB_SQL, OPP_SQL, shareable
-from app.storm import live, replay
+from app.storm import briefing, helene, live, replay, response
 
 def poll_once():
     with connect() as conn:
@@ -390,6 +390,28 @@ def plan_explain(opportunity_id: int | None = None, project: str | None = None, 
 @api.get("/health")
 def health(conn=Depends(get_conn)):
     return {"ok": True, "jobs": conn.execute("SELECT count(*) AS n FROM job").fetchone()["n"]}
+
+
+# ---------- storm response: pre-storm briefing and restoration crew plan ----------
+
+def storm_time(at, scenario, default_offset_h):
+    if at is not None:
+        return at if at.tzinfo else at.replace(tzinfo=timezone.utc)
+    return helene.LANDFALL + timedelta(hours=default_offset_h) if scenario == "helene" else datetime.now(timezone.utc)
+
+
+@api.get("/storm/briefing")
+def storm_briefing(at: datetime | None = None, scenario: str = "helene", safety_margin_h: float | None = None,
+                   crews_per_substation: float | None = None, conn=Depends(get_conn)):
+    opts = {k: v for k, v in {"safety_margin_h": safety_margin_h, "crews_per_substation": crews_per_substation}.items() if v is not None}
+    return briefing.build(conn, storm_time(at, scenario, -36), scenario, opts)
+
+
+@api.get("/storm/restoration_plan")
+def storm_restoration(at: datetime | None = None, scenario: str = "helene", mutual_aid: bool = True, crews_gpc: int | None = None,
+                      crews_desc: int | None = None, repair_h: float | None = None, max_drive_min: float | None = None, conn=Depends(get_conn)):
+    opts = {k: v for k, v in {"crews_gpc": crews_gpc, "crews_desc": crews_desc, "repair_h": repair_h, "max_drive_min": max_drive_min}.items() if v is not None}
+    return response.build(conn, storm_time(at, scenario, 24), scenario, mutual_aid, opts)
 
 
 app.include_router(api)
