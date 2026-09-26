@@ -5,6 +5,7 @@ from datetime import date
 import httpx
 
 from app.crewly.incident_tools import INCIDENT_TOOLS
+from app.crewly.memory_tools import memory_prompt, memory_tools
 from app.crewly.more_tools import MORE_TOOLS
 from app.crewly.outlook_tools import OUTLOOK_TOOLS
 from app.crewly.tools import REGIONS, TOOLS, _opp_row
@@ -109,6 +110,7 @@ def app_tools(ctx):
     for name in ("estimate_savings", "search_projects", "project_details", "compare_projects", "focus_map",
                  "outlook", "site_hazards", "weather_alerts", "incidents_near"):
         tools[name] = shared[name]
+    tools.update(memory_tools(ctx))
     return tools
 
 
@@ -131,4 +133,4 @@ Rules:
   direction received, status pending. Say which overlap it was about, its status, and quote their feedback if there is any.
 - You cannot send or answer requests yourself; tell the user to use the Send request / Approve / Decline buttons.
 - Weather and storm questions use outlook, weather_alerts or site_hazards; damage news uses incidents_near.
-- Keep replies short and warm: one to three sentences or a compact list. Refer to overlaps as "#id" with both project names."""
+- Keep replies short and warm: one to three sentences or a compact list. Refer to overlaps as "#id" with both project names.""" + memory_prompt(ctx.get("memories"))

@@ -4,7 +4,9 @@ from pydantic import BaseModel
 
 from app.auth import current_user
 from app.crewly import agent
+from app.crewly import proactive
 from app.crewly.app_tools import NAMES, app_system, app_tools, mine_sql
+from app.crewly.memory_tools import load_memories
 from app.db import get_conn
 from app.queries import JOB_SQL
 
@@ -42,4 +44,10 @@ class Chat(BaseModel):
 
 @router.post("/chat")
 def chat(body: Chat, user=Depends(current_user), conn=Depends(get_conn)):
+    user = {**user, "memories": load_memories(user)}  # the company's saved notes, read once per message
     return agent.run(conn, body.messages[-20:], app_system(user), app_tools(user))
+
+
+@router.post("/proactive/run")
+def proactive_run(user=Depends(current_user), conn=Depends(get_conn)):
+    return proactive.scan(conn, user["company"])  # new suggestions land in the bell over realtime
