@@ -7,6 +7,9 @@ type Props = {
   opportunities: Opportunity[];
   selected: Opportunity | null;
   onSelect: (id: number) => void;
+  hoverKey: string | null;
+  scrollToHover: boolean;
+  onHover: (key: string | null) => void;
 };
 
 type Row = { key: string; org: string; color: string; name: string; bars: Job[] };
@@ -14,7 +17,7 @@ type Row = { key: string; org: string; color: string; name: string; bars: Job[] 
 const PHASE_SHADE: Record<string, number> = { "survey & permitting": 0.35, clearing: 0.55, construction: 0.9, energization: 0.65 };
 const time = (iso: string) => new Date(iso).getTime();
 
-export default function Timeline({ jobs, opportunities, selected, onSelect }: Props) {
+export default function Timeline({ jobs, opportunities, selected, onSelect, hoverKey, scrollToHover, onHover }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const [all, setAll] = useState(false);
   const byId = useMemo(() => new Map(jobs?.features.map((f) => [f.properties.id, f.properties]) ?? []), [jobs]);
@@ -48,6 +51,11 @@ export default function Timeline({ jobs, opportunities, selected, onSelect }: Pr
   useEffect(() => {
     box.current?.querySelector("[data-selected='true']")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [selected]);
+
+  useEffect(() => {
+    if (!scrollToHover || !hoverKey) return;
+    box.current?.querySelector(`[data-key="${CSS.escape(hoverKey)}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [hoverKey, scrollToHover]);
 
   const pick = (j: Job) => {
     const best = opportunities.filter((o) => o.job_a === j.id || o.job_b === j.id).sort((a, b) => b.score - a.score)[0];
@@ -85,7 +93,8 @@ export default function Timeline({ jobs, opportunities, selected, onSelect }: Pr
           return (
             <div key={r.key}>
               {header && <div className="sticky top-0 z-10 bg-slate-50 px-3 py-0.5 text-[10px] font-semibold uppercase tracking-wide" style={{ color: r.color }}>{r.org}</div>}
-              <div data-selected={on} className={`flex h-6 items-center ${on ? "bg-violet-50" : ""}`}>
+              <div data-selected={on} data-key={r.key} onMouseEnter={() => onHover(r.key)} onMouseLeave={() => onHover(null)}
+                className={`flex h-6 items-center ${r.key === hoverKey ? "bg-amber-50" : on ? "bg-violet-50" : ""}`}>
                 <div className={`w-[260px] shrink-0 truncate px-3 text-[11px] ${on ? "font-semibold text-slate-900" : "text-slate-600"}`} title={r.name}>{r.name}</div>
                 <div className="relative h-full flex-1 overflow-hidden">
                   {r.bars.flatMap((b) => b.history ?? []).map((h) => (

@@ -13,13 +13,16 @@ type Props = {
   fly: { bbox: [number, number, number, number]; at: number } | null;
   storm: StormFrame | null;
   onMapClick?: ((lon: number, lat: number) => void) | null;
+  hoverKey: string | null;
+  onHover: (key: string | null) => void;
 };
 
 maplibregl.setWorkerUrl(workerUrl); // v6 needs an explicit worker once bundled
 
 const STYLE = "https://tiles.openfreemap.org/styles/positron";
 const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
-const tierColor = ["match", ["get", "tier"], ...Object.entries(TIER_COLOR).flat(), "#64748b"] as unknown as maplibregl.ExpressionSpecification;
+const ROW_KEY = ["coalesce", ["get", "parent_job_id"], ["get", "id"]] as maplibregl.ExpressionSpecification;  // phases share their project's row
+const tierColor =["match", ["get", "tier"], ...Object.entries(TIER_COLOR).flat(), "#64748b"] as unknown as maplibregl.ExpressionSpecification;
 
 function oppFeatures(opps: Opportunity[]): GeoJSON.FeatureCollection {
   return {
@@ -48,7 +51,7 @@ function coordsOf(g: GeoJSON.Geometry): number[][] {
   return [];
 }
 
-export default function MapView({ jobs, opportunities, selected, onSelect, fly, storm, onMapClick }: Props) {
+export default function MapView({ jobs, opportunities, selected, onSelect, fly, storm, onMapClick, hoverKey, onHover }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -59,6 +62,8 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
   onSelectRef.current = onSelect;
   const clickRef = useRef(onMapClick);
   clickRef.current = onMapClick;
+  const hoverRef = useRef(onHover);
+  hoverRef.current = onHover;
 
   useEffect(() => {
     const m = new maplibregl.Map({ container: box.current!, style: STYLE, center: [-81.6, 32.9], zoom: 6.3 });
@@ -116,6 +121,10 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
       });
       m.addLayer({ id: "opp-selected", type: "circle", source: "opps", filter: ["all", ["has", "marker"], ["==", ["get", "id"], -1]],
         paint: { "circle-radius": 18, "circle-color": "transparent", "circle-stroke-color": "#0f172a", "circle-stroke-width": 3 } });
+      m.addLayer({ id: "job-hover-line", type: "line", source: "jobs", filter: ["==", ROW_KEY, ""],
+        layout: { "line-cap": "round" }, paint: { "line-color": "#f59e0b", "line-width": 8, "line-opacity": 0.55 } });
+      m.addLayer({ id: "job-hover-point", type: "circle", source: "jobs", filter: ["all", ["==", ["geometry-type"], "Point"], ["==", ROW_KEY, ""]],
+        paint: { "circle-radius": 10, "circle-color": "transparent", "circle-stroke-color": "#f59e0b", "circle-stroke-width": 3.5 } });
 
       m.on("click", (e) => clickRef.current?.(e.lngLat.lng, e.lngLat.lat));
       m.on("click", "opp-markers", (e) => { if (!clickRef.current) onSelectRef.current(Number(e.features![0].properties.id)); });
@@ -129,6 +138,15 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
       for (const layer of ["opp-markers", "job-lines", "job-lines-approx", "job-points"]) {
         m.on("mouseenter", layer, () => (m.getCanvas().style.cursor = "pointer"));
         m.on("mouseleave", layer, () => (m.getCanvas().style.cursor = ""));
+      }
+      let hovered: string | null = null;
+      for (const layer of ["job-lines", "job-lines-approx", "job-points"]) {
+        m.on("mousemove", layer, (e) => {
+          const p = e.features![0].properties;
+          const key = p.parent_job_id && p.parent_job_id !== "null" ? String(p.parent_job_id) : String(p.id);
+          if (key !== hovered) hoverRef.current((hovered = key));  // only report changes
+        });
+        m.on("mouseleave", layer, () => { hovered = null; hoverRef.current(null); });
       }
       setLoaded(true);
     });
@@ -187,6 +205,13 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
   useEffect(() => {
     if (map.current) map.current.getCanvas().style.cursor = onMapClick ? "crosshair" : "";
   }, [onMapClick]);
+
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !loaded) return;
+    m.setFilter("job-hover-line", ["==", ROW_KEY, hoverKey ?? ""]);
+    m.setFilter("job-hover-point", ["all", ["==", ["geometry-type"], "Point"], ["==", ROW_KEY, hoverKey ?? ""]]);
+  }, [hoverKey, loaded]);
 
   useEffect(() => {
     if (!fly || !map.current) return;

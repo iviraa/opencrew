@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, type Assumption, type CrewlyAction, type ReviewItem, type StormFrame, type JobCollection, type Opportunity, type OpportunityDetail, type Tier } from "./api";
 import Crewly from "./components/Crewly";
 import DetailPanel from "./components/DetailPanel";
@@ -38,6 +38,7 @@ export default function App() {
   const [stormAt, setStormAt] = useState(LANDFALL - 12 * 3600e3);
   const [storm, setStorm] = useState<StormFrame | null>(null);
   const [fly, setFly] = useState<{ bbox: [number, number, number, number]; at: number } | null>(null);
+  const [hover, setHover] = useState<{ key: string; from: "map" | "timeline" } | null>(null);
 
   useEffect(() => {
     Promise.all([api.jobs(horizon), api.opportunities(horizon), api.assumptions()])
@@ -97,8 +98,10 @@ export default function App() {
 
   const selected = opps.find((o) => o.id === selectedId) ?? null;
   const live = (iso: string) => horizon !== "emergency" || Date.parse(iso) <= stormAt;  // storm replay only shows what has happened by now
-  const shown = opps.filter((o) => (!tier || o.tier === tier) && (!crewlyIds || crewlyIds.includes(o.id)) && live(o.a_start) && live(o.b_start));
-  const visibleJobs = jobs && horizon === "emergency" ? { ...jobs, features: jobs.features.filter((f) => live(f.properties.start_at)) } : jobs;
+  const shown = useMemo(() => opps.filter((o) => (!tier || o.tier === tier) && (!crewlyIds || crewlyIds.includes(o.id)) && live(o.a_start) && live(o.b_start)),
+    [opps, tier, crewlyIds, horizon, stormAt]);  // stable arrays so hover renders don't re-upload map data
+  const visibleJobs = useMemo(() => (jobs && horizon === "emergency" ? { ...jobs, features: jobs.features.filter((f) => live(f.properties.start_at)) } : jobs),
+    [jobs, horizon, stormAt]);
 
   return (
     <div className="flex h-full flex-col">
@@ -139,7 +142,8 @@ export default function App() {
         </aside>
         <section className="flex min-w-0 flex-1 flex-col">
           <div className="relative min-h-0 flex-1">
-            <MapView jobs={visibleJobs} opportunities={shown} selected={selected} onSelect={setSelectedId} fly={fly} storm={storm} onMapClick={placingId != null ? placeAt : null} />
+            <MapView jobs={visibleJobs} opportunities={shown} selected={selected} onSelect={setSelectedId} fly={fly} storm={storm} onMapClick={placingId != null ? placeAt : null}
+              hoverKey={hover?.key ?? null} onHover={(key) => setHover(key ? { key, from: "map" } : null)} />
             {crewlyOpen && (
               <div className="absolute bottom-3 right-3 top-3 z-20 w-[360px]">
                 <Crewly onActions={applyActions} onClose={() => setCrewlyOpen(false)} />
@@ -149,7 +153,8 @@ export default function App() {
           <div className="h-[210px] shrink-0 border-t border-slate-200">
             {horizon === "emergency"
               ? <StormReplay frame={storm} at={stormAt} onAt={setStormAt} start={STORM_START} end={STORM_END} landfall={LANDFALL} />
-              : <Timeline jobs={jobs} opportunities={shown} selected={selected} onSelect={setSelectedId} />}
+              : <Timeline jobs={jobs} opportunities={shown} selected={selected} onSelect={setSelectedId}
+                  hoverKey={hover?.key ?? null} scrollToHover={hover?.from === "map"} onHover={(key) => setHover(key ? { key, from: "timeline" } : null)} />}
           </div>
         </section>
         {selectedId != null && (
