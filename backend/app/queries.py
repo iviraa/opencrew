@@ -13,8 +13,8 @@ OPP_SQL = """
 SELECT op.id, op.job_a, op.job_b, op.horizon, op.distance_m, op.center_distance_m, op.overlap_m, op.tier,
        op.time_overlap, op.time_gap_days, op.risk, op.vulnerability, op.score, op.flags, op.savings_low, op.savings_high,
        op.status, ST_AsGeoJSON(op.link)::json AS link,
-       ja.name AS a_name, ja.phase AS a_phase, ja.org_id AS a_org, oa.color AS a_color, ja.confidence AS a_conf, ja.geom_quality AS a_quality,
-       jb.name AS b_name, jb.phase AS b_phase, jb.org_id AS b_org, ob.color AS b_color, jb.confidence AS b_conf, jb.geom_quality AS b_quality
+       ja.name AS a_name, ja.phase AS a_phase, lower(ja.work_window) AS a_start, ja.org_id AS a_org, oa.color AS a_color, ja.confidence AS a_conf, ja.geom_quality AS a_quality,
+       jb.name AS b_name, jb.phase AS b_phase, lower(jb.work_window) AS b_start, jb.org_id AS b_org, ob.color AS b_color, jb.confidence AS b_conf, jb.geom_quality AS b_quality
 FROM opportunity op
 JOIN job ja ON ja.id = op.job_a JOIN org oa ON oa.id = ja.org_id
 JOIN job jb ON jb.id = op.job_b JOIN org ob ON ob.id = jb.org_id

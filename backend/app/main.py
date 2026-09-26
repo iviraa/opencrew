@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from pydantic import BaseModel
 
@@ -8,6 +10,7 @@ from app.db import get_conn
 from app.engine.cost import savings
 from app.engine.overlap import recompute
 from app.queries import JOB_SQL, OPP_SQL, shareable
+from app.storm import replay
 
 app = FastAPI(title="OpenCrew")
 api = APIRouter(prefix="/api")
@@ -163,6 +166,11 @@ def tracts(conn=Depends(get_conn)):
     rows = conn.execute("SELECT geoid, risk, vulnerability, ST_AsGeoJSON(ST_SimplifyPreserveTopology(geom, 0.003), 4)::json AS g FROM tract").fetchall()
     return {"type": "FeatureCollection",
             "features": [{"type": "Feature", "geometry": r.pop("g"), "properties": r} for r in rows]}
+
+
+@api.get("/storm/frame")
+def storm_frame(at: datetime, conn=Depends(get_conn)):
+    return replay.frame(conn, at)
 
 
 @api.get("/review")
