@@ -12,7 +12,7 @@ from app.crewly import agent, brief
 from app.db import ROOT, get_conn
 from app.engine.cost import savings
 from app.engine.overlap import recompute
-from app.engine import equipment
+from app.engine import equipment, plan
 from app.engine.phases import build_phases
 from app.geo.drive import Drive
 from app.ingest import filing
@@ -284,6 +284,29 @@ class Chat(BaseModel):
 @api.post("/crewly")
 def crewly(body: Chat, conn=Depends(get_conn)):
     return agent.run(conn, body.messages)
+
+
+class PlanLimits(BaseModel):
+    max_delay_months: int | None = None
+    max_drive_min: int | None = None
+    min_overlap_months: int | None = None
+
+
+@api.post("/plan/run")
+def plan_run(body: PlanLimits, conn=Depends(get_conn)):
+    return plan.run(conn, body.model_dump())
+
+
+@api.get("/plan")
+def plan_latest(conn=Depends(get_conn)):
+    return plan.latest(conn)
+
+
+@api.get("/plan/explain")
+def plan_explain(opportunity_id: int | None = None, project: str | None = None, conn=Depends(get_conn)):
+    if opportunity_id is None and not project:
+        raise HTTPException(400, "give an opportunity_id or a project name")
+    return plan.explain(conn, opportunity_id, project)
 
 
 @api.get("/health")
