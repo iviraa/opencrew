@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from app.config import ASSUMPTIONS, MAX_DRIVE_MIN, STATUSES
 from app import app_api, outreach, vendors, weather_api
+from app.feasibility import api as feasibility_api
 from app.hazards import api as hazards_api
 from app.companies import companies
 from app.crewly import agent, brief, proactive
@@ -526,6 +527,7 @@ app.include_router(api)
 app.include_router(app_api.router)
 app.include_router(weather_api.router)
 app.include_router(hazards_api.router)
+app.include_router(feasibility_api.router)
 
 @app.get("/config.js", include_in_schema=False)
 def web_config():

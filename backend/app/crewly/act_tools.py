@@ -93,18 +93,35 @@ def start_goal(ctx, conn, goal, count=5, start_date=None, end_date=None, tier=No
                    AND jb.work_window && tstzrange(%(s)s::timestamptz, %(e)s::timestamptz)"""
     rows = conn.execute(sql + " ORDER BY op.score DESC, op.distance_m", {"t": tier, "s": s, "e": e}).fetchall()
     taken = {r["opportunity_id"] for r in _open_requests(ctx)}
-    pick = [o for o in rows if o["id"] not in taken][:max(1, min(int(count or 5), MAX_GOAL))]
+    want = max(1, min(int(count or 5), MAX_GOAL))
+    free = [o for o in rows if o["id"] not in taken]
+    verdicts = rank_feasibility(conn, ctx["company"], free[:want * 3])  # quick assessments decide the order, not distance alone
+    unlikely = [o["id"] for o in free if verdicts.get(o["id"], {}).get("verdict") == "unlikely"]
+    ordered = sorted((o for o in free if o["id"] not in unlikely),
+                     key=lambda o: -(verdicts.get(o["id"], {}).get("score") or 0.5) * max(float(o["savings_high"] or 0), 1))
+    pick = ordered[:want]
     if not pick:
-        return {"drafted": 0, "reason": "no overlaps with savings are left without a pending or approved request"}, []
+        return {"drafted": 0, "reason": "no overlaps with savings are left without a pending or approved request",
+                "skipped_unlikely": unlikely}, []
     steps = [{"opportunity_id": o["id"], "title": " × ".join(_sides(ctx, o)), "partner": partner(o, ctx["company"]), "note": draft_note(ctx, o),
-              "request_id": None, "skipped": False}
+              "request_id": None, "skipped": False, "feasibility": verdicts.get(o["id"])}
              for o in pick]
     task = rest(ctx, "POST", "agent_task", json={"goal": goal.strip()[:500] or "Line up collaboration", "steps": steps},
                 headers={"Prefer": "return=representation"})[0]
     return ({"task_id": task["id"], "goal": task["goal"], "drafted": len(steps), "skipped_already_handled": len(taken & {o["id"] for o in rows}),
+             "skipped_unlikely": unlikely, "ranked_by": "feasibility score x savings",
              "overlaps": [{"id": st["opportunity_id"], "projects": st["title"]} for st in steps], "sent": False,
              "next_step": "the user reviews the drafts in the goal panel and sends them"},
             [{"type": "goal", "id": task["id"]}, {"type": "show_overlaps", "ids": [st["opportunity_id"] for st in steps]}])
+
+
+def rank_feasibility(conn, company, candidates):
+    """Quick feasibility verdicts for the candidate overlaps; an empty dict if the assessment cannot run."""
+    try:
+        from app.feasibility.assess import rank
+        return rank(conn, company, candidates, quick=True)
+    except Exception:
+        return {}
 
 
 def step_state(step, by_id):
