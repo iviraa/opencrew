@@ -4,7 +4,7 @@ from datetime import date
 from google import genai
 
 from app.config import ASSUMPTIONS, MILE_M
-from app.crewly.agent import MODEL, unsourced
+from app.llm import MODEL, unsourced
 from app.engine.cost import savings
 from app.queries import JOB_SQL, OPP_SQL, shareable
 

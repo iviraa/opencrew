@@ -5,7 +5,7 @@ import httpx
 from google import genai
 
 from app.config import MILE_M
-from app.crewly.agent import MODEL, unsourced
+from app.llm import MODEL, unsourced
 from app.queries import OPP_SQL, shareable
 
 RESEND = "https://api.resend.com/emails"

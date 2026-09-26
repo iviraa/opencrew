@@ -23,7 +23,8 @@ export type Assumption = { low: number; high: number; unit: string; label: strin
 
 export type CrewlyAction =
   | { type: "filter"; horizon: string; tier: Tier | null; opportunity_ids: number[] }
-  | { type: "select"; horizon: string; opportunity_id: number }
+  | { type: "select"; horizon: string | null; opportunity_id: number }
+  | { type: "storm"; at: string }
   | { type: "fly"; bbox: [number, number, number, number] };
 
 export type CrewlyReply = { reply: string; ui_actions: CrewlyAction[]; tool_calls: { name: string; args: Record<string, unknown> }[]; unsourced: string[] };

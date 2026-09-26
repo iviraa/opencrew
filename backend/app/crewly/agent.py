@@ -1,13 +1,12 @@
 import json
 import os
-import re
 
 from google import genai
 from google.genai import types
 
 from app.crewly.tools import TOOLS
+from app.llm import MODEL, unsourced
 
-MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 MAX_STEPS = 6
 
 SYSTEM = """You are Crewly, the coordination assistant inside OpenCrew. OpenCrew finds where Dominion Energy South Carolina (desc)
@@ -19,25 +18,14 @@ Rules:
 - Use tools to drive the UI: find_overlaps filters the list and map, get_opportunity and focus_map move the map.
 - Refer to opportunities by project names and #id. Keep replies short: a few sentences or a compact list.
 - Say plainly when a location is approximate (straight_line, partial_point) or a window is derived.
-- You cannot send email. Outreach always needs a human to approve it.
+- You can draft outreach but never send it. A person must approve every email in the UI.
+- Storm questions are about the Hurricane Helene replay (Sept 2024); use storm_status.
 - Data comes from public filings only."""
-
-NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
-
 
 def _declarations():
     return [types.FunctionDeclaration(name=name, description=desc,
                                       parameters_json_schema={"type": "object", "properties": props, "required": req})
             for name, (_, desc, props, req) in TOOLS.items()]
-
-
-def _numbers(text):
-    return {n.replace(",", "").rstrip(".") for n in NUMBER.findall(text)}
-
-
-def unsourced(reply, tool_text):
-    allowed = _numbers(tool_text)
-    return sorted(n for n in _numbers(reply) if n not in allowed and n.lstrip("0") not in allowed)
 
 
 def run(conn, messages):

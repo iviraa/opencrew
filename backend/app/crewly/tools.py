@@ -1,8 +1,13 @@
 from rapidfuzz import fuzz, process
 
+from datetime import datetime
+
+from app import outreach
 from app.config import MILE_M
 from app.engine.cost import savings
 from app.queries import JOB_SQL, OPP_SQL, shareable
+from app.storm import replay
+from app.storm.helene import LANDFALL
 
 REGIONS = {  # lon/lat boxes for place filters
     "savannah": (-81.6, 31.8, -80.6, 32.6), "augusta": (-82.4, 33.2, -81.6, 33.8), "charleston": (-80.3, 32.6, -79.7, 33.1),
@@ -95,7 +100,38 @@ def focus_map(conn, opportunity_id=None, region=None):
     return {"error": "unknown place; known regions: " + ", ".join(REGIONS)}, []
 
 
-HORIZON = {"type": "string", "enum": ["long", "near"], "description": "long = multi-year plans, near = derived monthly phases"}
+def storm_status(conn, time=None, hours_from_landfall=None):
+    t = datetime.fromisoformat(time.replace("Z", "+00:00")) if time else LANDFALL
+    if hours_from_landfall is not None:
+        from datetime import timedelta
+        t = LANDFALL + timedelta(hours=float(hours_from_landfall))
+    f = replay.frame(conn, t)
+    reports = f["reports"]["features"]
+    cone = f["cone"]["features"][0]["properties"]["payload"] if f["cone"]["features"] else None
+    return ({"time_utc": t.isoformat(), "landfall_utc": LANDFALL.isoformat(), "forecast_advisory": cone and cone["advisory"],
+             "substations_in_forecast_cone": f["exposure"], "damage_reports_so_far": len(reports),
+             "reports_mentioning_power": sum(1 for r in reports if r["properties"]["payload"].get("power")),
+             "active_warnings": len(f["warnings"]["features"]),
+             "shared_staging_points": [{"desc_sites": s["properties"]["desc_n"], "gpc_sites": s["properties"]["gpc_n"],
+                                        "lon": s["geometry"]["coordinates"][0], "lat": s["geometry"]["coordinates"][1]} for s in f["staging"]["features"]]},
+            [{"type": "storm", "at": t.isoformat()}])
+
+
+def find_contacts(conn, opportunity_id):
+    return {"contacts": [{"contact_id": c["id"], "utility": c["org_name"], "role": c["role"], "email": c["email"], "demo_inbox": c["is_demo"]}
+                         for c in outreach.contacts(conn, opportunity_id)]}, [{"type": "select", "horizon": None, "opportunity_id": opportunity_id}]
+
+
+def draft_outreach(conn, opportunity_id, contact_id):
+    row = outreach.draft(conn, opportunity_id, contact_id)
+    if not row:
+        return {"error": "opportunity or contact not found"}, []
+    return ({"outreach_id": row["id"], "state": row["state"], "subject": row["subject"],
+             "note": "Draft saved. A person must approve it in the detail panel before anything is sent."},
+            [{"type": "select", "horizon": None, "opportunity_id": opportunity_id}])
+
+
+HORIZON = {"type": "string", "enum": ["long", "near", "emergency"], "description": "long = multi-year plans, near = derived monthly phases, emergency = Helene storm restoration"}
 TOOLS = {
     "find_overlaps": (find_overlaps, "List ranked cross-utility coordination opportunities. Filters the map and list in the UI.", {
         "horizon": HORIZON, "org": {"type": "string", "enum": ["desc", "gpc"]},
@@ -109,6 +145,12 @@ TOOLS = {
         "opportunity_id": {"type": "integer"}, "assumptions": {"type": "object"}}, ["opportunity_id"]),
     "search_projects": (search_projects, "Find projects by name and how many opportunities each has.", {
         "query": {"type": "string"}, "org": {"type": "string", "enum": ["desc", "gpc"]}}, ["query"]),
+    "storm_status": (storm_status, "Hurricane Helene replay status at a time: forecast cone, substations exposed, damage reports, shared staging points. "
+                     "Moves the storm replay to that time.", {
+        "time": {"type": "string", "description": "ISO time in UTC"}, "hours_from_landfall": {"type": "number", "description": "e.g. -24 or 6"}}, []),
+    "find_contacts": (find_contacts, "Contacts at both utilities for an opportunity.", {"opportunity_id": {"type": "integer"}}, ["opportunity_id"]),
+    "draft_outreach": (draft_outreach, "Draft (never send) an intro email to a contact about an opportunity.", {
+        "opportunity_id": {"type": "integer"}, "contact_id": {"type": "integer"}}, ["opportunity_id", "contact_id"]),
     "focus_map": (focus_map, "Fly the map to an opportunity or a named region.", {
         "opportunity_id": {"type": "integer"}, "region": {"type": "string"}}, []),
 }

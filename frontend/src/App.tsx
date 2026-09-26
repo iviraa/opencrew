@@ -77,7 +77,8 @@ export default function App() {
   const applyActions = (actions: CrewlyAction[]) => {
     for (const a of actions) {
       if (a.type === "filter") { setHorizon(a.horizon); setTier(a.tier); setCrewlyIds(a.opportunity_ids); }
-      if (a.type === "select") { setHorizon(a.horizon); setSelectedId(a.opportunity_id); }
+      if (a.type === "select") { if (a.horizon) setHorizon(a.horizon); setSelectedId(a.opportunity_id); }
+      if (a.type === "storm") { setHorizon("emergency"); setStormAt(Date.parse(a.at)); }
       if (a.type === "fly") setFly({ bbox: a.bbox, at: Date.now() });
     }
   };
