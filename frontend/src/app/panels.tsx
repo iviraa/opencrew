@@ -1,5 +1,6 @@
-import { ArrowDownLeft, ArrowUpRight, Check, ChevronLeft, Clock3, Handshake, MapPin, Send, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { ArrowDownLeft, ArrowUpRight, Check, ChevronLeft, ChevronRight, Clock3, Handshake, MapPin, Send, X } from "lucide-react";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import type { Savings } from "../api";
 import {
   TIER_LABEL, company, partnerOf, ago, api, miles, month, requests as requestsApi, usd,
   type CollabRequest, type Jobs, type Me, type Overlap, type OverlapDetail,
@@ -168,6 +169,85 @@ type WeatherCost = { cost?: { total: { low: number; high: number } }; coordinati
 const THIS_MONTH = new Date().getMonth() + 1;
 const MONTH_NAME = new Date().toLocaleDateString("en-US", { month: "long" });
 
+const METHOD_DOC = "https://github.com/iviraa/opencrew/blob/main/docs/cost-savings-model.md";
+const CAT_TINT: Record<string, string> = {  // one colour per cost type, matching config.CATEGORIES
+  labor: "#7c4dff", equipment: "#00b8a9", travel: "#ffb020", time: "#ff4fa3", land: "#43aa8b", overhead: "#577590",
+};
+
+const range = (lo: number, hi: number) => <>{usd(lo)}<span className="font-normal text-faint"> to </span>{usd(hi)}</>;
+
+// where the headline figure comes from: one row per cost type, opening to the lines and the published price behind each
+function SavingsTable({ s }: { s: Savings }) {
+  const [open, setOpen] = useState<string | null>(null);
+  const cats = s.categories ?? [];
+  const lines = s.lines ?? [];
+  if (!cats.length) return null;
+  const max = Math.max(...cats.map((c) => c.high), 1);
+  return (
+    <table className="mt-2.5 w-full border-collapse text-xs">
+      <caption className="sr-only">Where the estimated savings come from</caption>
+      <thead>
+        <tr className="border-b-2 border-line text-[10px] uppercase tracking-wide text-faint">
+          <th scope="col" className="pb-1 text-left font-semibold">Where it comes from</th>
+          <th scope="col" className="pb-1 text-right font-semibold">Saving</th>
+        </tr>
+      </thead>
+      <tbody>
+        {cats.map((c) => {
+          const shown = open === c.key;
+          return (
+            <Fragment key={c.key}>
+              <tr className="border-b border-line/60 align-top">
+                <th scope="row" className="py-1.5 pr-2 text-left font-semibold">
+                  <button onClick={() => setOpen(shown ? null : c.key)} aria-expanded={shown} title={c.hint}
+                    className="flex w-full items-center gap-1 text-left hover:text-grape">
+                    <ChevronRight size={12} strokeWidth={3} className={`shrink-0 transition ${shown ? "rotate-90" : ""}`} />
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: CAT_TINT[c.key] ?? "#888" }} />
+                    {c.label}
+                  </button>
+                  <span className="mt-1 block h-1.5 rounded-full bg-white">
+                    <span className="block h-full rounded-full" style={{ width: `${(c.high / max) * 100}%`, background: CAT_TINT[c.key] ?? "#888" }} />
+                  </span>
+                </th>
+                <td className="py-1.5 text-right font-semibold tabular-nums">{range(c.low, c.high)}</td>
+              </tr>
+              {shown && lines.filter((l) => l.category === c.key).map((l) => (
+                <tr key={l.name} className="border-b border-line/40 bg-white/60 align-top">
+                  <td className="py-1.5 pl-4.75 pr-2">
+                    <span className="font-semibold">{l.name}</span>
+                    <span className="mt-0.5 block text-[11px] leading-snug text-muted">{[l.qty, l.over].filter(Boolean).join(" · ")}</span>
+                    <span className="block text-[11px] leading-snug text-faint">{l.basis}</span>
+                  </td>
+                  <td className="py-1.5 text-right tabular-nums">{range(l.low, l.high)}</td>
+                </tr>
+              ))}
+            </Fragment>
+          );
+        })}
+      </tbody>
+      <tfoot>
+        <tr className="border-t-2 border-pen">
+          <th scope="row" className="pt-1.5 text-left font-semibold">Total</th>
+          <td className="pt-1.5 text-right font-semibold tabular-nums text-save">{range(s.low, s.high)}</td>
+        </tr>
+      </tfoot>
+    </table>
+  );
+}
+
+// the scaling and the sanity check under the table, in the same order the backend applies them
+function savingsNote(s: Savings) {
+  const f = s.factors;
+  if (!f) return null;
+  const bits = [`${Math.round(f.same_time * 100)}% time overlap`, `${Math.round(f.drive * 100)}% drive factor`];
+  if (f.kv) bits.push(`${f.kv} kV job size`);
+  const share = s.share_of_budget;
+  return (
+    <>Scaled by {bits.join(", ")}.{f.shared_days ? ` ${f.shared_days} days of shared build window.` : ""}
+      {share ? ` That is ${(share.low * 100).toFixed(1)}% to ${(share.high * 100).toFixed(1)}% of the smaller project's budget.` : ""}</>
+  );
+}
+
 export function OverlapDetailPanel({ me, id, requests, onBack, onSent, onOpenRequest, onHazards }: {
   me: Me; id: number; requests: CollabRequest[]; onBack: () => void; onSent: (r: CollabRequest) => void; onOpenRequest: (id: number) => void;
   onHazards?: (id: number, month: number) => void;
@@ -204,8 +284,6 @@ export function OverlapDetailPanel({ me, id, requests, onBack, onSent, onOpenReq
   const ourJob = d.a.id === s.ours.job ? d.a : d.b;
   const theirJob = d.a.id === s.ours.job ? d.b : d.a;
   const budget = (ourJob.cost_usd ?? 0) + (theirJob.cost_usd ?? 0);
-  const items = Object.entries(d.savings.items);
-  const maxItem = Math.max(...items.map(([, v]) => v.high), 1);
   const none = noSavings({ ...d, savings_high: d.savings.high });
 
   return (
@@ -239,19 +317,11 @@ export function OverlapDetailPanel({ me, id, requests, onBack, onSent, onOpenReq
           <h3 className="text-sm font-semibold text-muted">Cost analysis</h3>
           <div className="font-logo text-2xl font-semibold text-save">{usd(d.savings.low)} to {usd(d.savings.high)}</div>
           <div className="text-xs text-muted">estimated savings from working together{budget > 0 && `, on ${usd(budget)} of combined budget`}</div>
-          <div className="mt-2.5 flex flex-col gap-1.5">
-            {items.map(([k, v]) => (
-              <div key={k}>
-                <div className="flex justify-between text-xs"><span className="capitalize">{k}</span><span className="font-semibold">{usd(v.low)} to {usd(v.high)}</span></div>
-                <div className="mt-0.5 h-1.5 rounded-full bg-white"><div className="h-full rounded-full bg-save" style={{ width: `${(v.high / maxItem) * 100}%` }} /></div>
-              </div>
-            ))}
-          </div>
-          {d.savings.factors && (
-            <p className="mt-2 text-xs text-muted">
-              Scaled by {Math.round(d.savings.factors.same_time * 100)}% time overlap and {Math.round(d.savings.factors.drive * 100)}% drive factor.
-            </p>
-          )}
+          <SavingsTable s={d.savings} />
+          <p className="mt-2 text-xs text-muted">
+            {savingsNote(d.savings)}{" "}
+            <a href={METHOD_DOC} target="_blank" rel="noreferrer" className="font-semibold text-grape underline">How this is worked out</a>
+          </p>
         </section>
         )}
 
