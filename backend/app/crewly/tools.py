@@ -186,8 +186,10 @@ TOOLS = {
         "opportunity_id": {"type": "integer"}, "region": {"type": "string"}}, []),
 }
 
+from app.crewly.incident_tools import INCIDENT_TOOLS  # noqa: E402
 from app.crewly.more_tools import MORE_TOOLS  # noqa: E402  kept at the bottom so tools stay one registry
 from app.crewly.plan_tools import PLAN_TOOLS  # noqa: E402
 
 TOOLS.update(MORE_TOOLS)
 TOOLS.update(PLAN_TOOLS)
+TOOLS.update(INCIDENT_TOOLS)
