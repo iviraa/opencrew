@@ -3,6 +3,7 @@ import { api, type Assumption, type Job, type OpportunityDetail, type Savings } 
 import { BASIS_LABEL, FLAG_LABEL, QUALITY_LABEL, STATUSES, miles, monthYear, pct, title, usd } from "../format";
 import BriefModal from "./BriefModal";
 import Outreach from "./Outreach";
+import Vendors from "./Vendors";
 import { TierChip } from "./OpportunityList";
 
 type Props = {
@@ -74,6 +75,8 @@ export default function DetailPanel({ detail, assumptions, onClose, onStatus, on
             {detail.shareable.map((s) => <span key={s} className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-700">{s}</span>)}
           </div>
         </section>
+
+        <Vendors opportunityId={detail.id} />
 
         <section className="rounded-lg bg-emerald-50 p-3 ring-1 ring-emerald-200">
           <div className="text-xs font-semibold uppercase tracking-wide text-emerald-800">Estimated savings</div>

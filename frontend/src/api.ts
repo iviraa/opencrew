@@ -56,6 +56,8 @@ export type IngestResult = {
   long: { pairs: number }; near: { pairs: number }; seconds: number;
 };
 
+export type Vendor = { name: string; address: string; phone: string | null; website: string | null; rating: number | null; distance_km: number };
+
 export type JobCollection = GeoJSON.FeatureCollection<GeoJSON.Geometry, Job>;
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
@@ -82,6 +84,8 @@ export const api = {
   grid: () => call<GeoJSON.FeatureCollection>("/layers/grid"),
   storm: (at: number) => call<StormFrame>(`/storm/frame?at=${new Date(at).toISOString()}`),
   ingest: (form: FormData) => call<IngestResult>("/ingest", { method: "POST", body: form }),
+  vendors: (id: number, service: string) =>
+    call<{ vendors: Vendor[] }>(`/vendors?opportunity_id=${id}&service=${encodeURIComponent(service)}`),
   procurement: () => call<ProcurementGroup[]>("/procurement"),
   review: () => call<ReviewItem[]>("/review"),
   place: (id: number, lon: number, lat: number) => call<unknown>(`/review/${id}/place`, { method: "POST", body: JSON.stringify({ lon, lat }) }),
