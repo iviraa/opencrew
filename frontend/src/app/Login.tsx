@@ -1,4 +1,4 @@
-import { Eye, EyeOff, LogIn } from "lucide-react";
+import { LogIn } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { EMAIL_DOMAIN, colorFor, publicApi, supabase, type Company } from "./data";
 import { beaver } from "./mascot";
@@ -11,7 +11,6 @@ const DEMO = ["dominion", "georgia"];  // the two demo logins; other utilities a
 export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [people, setPeople] = useState<Company[]>([]);
@@ -53,13 +52,8 @@ export default function Login() {
           </label>
           <label className="flex flex-col gap-1.5">
             <span className="text-sm font-semibold">Password</span>
-            <div className="pen-box flex items-center bg-white pr-2 focus-within:bg-grape-soft/40">
-              <input value={password} onChange={(e) => setPassword(e.target.value)} type={show ? "text" : "password"} autoComplete="current-password"
-                className="min-w-0 flex-1 bg-transparent px-4 py-3 outline-none" />
-              <button type="button" onClick={() => setShow(!show)} className="rounded-full p-2 text-muted hover:text-ink" aria-label={show ? "Hide password" : "Show password"}>
-                {show ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
+            <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" autoComplete="current-password"
+              className="pen-box bg-white px-4 py-3 outline-none focus:bg-grape-soft/40" />
           </label>
 
           {error && <p className="pop-in -mt-1 text-sm font-medium text-warn" role="alert">{error}</p>}
