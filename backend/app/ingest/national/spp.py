@@ -75,13 +75,15 @@ def mapped(r, state):
     cost = number(r["Current Cost Estimate"]) or number(r["Baseline Cost Estimate with Escalation"]) or number(r["Baseline Cost Estimate"])
     raw = {k.replace("\n", " "): clean(v) for k, v in r.items()}
     raw["in_service_from"] = "owner" if owner_isd else "rto_need_date" if need_date else None  # which date we used
+    ends = ends_for(r)
     return {
         "id": f"spp-{int(r['Upgrade ID'])}", "name": str(r["Upgrade Name"] if isinstance(r["Upgrade Name"], str) else r["Project Name"])[:200],
         "description": clean(r["Project Description/ Comments"]) or clean(r["Project Name"]), "voltage_kv": kv(r["Voltages (kV)"]),
         "in_service": isd, "start": to_date(r[NTC]), "status": str(r["Project Status"]).lower(),
         "need": " ".join(str(r["Project Type"]).split()).lower() if isinstance(r["Project Type"], str) else None,
-        "length_mi": miles or None, "cost_usd": cost, "ends": ends_for(r),
-        "states": list(dict.fromkeys([state, *row_states(r["State(s)"])])), "counties": None,
+        "length_mi": miles or None, "cost_usd": cost, "ends": ends,
+        "states": list(dict.fromkeys([state, *row_states(r["State(s)"])])),
+        "counties": [e for e in ends if e.lower().endswith(" county")] or None,  # stations named after a county can fall back to it
         "source_project_id": f"SPP project {int(r['Project ID'])} / upgrade {int(r['Upgrade ID'])}"
                              + (f" / NTC {int(r['NTC ID'])}" if pd.notna(r["NTC ID"]) else ""),
         "planner": "SPP", "state": state, "raw": raw,
