@@ -54,7 +54,7 @@ def weather_alerts(conn):
 def phase_weather_risks(conn):
     rows = conn.execute("""SELECT site, day, gust_mph, work, alert, job_id FROM phase_risk ORDER BY day, gust_mph DESC""").fetchall()
     return {"alerts": len(rows), "risks": [{**r, "day": r["day"].isoformat()} for r in rows[:15]],
-            "limit_mph": 35, "note": "NWS gridpoint gust forecasts for near-term phases active in the next 7 days"}, [{"type": "view", "horizon": "near"}]
+            "limit_mph": 35, "note": "NWS gridpoint gust forecasts for near-term phases active in the next 7 days"}, [{"type": "view", "horizon": "near", "tier": None, "tab": None}]
 
 
 INCIDENT_TOOLS = {

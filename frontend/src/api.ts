@@ -25,6 +25,7 @@ export type CrewlyAction =
   | { type: "filter"; horizon: string; tier: Tier | null; opportunity_ids: number[] }
   | { type: "select"; horizon: string | null; opportunity_id: number }
   | { type: "storm"; at: string }
+  | { type: "live" }
   | { type: "reload" }
   | { type: "status"; opportunity_id: number; status: string }
   | { type: "assumptions"; values: Record<string, { low: number; high: number }> }
@@ -48,7 +49,18 @@ export type StormFrame = {
   at: string; landfall: string; window: [string, string];
   cone: GeoJSON.FeatureCollection; track: GeoJSON.FeatureCollection; warnings: GeoJSON.FeatureCollection;
   reports: GeoJSON.FeatureCollection; staging: GeoJSON.FeatureCollection; exposure: Record<string, number>;
+  incidents: GeoJSON.FeatureCollection; mode?: string;
 };
+
+export type IncidentSource = { type: string; name: string; url?: string; title?: string; quote_evidence?: string; method?: string };
+
+export type IncidentDetail = {
+  id: number; ts: string; mode: string; kind: string; where_text: string; precision: string; utility_mentioned: string | null;
+  customers_affected: number | null; confidence: number; verified: boolean; needs_confirmation: boolean; lat: number; lon: number;
+  sources: IncidentSource[]; nearest: Record<string, { asset: string; km: number }> | null;
+};
+
+export type PhaseRisk = { job_id: string; site: string; day: string; gust_mph: number; work: string; alert: string; fetched_at: string };
 
 export type ReviewItem = { id: number; org_id: string; reason: string; source_page: number; name: string; in_service: string; endpoints: string[] | null };
 
@@ -124,7 +136,11 @@ export const api = {
   brief: (id: number) => call<{ markdown: string; summary_source: string }>(`/opportunities/${id}/brief`, { method: "POST" }),
   tracts: () => call<GeoJSON.FeatureCollection>("/layers/tracts"),
   grid: () => call<GeoJSON.FeatureCollection>("/layers/grid"),
-  storm: (at: number) => call<StormFrame>(`/storm/frame?at=${new Date(at).toISOString()}`),
+  storm: (at: number | null, mode = "replay") =>
+    call<StormFrame>(`/storm/frame?mode=${mode}${at == null ? "" : `&at=${new Date(at).toISOString()}`}`),
+  incident: (id: number) => call<IncidentDetail>(`/incidents/${id}`),
+  phaseRisks: () => call<PhaseRisk[]>("/weather/phase_risks"),
+  livePoll: () => call<Record<string, unknown>>("/live/poll", { method: "POST" }),
   ingest: (form: FormData) => call<IngestResult>("/ingest", { method: "POST", body: form }),
   vendors: (id: number, service: string) =>
     call<{ vendors: Vendor[] }>(`/vendors?opportunity_id=${id}&service=${encodeURIComponent(service)}`),

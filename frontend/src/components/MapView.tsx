@@ -4,6 +4,7 @@ import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { useEffect, useRef, useState } from "react";
 import { api, type JobCollection, type Opportunity, type StormFrame } from "../api";
 import { QUALITY_LABEL, TIER_COLOR, TIER_LABEL, monthYear, title } from "../format";
+import { kindColorExpression } from "./IncidentCard";
 
 type Props = {
   jobs: JobCollection | null;
@@ -16,6 +17,7 @@ type Props = {
   hoverKey: string | null;
   onHover: (key: string | null) => void;
   zone?: GeoJSON.Feature | null;
+  onIncident?: (id: number) => void;
 };
 
 maplibregl.setWorkerUrl(workerUrl); // v6 needs an explicit worker once bundled
@@ -24,6 +26,7 @@ const STYLE = "https://tiles.openfreemap.org/styles/positron";
 const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 const ROW_KEY = ["coalesce", ["get", "parent_job_id"], ["get", "id"]] as maplibregl.ExpressionSpecification;  // phases share their project's row
 const tierColor = ["match", ["get", "tier"], ...Object.entries(TIER_COLOR).flat(), "#64748b"] as unknown as maplibregl.ExpressionSpecification;
+const incidentColor = kindColorExpression as unknown as maplibregl.ExpressionSpecification;
 
 const esc = (v: unknown) => String(v ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);  // popup text comes from filings and storm reports
 const present = (v: unknown) => v != null && v !== "null" && v !== "";
@@ -74,7 +77,7 @@ function coordsOf(g: GeoJSON.Geometry): number[][] {
   return [];
 }
 
-export default function MapView({ jobs, opportunities, selected, onSelect, fly, storm, onMapClick, hoverKey, onHover, zone }: Props) {
+export default function MapView({ jobs, opportunities, selected, onSelect, fly, storm, onMapClick, hoverKey, onHover, zone, onIncident }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -87,6 +90,8 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
   clickRef.current = onMapClick;
   const hoverRef = useRef(onHover);
   hoverRef.current = onHover;
+  const incidentRef = useRef(onIncident);
+  incidentRef.current = onIncident;
 
   useEffect(() => {
     const m = new maplibregl.Map({ container: box.current!, style: STYLE, center: [-81.6, 32.9], zoom: 6.3 });
@@ -104,7 +109,7 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
       m.addLayer({ id: "grid", type: "line", source: "grid", layout: { visibility: "none" },
         paint: { "line-color": "#94a3b8", "line-opacity": 0.7,
           "line-width": ["interpolate", ["linear"], ["coalesce", ["get", "voltage"], 115], 115, 0.6, 230, 1.2, 500, 2.2] } });
-      for (const src of ["cone", "track", "warnings", "reports", "staging"]) m.addSource(src, { type: "geojson", data: EMPTY });
+      for (const src of ["cone", "track", "warnings", "reports", "staging", "incidents"]) m.addSource(src, { type: "geojson", data: EMPTY });
       m.addLayer({ id: "cone-fill", type: "fill", source: "cone", paint: { "fill-color": "#f43f5e", "fill-opacity": 0.12 } });
       m.addLayer({ id: "cone-line", type: "line", source: "cone", paint: { "line-color": "#e11d48", "line-width": 1.5, "line-dasharray": [2, 2] } });
       m.addLayer({ id: "warnings", type: "fill", source: "warnings",
@@ -135,8 +140,15 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
           "circle-color": tierColor, "circle-opacity": 0.2, "circle-stroke-color": tierColor, "circle-stroke-width": 2,
         } });
       m.addLayer({ id: "reports", type: "circle", source: "reports",
-        paint: { "circle-radius": 3.5, "circle-color": ["case", ["boolean", ["get", "power", ["get", "payload"]], false], "#e11d48", "#64748b"],
-          "circle-opacity": 0.8, "circle-stroke-color": "#fff", "circle-stroke-width": 0.5 } });
+        paint: { "circle-radius": 2, "circle-color": ["case", ["boolean", ["get", "power", ["get", "payload"]], false], "#e11d48", "#64748b"],
+          "circle-opacity": 0.35 } });  // raw reports sit under the merged incidents
+      m.addLayer({ id: "incidents", type: "circle", source: "incidents",  // solid = verified, hollow = unverified
+        paint: { "circle-radius": ["match", ["get", "kind"], ["downed_line", "substation_damage", "outage", "tree_on_line"], 7, 4],  // grid damage stands out
+          "circle-color": ["case", ["boolean", ["get", "verified"], false], incidentColor, "#ffffff"],
+          "circle-stroke-color": incidentColor, "circle-stroke-width": 2.5, "circle-opacity": 0.9 } });
+      m.on("click", "incidents", (e) => incidentRef.current?.(Number(e.features![0].properties.id)));
+      m.on("mouseenter", "incidents", () => (m.getCanvas().style.cursor = "pointer"));
+      m.on("mouseleave", "incidents", () => (m.getCanvas().style.cursor = ""));
       m.addLayer({ id: "staging", type: "circle", source: "staging",
         paint: { "circle-radius": 11, "circle-color": "#16a34a", "circle-stroke-color": "#fff", "circle-stroke-width": 3 } });
       m.addLayer({ id: "staging-label", type: "symbol", source: "staging",
@@ -224,7 +236,7 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
   useEffect(() => {
     const m = map.current;
     if (!m || !loaded) return;
-    for (const key of ["cone", "track", "warnings", "reports", "staging"] as const) {
+    for (const key of ["cone", "track", "warnings", "reports", "staging", "incidents"] as const) {
       (m.getSource(key) as GeoJSONSource).setData(storm ? storm[key] : EMPTY);
     }
   }, [storm, loaded]);
@@ -317,6 +329,8 @@ function Legend({ jobs, storm, compact }: { jobs: JobCollection | null; storm: b
           <Swatch className="h-2.5 w-5 rounded-sm bg-gradient-to-r from-amber-500/40 to-red-600/40" label="NWS severe storm or tornado warning" />
           <Swatch className="h-2 w-2 rounded-full bg-rose-600" label="damage report mentioning power" />
           <Swatch className="h-2 w-2 rounded-full bg-slate-500" label="other damage report" />
+          <Swatch className="h-3 w-3 rounded-full border-2 border-red-600 bg-red-600" label="verified incident (official or 2 sources)" />
+          <Swatch className="h-3 w-3 rounded-full border-2 border-red-600 bg-white" label="unverified incident (news only)" />
           <Swatch className="h-3 w-3 rounded-full border-2 border-white bg-green-600 shadow" label="shared staging point" />
         </div>
       )}

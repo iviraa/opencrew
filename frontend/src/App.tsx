@@ -4,8 +4,10 @@ import BriefModal from "./components/BriefModal";
 import CrewLanes from "./components/CrewLanes";
 import Crewly from "./components/Crewly";
 import DetailPanel from "./components/DetailPanel";
+import IncidentCard from "./components/IncidentCard";
 import IngestModal from "./components/IngestModal";
 import JointPlan from "./components/JointPlan";
+import PhaseRisks from "./components/PhaseRisks";
 import MapView from "./components/MapView";
 import OpportunityList from "./components/OpportunityList";
 import ReviewPanel from "./components/ReviewPanel";
@@ -54,6 +56,9 @@ export default function App() {
   const [plan, setPlan] = useState<Plan | null>(null);
   const [solving, setSolving] = useState(false);
   const [pending, setPending] = useState<{ constraints: PlanConstraints; rules: string[] } | null>(null);
+  const [liveMode, setLiveMode] = useState(false);
+  const [incidentId, setIncidentId] = useState<number | null>(null);
+  const [stormTick, setStormTick] = useState(0);
 
   useEffect(() => {
     setLoading(true);
@@ -66,14 +71,16 @@ export default function App() {
   useEffect(() => {
     if (horizon !== "emergency") { setStorm(null); return; }
     setStormLoading(true);
-    const id = setTimeout(() => api.storm(stormAt).then(setStorm).catch((e) => setError(String(e))).finally(() => setStormLoading(false)), 120);
+    const id = setTimeout(() => api.storm(liveMode ? null : stormAt, liveMode ? "live" : "replay").then(setStorm)
+      .catch((e) => setError(String(e))).finally(() => setStormLoading(false)), 120);
     return () => clearTimeout(id);
-  }, [horizon, stormAt]);
+  }, [horizon, stormAt, liveMode, stormTick]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      if (ingestOpen) setIngestOpen(false);  // close the top-most thing only
+      if (incidentId != null) setIncidentId(null);  // close the top-most thing only
+      else if (ingestOpen) setIngestOpen(false);
       else if (placingId != null) setPlacingId(null);
       else if (crewlyOpen) setCrewlyOpen(false);
       else if (selectedId != null) setSelectedId(null);
@@ -142,7 +149,8 @@ export default function App() {
     for (const a of actions) {
       if (a.type === "filter") { setHorizon(a.horizon); setTier(a.tier); setCrewlyIds(a.opportunity_ids); }
       if (a.type === "select") { if (a.horizon) setHorizon(a.horizon); setSelectedId(a.opportunity_id); }
-      if (a.type === "storm") { setHorizon("emergency"); setStormAt(Date.parse(a.at)); }
+      if (a.type === "storm") { setHorizon("emergency"); setLiveMode(false); setStormAt(Date.parse(a.at)); }
+      if (a.type === "live") { setHorizon("emergency"); setLiveMode(true); }
       if (a.type === "fly") setFly({ bbox: a.bbox, at: Date.now() });
       if (a.type === "reload") setReload((n) => n + 1);
       if (a.type === "status") { setOpps((xs) => xs.map((o) => (o.id === a.opportunity_id ? { ...o, status: a.status } : o))); setDetail((d) => (d && d.id === a.opportunity_id ? { ...d, status: a.status } : d)); }
@@ -156,12 +164,12 @@ export default function App() {
   };
 
   const selected = opps.find((o) => o.id === selectedId) ?? null;
-  const live = (iso: string) => horizon !== "emergency" || Date.parse(iso) <= stormAt;  // storm replay only shows what has happened by now
+  const live = (iso: string) => horizon !== "emergency" || (!liveMode && Date.parse(iso) <= stormAt);  // replay shows what has happened by now; live hides helene jobs
   const shown = useMemo(() => opps.filter((o) => (!tier || o.tier === tier) && (!crewlyIds || crewlyIds.includes(o.id)) && live(o.a_start) && live(o.b_start)
     && (!roadOnly || o.drive_min == null || o.drive_min <= 45)),
-    [opps, tier, crewlyIds, horizon, stormAt, roadOnly]);  // stable arrays so hover renders don't re-upload map data
+    [opps, tier, crewlyIds, horizon, stormAt, roadOnly, liveMode]);  // stable arrays so hover renders don't re-upload map data
   const visibleJobs = useMemo(() => (jobs && horizon === "emergency" ? { ...jobs, features: jobs.features.filter((f) => live(f.properties.start_at)) } : jobs),
-    [jobs, horizon, stormAt]);
+    [jobs, horizon, stormAt, liveMode]);
 
   return (
     <div className="flex h-full flex-col">
@@ -211,7 +219,11 @@ export default function App() {
         <section className="flex min-w-0 flex-1 flex-col">
           <div className="relative min-h-0 flex-1">
             <MapView jobs={visibleJobs} opportunities={shown} selected={selected} onSelect={setSelectedId} fly={fly} storm={storm} zone={zone} onMapClick={placingId != null ? placeAt : null}
-              hoverKey={hover?.key ?? null} onHover={(key) => setHover(key ? { key, from: "map" } : null)} />
+              hoverKey={hover?.key ?? null} onHover={(key) => setHover(key ? { key, from: "map" } : null)} onIncident={setIncidentId} />
+            {horizon === "near" && <div className="absolute left-1/2 top-3 z-10 -translate-x-1/2"><PhaseRisks /></div>}
+            {incidentId != null && (
+              <div className="absolute bottom-3 left-3 top-14 z-30 w-[340px]"><IncidentCard id={incidentId} onClose={() => setIncidentId(null)} /></div>
+            )}
             {crewlyOpen && (
               <div className="absolute bottom-3 right-3 top-3 z-20 w-[360px]">
                 <Crewly onActions={applyActions} onClose={() => setCrewlyOpen(false)} />
@@ -223,7 +235,9 @@ export default function App() {
               ? <CrewLanes rows={plan?.schedule ?? []} colors={Object.fromEntries((jobs?.features ?? []).map((f) => [f.properties.org_id, f.properties.color]))}
                   selected={selected ? [selected.job_a, selected.job_b] : []} />
               : horizon === "emergency"
-              ? <StormReplay frame={storm} at={stormAt} onAt={setStormAt} start={STORM_START} end={STORM_END} landfall={LANDFALL} loading={stormLoading} />
+              ? <StormReplay frame={storm} at={stormAt} onAt={setStormAt} start={STORM_START} end={STORM_END} landfall={LANDFALL} loading={stormLoading}
+                  live={liveMode} onLive={setLiveMode} onIncident={setIncidentId}
+                  onPoll={() => api.livePoll().then(() => setStormTick((n) => n + 1))} />
               : <Timeline jobs={jobs} opportunities={shown} selected={selected} onSelect={setSelectedId} filter={timelineFilter} onClearFilter={() => setTimelineFilter(null)}
                   hoverKey={hover?.key ?? null} scrollToHover={hover?.from === "map"} onHover={(key) => setHover(key ? { key, from: "timeline" } : null)} />}
           </div>
