@@ -50,7 +50,7 @@ def opportunity(opp_id: int, conn=Depends(get_conn)):
         raise HTTPException(404, "opportunity not found")
     job_rows = conn.execute(JOB_SQL + " WHERE j.id IN (%s, %s)", (op["job_a"], op["job_b"])).fetchall()
     by_id = {j["id"]: j for j in job_rows}
-    return {**op, "a": by_id[op["job_a"]], "b": by_id[op["job_b"]], "shareable": shareable(op["tier"]),
+    return {**op, "a": by_id[op["job_a"]], "b": by_id[op["job_b"]], "shareable": shareable(op["tier"], op["a_phase"], op["b_phase"]),
             "savings": savings(op["tier"], op["overlap_m"])}
 
 

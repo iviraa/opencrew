@@ -61,3 +61,20 @@ def test_flags():
     a = {"name": "Hooks - Thurmond 115kV Tie: Rebuild", "endpoints": ["Hooks", "Thurmond"]}
     b = {"name": "EVANS PRIMARY - THURMOND DAM (USA) #5 115KV REBUILD", "endpoints": ["EVANS PRIMARY", "THURMOND DAM (USA) #5"]}
     assert set(flags(a, b, 0.9, dt(2024), dt(2026), dt(2025), dt(2027))) == {"hurricane_season_high_risk", "tie_line", "shared_endpoint"}
+
+
+def test_phase_share():
+    from app.engine.scoring import phase_share
+    assert phase_share(None, "construction") is None
+    assert phase_share("construction", "clearing") == phase_share("clearing", "construction")
+    assert phase_share("construction", "construction")[0] == 1.0
+    assert phase_share("survey & permitting", "energization")[0] < 1.0
+    assert "permits" in phase_share("survey & permitting", "survey & permitting")[1]
+
+
+def test_phase_score_and_shareable():
+    from app.queries import shareable
+    assert score("site", 0.8, phase_factor=0.4) == 0.5 * 1.0 * 0.4
+    assert shareable("crew") == ["crews", "equipment"]  # long horizon unchanged
+    assert shareable("crew", "energization", "energization") == ["coordinated outage windows"]
+    assert shareable("crossing", "survey & permitting", "construction") == ["schedule coordination", "outage timing", "crossing structures"]

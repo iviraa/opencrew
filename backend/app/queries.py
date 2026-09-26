@@ -1,5 +1,6 @@
 from app.config import SHAREABLE, TIERS
 from app.engine.cost import RANK
+from app.engine.scoring import phase_share
 
 JOB_SQL = """
 SELECT j.id, j.org_id, o.name AS org_name, o.color, j.name, j.ref, j.description, j.horizon, j.job_type, j.voltage_kv,
@@ -24,5 +25,9 @@ JOIN job jb ON jb.id = op.job_b JOIN org ob ON ob.id = jb.org_id
 """
 
 
-def shareable(tier):
-    return [r for name, _ in TIERS if RANK[name] >= RANK[tier] for r in SHAREABLE[name]]  # closer tiers share everything further ones do
+def shareable(tier, a_phase=None, b_phase=None):
+    ps = phase_share(a_phase, b_phase)
+    if not ps:
+        return [r for name, _ in TIERS if RANK[name] >= RANK[tier] for r in SHAREABLE[name]]  # closer tiers share everything further ones do
+    extra = SHAREABLE[tier] if tier in ("crossing", "land") else []  # physical overlap needs coordination in any phase
+    return ps[1] + [r for r in extra if r not in ps[1]]

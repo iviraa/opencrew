@@ -1,4 +1,4 @@
-from app.config import TIER_WEIGHT, TIERS
+from app.config import PHASE_MISMATCH, PHASE_SHARE, TIER_WEIGHT, TIERS
 
 
 def tier_for(distance_m, touches=False):
@@ -24,5 +24,11 @@ def time_factor(overlap):
     return 0.5 if overlap > 0 else 0.2
 
 
-def score(tier, overlap, risk=0.0, vulnerability=0.0):
-    return TIER_WEIGHT[tier] * time_factor(overlap) * (1 + risk + vulnerability)
+def phase_share(a_phase, b_phase):
+    if not a_phase or not b_phase:
+        return None  # long-range jobs have no phase
+    return PHASE_SHARE.get(tuple(sorted((a_phase, b_phase))), PHASE_MISMATCH)
+
+
+def score(tier, overlap, risk=0.0, vulnerability=0.0, phase_factor=1.0):
+    return TIER_WEIGHT[tier] * time_factor(overlap) * (1 + risk + vulnerability) * phase_factor

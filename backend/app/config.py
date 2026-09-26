@@ -14,6 +14,15 @@ DEFAULT_DURATION_MONTHS = {"new_line": 36, "line_upgrade": 18, "substation": 24}
 
 PHASES = [("survey & permitting", 0.20), ("clearing", 0.15), ("construction", 0.55), ("energization", 0.10)]
 
+PHASE_SHARE = {  # sorted phase pair -> (score factor, what concurrent phases can share)
+    ("clearing", "clearing"): (1.0, ["crews", "equipment", "staging yards"]),
+    ("clearing", "construction"): (0.8, ["crews", "equipment", "staging yards"]),
+    ("construction", "construction"): (1.0, ["crews", "cranes", "equipment", "staging yards"]),
+    ("survey & permitting", "survey & permitting"): (1.0, ["right-of-way surveys", "permits", "environmental review"]),
+    ("energization", "energization"): (1.0, ["coordinated outage windows"]),
+}
+PHASE_MISMATCH = (0.4, ["schedule coordination"])
+
 ACRE_M2 = 4046.86
 
 ASSUMPTIONS = {

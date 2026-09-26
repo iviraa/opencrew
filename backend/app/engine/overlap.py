@@ -3,11 +3,11 @@ import time
 from app.config import OVERLAP_RADIUS_M
 from app.engine.cost import savings
 from app.engine.flags import flags
-from app.engine.scoring import score, tier_for, time_overlap
+from app.engine.scoring import phase_share, score, tier_for, time_overlap
 
 PAIRS_SQL = """
 WITH j AS (
-  SELECT id, org_id, name, endpoints, horizon, geom, work_window, in_service,
+  SELECT id, org_id, name, phase, endpoints, horizon, geom, work_window, in_service,
          ST_GeometryType(geom::geometry) = 'ST_LineString' AS is_line,
          CASE WHEN ST_GeometryType(geom::geometry) = 'ST_LineString'
               THEN ST_Centroid(ST_MakeLine(ST_StartPoint(geom::geometry), ST_EndPoint(geom::geometry)))
@@ -15,6 +15,7 @@ WITH j AS (
   FROM job WHERE horizon = %(horizon)s
 )
 SELECT a.id AS job_a, b.id AS job_b, a.name AS a_name, b.name AS b_name, a.endpoints AS a_endpoints, b.endpoints AS b_endpoints,
+       a.phase AS a_phase, b.phase AS b_phase,
        ST_Distance(a.geom, b.geom) AS distance_m,
        ST_Distance(a.center, b.center, false) AS center_distance_m,
        ST_Intersects(a.geom, b.geom) AS touches,
@@ -62,7 +63,9 @@ def recompute(conn, horizon="long"):
         sav = savings(tier, r["overlap_m"])
         fl = flags({"name": r["a_name"], "endpoints": r["a_endpoints"]}, {"name": r["b_name"], "endpoints": r["b_endpoints"]},
                    r["risk"], r["a_start"], r["a_end"], r["b_start"], r["b_end"])
-        out.append({**r, "horizon": horizon, "tier": tier, "time_overlap": ov, "flags": fl, "score": score(tier, ov, r["risk"], r["vulnerability"]),
+        ps = phase_share(r["a_phase"], r["b_phase"])
+        out.append({**r, "horizon": horizon, "tier": tier, "time_overlap": ov, "flags": fl,
+                    "score": score(tier, ov, r["risk"], r["vulnerability"], ps[0] if ps else 1.0),
                     "savings_low": sav["low"], "savings_high": sav["high"]})
     with conn.cursor() as cur:
         cur.executemany(UPSERT_SQL, out)

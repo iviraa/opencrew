@@ -58,7 +58,7 @@ def get_opportunity(conn, opportunity_id):
                 "description": j["description"]}
 
     s = savings(o["tier"], o["overlap_m"])
-    return ({**_opp_row(o), "job_a": job(jobs[o["job_a"]]), "job_b": job(jobs[o["job_b"]]), "shareable": shareable(o["tier"]),
+    return ({**_opp_row(o), "job_a": job(jobs[o["job_a"]]), "job_b": job(jobs[o["job_b"]]), "shareable": shareable(o["tier"], o["a_phase"], o["b_phase"]),
              "savings_breakdown": {k: f"${int(v['low']):,} to ${int(v['high']):,}" for k, v in s["items"].items()}},
             [{"type": "select", "horizon": o["horizon"], "opportunity_id": o["id"]}])
 

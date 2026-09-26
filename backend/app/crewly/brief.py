@@ -34,7 +34,7 @@ def facts(conn, opp_id):
 
 def template_summary(o, a, b):
     return (f"{a['org_name']} and {b['org_name']} plan work close together: {a['name']} and {b['name']}. "
-            f"They fall in the {o['tier']} tier, so the utilities could share {', '.join(shareable(o['tier'])[:3])}.")
+            f"They fall in the {o['tier']} tier, so the utilities could share {', '.join(shareable(o['tier'], o['a_phase'], o['b_phase'])[:3])}.")
 
 
 def llm_summary(o, a, b):
@@ -43,7 +43,7 @@ def llm_summary(o, a, b):
         return None
     prompt = (f"Write two plain sentences for utility planners explaining why these two projects should coordinate. "
               f"Do not include any numbers, dates or dollar amounts.\nProject A: {a['name']} ({a['org_name']}): {a['description']}\n"
-              f"Project B: {b['name']} ({b['org_name']}): {b['description']}\nShareable: {', '.join(shareable(o['tier']))}")
+              f"Project B: {b['name']} ({b['org_name']}): {b['description']}\nShareable: {', '.join(shareable(o['tier'], o['a_phase'], o['b_phase']))}")
     try:
         text = genai.Client(api_key=key).models.generate_content(model=MODEL, contents=prompt).text.strip()
     except Exception:
@@ -82,7 +82,7 @@ def build(conn, opp_id):
     lines += [f"- {FLAGS.get(f, f)}" for f in o["flags"]]
     if o["overlap_m"] > 0:
         lines.append(f"- Parallel corridor within 1 mile: {o['overlap_m'] / MILE_M:.1f} mi")
-    lines += ["", "## What could be shared", *[f"- {r}" for r in shareable(o["tier"])], "",
+    lines += ["", "## What could be shared", *[f"- {r}" for r in shareable(o["tier"], o["a_phase"], o["b_phase"])], "",
               "## Savings estimate", f"**{usd(s['low'])} to {usd(s['high'])}**, assuming the work is scheduled together.", "",
               "| Item | Low | High |", "|---|---|---|", *[f"| {k} | {usd(v['low'])} | {usd(v['high'])} |" for k, v in s["items"].items()], "",
               "Assumptions: " + "; ".join(f"{v['label']} {v['low']:,}-{v['high']:,} {v['unit']}{'' if v['verified'] else ' (placeholder)'}"
