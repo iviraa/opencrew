@@ -51,6 +51,13 @@ def stations(state):
     return [r for r in rows if r.get("name")], [norm(r["name"]) for r in rows if r.get("name")]
 
 
+COMPASS = {"north", "south", "east", "west", "n", "s", "e", "w", "ne", "nw", "se", "sw", "northeast", "northwest", "southeast", "southwest", "upper", "lower", "new", "old"}
+
+
+def same_compass(a, b):
+    return {w for w in a.split() if w in COMPASS} == {w for w in b.split() if w in COMPASS}  # "west devon" is not "east devon"
+
+
 def find_station(name, states):
     """Best osm substation for a planner's station name in the given states, or None when unsure."""
     key = norm(re.sub(r"\b\d+(\.\d+)?\s*kv\b|\bckt\b.*|\bline\b.*", " ", str(name), flags=re.I))  # "crooked lake 161kv" -> "crooked lake"
@@ -61,13 +68,15 @@ def find_station(name, states):
         rows, keys = stations(st)
         hits = process.extract(key, keys, scorer=fuzz.token_sort_ratio, limit=3, score_cutoff=MATCH_MIN)
         for _, score, i in hits:
+            if not same_compass(key, keys[i]):
+                continue
             if not best or score > best["score"]:
                 best = {**rows[i], "score": score}
             elif score == best["score"] and km((rows[i]["lat"], rows[i]["lon"]), (best["lat"], best["lon"])) > 15:
                 best = {**best, "ambiguous": True}  # two far apart stations share the name
     if not best:  # "el dorado donan" vs "donan": accept a subset match only when it is the one station that fits
         hits = [(rows[i], st) for st in states for rows, keys in [stations(st)] for i, k in enumerate(keys)
-                if len(k) >= 5 and len(key) >= 5 and key.split()[-1] in k.split() and fuzz.token_set_ratio(key, k) >= 97]  # the distinctive word must match
+                if len(k) >= 5 and len(key) >= 5 and key.split()[-1] in k.split() and same_compass(key, k) and fuzz.token_set_ratio(key, k) >= 97]  # the distinctive word must match
         spots = {(round(r["lat"], 2), round(r["lon"], 2)) for r, _ in hits}
         if len(spots) == 1:
             best = {**hits[0][0], "score": 85.0}
