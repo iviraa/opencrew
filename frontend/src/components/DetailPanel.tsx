@@ -12,11 +12,12 @@ type Props = {
   onClose: () => void;
   onStatus: (id: number, status: string) => void;
   onRefresh: () => void;
+  overrides?: Values | null;
 };
 
 type Values = Record<string, { low: number; high: number }>;
 
-export default function DetailPanel({ detail, assumptions, onClose, onStatus, onRefresh }: Props) {
+export default function DetailPanel({ detail, assumptions, onClose, onStatus, onRefresh, overrides }: Props) {
   const [values, setValues] = useState<Values>({});
   const [savings, setSavings] = useState<Savings>(detail.savings);
   const [brief, setBrief] = useState<{ markdown: string; summary_source: string } | null>(null);
@@ -28,9 +29,10 @@ export default function DetailPanel({ detail, assumptions, onClose, onStatus, on
   };
 
   useEffect(() => {
-    setValues(Object.fromEntries(Object.entries(assumptions).map(([k, a]) => [k, { low: a.low, high: a.high }])));
-    setSavings(detail.savings);
-  }, [detail, assumptions]);
+    setValues(overrides ?? Object.fromEntries(Object.entries(assumptions).map(([k, a]) => [k, { low: a.low, high: a.high }])));
+    if (overrides) api.savings(detail.id, overrides).then(setSavings);  // crewly what-if moves the sliders
+    else setSavings(detail.savings);
+  }, [detail, assumptions, overrides]);
 
   const change = (key: string, end: "low" | "high", v: number) => {
     const next = { ...values, [key]: { ...values[key], [end]: v } };

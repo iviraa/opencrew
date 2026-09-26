@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Opportunity, Tier } from "../api";
 import Procurement from "./Procurement";
 import { FLAG_LABEL, TIER_COLOR, TIER_LABEL, miles, pct, title, usd } from "../format";
@@ -16,6 +16,7 @@ type Props = {
   emptyText: string;
   roadOnly: boolean;
   onRoadOnly: (v: boolean) => void;
+  tabRequest?: { tab: string; at: number } | null;
 };
 
 export function TierChip({ tier }: { tier: Tier }) {
@@ -26,8 +27,9 @@ export function TierChip({ tier }: { tier: Tier }) {
   );
 }
 
-export default function OpportunityList({ items, shown, crewlyFiltered, onClearCrewly, selectedId, tier, onTier, onSelect, loading, emptyText, roadOnly, onRoadOnly }: Props) {
+export default function OpportunityList({ items, shown, crewlyFiltered, onClearCrewly, selectedId, tier, onTier, onSelect, loading, emptyText, roadOnly, onRoadOnly, tabRequest }: Props) {
   const [tab, setTab] = useState<"overlaps" | "equipment">("overlaps");
+  useEffect(() => { if (tabRequest?.tab === "overlaps" || tabRequest?.tab === "equipment") setTab(tabRequest.tab); }, [tabRequest]);  // crewly can switch tabs
   const tabs = (
     <div className="mb-2 flex gap-4 text-sm">
       {(["overlaps", "equipment"] as const).map((t) => (

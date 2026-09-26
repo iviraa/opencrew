@@ -3,7 +3,13 @@ import { api, type CrewlyAction } from "../api";
 
 type Message = { role: "user" | "model"; text: string; tools?: { name: string; args: Record<string, unknown> }[]; unsourced?: string[] };
 
-const STARTERS = ["What are the top coordination opportunities near Savannah?", "Explain the best opportunity near Augusta", "What did Helene look like 6 hours after landfall?"];
+const STARTERS = [
+  "What are the top coordination opportunities near Savannah?",
+  "Has the Thomson Primary second transformer been delayed?",
+  "What if staging yards cost $300k to $600k?",
+  "Draft a brief for the Hooks-Thurmond tie line pair",
+  "Where could both utilities stage crews 15 hours after Helene's landfall?",
+];
 
 export default function Crewly({ onActions, onClose }: { onActions: (a: CrewlyAction[]) => void; onClose: () => void }) {
   const [messages, setMessages] = useState<Message[]>([]);

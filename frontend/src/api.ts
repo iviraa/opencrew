@@ -26,6 +26,11 @@ export type CrewlyAction =
   | { type: "select"; horizon: string | null; opportunity_id: number }
   | { type: "storm"; at: string }
   | { type: "reload" }
+  | { type: "status"; opportunity_id: number; status: string }
+  | { type: "assumptions"; values: Record<string, { low: number; high: number }> }
+  | { type: "view"; horizon: string | null; tier: Tier | null; tab: string | null }
+  | { type: "timeline"; years: [number, number] | null; orgs: string[] | null }
+  | { type: "brief"; opportunity_id: number; markdown: string; source: string }
   | { type: "fly"; bbox: [number, number, number, number] };
 
 export type CrewlyReply = { reply: string; ui_actions: CrewlyAction[]; tool_calls: { name: string; args: Record<string, unknown> }[]; unsourced: string[] };

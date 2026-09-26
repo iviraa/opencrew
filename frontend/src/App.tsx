@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type Assumption, type CrewlyAction, type ReviewItem, type StormFrame, type JobCollection, type Opportunity, type OpportunityDetail, type Tier } from "./api";
+import BriefModal from "./components/BriefModal";
 import Crewly from "./components/Crewly";
 import DetailPanel from "./components/DetailPanel";
 import IngestModal from "./components/IngestModal";
@@ -43,6 +44,10 @@ export default function App() {
   const [hover, setHover] = useState<{ key: string; from: "map" | "timeline" } | null>(null);
   const [loading, setLoading] = useState(true);
   const [stormLoading, setStormLoading] = useState(false);
+  const [sliders, setSliders] = useState<Record<string, { low: number; high: number }> | null>(null);
+  const [listTab, setListTab] = useState<{ tab: string; at: number } | null>(null);
+  const [timelineFilter, setTimelineFilter] = useState<{ years: [number, number] | null; orgs: string[] | null } | null>(null);
+  const [crewlyBrief, setCrewlyBrief] = useState<{ markdown: string; source: string } | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -123,6 +128,11 @@ export default function App() {
       if (a.type === "storm") { setHorizon("emergency"); setStormAt(Date.parse(a.at)); }
       if (a.type === "fly") setFly({ bbox: a.bbox, at: Date.now() });
       if (a.type === "reload") setReload((n) => n + 1);
+      if (a.type === "status") { setOpps((xs) => xs.map((o) => (o.id === a.opportunity_id ? { ...o, status: a.status } : o))); setDetail((d) => (d && d.id === a.opportunity_id ? { ...d, status: a.status } : d)); }
+      if (a.type === "assumptions") setSliders(a.values);
+      if (a.type === "view") { if (a.horizon) switchHorizon(a.horizon); if (a.tier) setTier(a.tier); if (a.tab === "review") setReviewOpen(true); else if (a.tab) { setReviewOpen(false); setListTab({ tab: a.tab, at: Date.now() }); } }
+      if (a.type === "timeline") setTimelineFilter({ years: a.years, orgs: a.orgs });
+      if (a.type === "brief") { setSelectedId(a.opportunity_id); setCrewlyBrief({ markdown: a.markdown, source: a.source }); }
     }
   };
 
@@ -168,13 +178,14 @@ export default function App() {
         </div>
       </header>
       {error && <div className="bg-red-50 px-5 py-2 text-sm text-red-700">{error}</div>}
+      {crewlyBrief && <BriefModal markdown={crewlyBrief.markdown} source={crewlyBrief.source} onClose={() => setCrewlyBrief(null)} />}
       {ingestOpen && <IngestModal onClose={() => setIngestOpen(false)} onDone={() => setReload((n) => n + 1)} />}
       <main className="flex min-h-0 flex-1">
         <aside className="w-[380px] shrink-0 border-r border-slate-200 bg-white">
           {reviewOpen
             ? <ReviewPanel items={review} placingId={placingId} onPlace={setPlacingId} onClose={() => { setReviewOpen(false); setPlacingId(null); }} />
             : <OpportunityList items={opps} shown={shown} selectedId={selectedId} tier={tier} onTier={setTier} onSelect={setSelectedId}
-            crewlyFiltered={crewlyIds !== null} onClearCrewly={() => setCrewlyIds(null)} loading={loading} roadOnly={roadOnly} onRoadOnly={setRoadOnly}
+            crewlyFiltered={crewlyIds !== null} onClearCrewly={() => setCrewlyIds(null)} loading={loading} roadOnly={roadOnly} onRoadOnly={setRoadOnly} tabRequest={listTab}
             emptyText={horizon === "emergency" ? "No cross-utility restoration overlaps yet at this time. Scrub the replay forward." : "No opportunities match these filters."} />}
         </aside>
         <section className="flex min-w-0 flex-1 flex-col">
@@ -190,14 +201,14 @@ export default function App() {
           <div className="h-[210px] shrink-0 border-t border-slate-200">
             {horizon === "emergency"
               ? <StormReplay frame={storm} at={stormAt} onAt={setStormAt} start={STORM_START} end={STORM_END} landfall={LANDFALL} loading={stormLoading} />
-              : <Timeline jobs={jobs} opportunities={shown} selected={selected} onSelect={setSelectedId}
+              : <Timeline jobs={jobs} opportunities={shown} selected={selected} onSelect={setSelectedId} filter={timelineFilter} onClearFilter={() => setTimelineFilter(null)}
                   hoverKey={hover?.key ?? null} scrollToHover={hover?.from === "map"} onHover={(key) => setHover(key ? { key, from: "timeline" } : null)} />}
           </div>
         </section>
         {selectedId != null && (
           <aside className="w-[400px] shrink-0 border-l border-slate-200 bg-white">
             {detail?.id === selectedId
-              ? <DetailPanel detail={detail} assumptions={assumptions} onClose={() => setSelectedId(null)} onStatus={setStatus} onRefresh={refreshSelected} />
+              ? <DetailPanel detail={detail} assumptions={assumptions} onClose={() => setSelectedId(null)} onStatus={setStatus} onRefresh={refreshSelected} overrides={sliders} />
               : <div className="p-4 text-sm text-slate-400">Loading…</div>}
           </aside>
         )}

@@ -10,6 +10,8 @@ type Props = {
   hoverKey: string | null;
   scrollToHover: boolean;
   onHover: (key: string | null) => void;
+  filter?: { years: [number, number] | null; orgs: string[] | null } | null;
+  onClearFilter?: () => void;
 };
 
 type Row = { key: string; org: string; color: string; name: string; bars: Job[] };
@@ -17,7 +19,7 @@ type Row = { key: string; org: string; color: string; name: string; bars: Job[] 
 const PHASE_SHADE: Record<string, number> = { "survey & permitting": 0.35, clearing: 0.55, construction: 0.9, energization: 0.65 };
 const time = (iso: string) => new Date(iso).getTime();
 
-export default function Timeline({ jobs, opportunities, selected, onSelect, hoverKey, scrollToHover, onHover }: Props) {
+export default function Timeline({ jobs, opportunities, selected, onSelect, hoverKey, scrollToHover, onHover, filter, onClearFilter }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const axis = useRef<HTMLDivElement>(null);
   const [axisWidth, setAxisWidth] = useState(800);
@@ -38,17 +40,19 @@ export default function Timeline({ jobs, opportunities, selected, onSelect, hove
     for (const j of byId.values()) {
       const key = rowKey(j);
       if (!all && !wanted.has(key)) continue;
+      if (filter?.orgs && !filter.orgs.includes(j.org_id)) continue;
       const row = map.get(key) ?? { key, org: j.org_name, color: j.color, name: j.name, bars: [] };
       row.bars.push(j);
       map.set(key, row);
     }
     return [...map.values()].sort((a, b) => a.org.localeCompare(b.org) || time(a.bars[0].start_at) - time(b.bars[0].start_at));
-  }, [opportunities, byId, all]);
+  }, [opportunities, byId, all, filter]);
 
   const [t0, t1] = useMemo(() => {
+    if (filter?.years) return [new Date(filter.years[0], 0, 1).getTime(), new Date(filter.years[1] + 1, 0, 1).getTime()];
     const ts = rows.flatMap((r) => r.bars.flatMap((b) => [b, ...(b.history ?? [])]).flatMap((b) => [time(b.start_at), time(b.end_at)]));
     return ts.length ? [Math.min(...ts), Math.max(...ts)] : [Date.now() - 3e10, Date.now() + 3e10];
-  }, [rows]);
+  }, [rows, filter]);
   const x = (t: number) => `${((t - t0) / (t1 - t0)) * 100}%`;
   const years = [];
   for (let y = new Date(t0).getFullYear() + 1; y <= new Date(t1).getFullYear(); y++) years.push(y);
@@ -83,6 +87,11 @@ export default function Timeline({ jobs, opportunities, selected, onSelect, hove
             </button>
           ))}
           <span className="flex items-center gap-1"><span className="inline-block h-2.5 w-4 rounded-sm border border-dashed border-slate-400" /> earlier plan</span>
+          {filter && (
+            <button onClick={onClearFilter} className="rounded bg-blue-50 px-1.5 py-0.5 text-blue-700 ring-1 ring-blue-200">
+              {filter.years ? `${filter.years[0]}–${filter.years[1]}` : "all years"}{filter.orgs ? ` · ${filter.orgs.join(", ").toUpperCase()}` : ""} ✕
+            </button>
+          )}
         </div>
         <div ref={axis} className="absolute inset-y-0 left-[260px] right-0">
           {years.filter((_, i) => i % step === 0).map((y) => (
