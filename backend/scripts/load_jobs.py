@@ -4,6 +4,7 @@ from datetime import date
 
 from app.db import ROOT, connect, init_schema
 from app.outreach import seed_contacts
+from app.storm.restoration import build_restoration
 from app.engine.overlap import recompute
 from app.engine.phases import build_phases
 from app.geo.geolocate import Locator
@@ -74,6 +75,7 @@ def main():
         print(dict(stats))
         print(recompute(conn, "long"))
         print("phases", build_phases(conn), recompute(conn, "near"))
+        print("restoration", build_restoration(conn), recompute(conn, "emergency"))
 
 
 if __name__ == "__main__":
