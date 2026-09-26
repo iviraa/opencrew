@@ -21,6 +21,10 @@ AGENDA = ["Confirm scope and current schedule of both projects", "Walk the share
           "Name one contact per utility and set a follow-up date"]
 
 
+def ordinal(n):
+    return f"{n}{'th' if 10 <= n % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')}"
+
+
 def usd(n):
     return f"${int(n):,}"
 
@@ -79,7 +83,7 @@ def build(conn, opp_id):
         f"- In-service dates are {o['time_gap_days']} days apart" if o["time_gap_days"] is not None else "- In-service gap: unknown",
     ]
     lines.append(f"- Area context: hurricane risk {round(o['risk'] * 100)}/100 (FEMA NRI), social vulnerability "
-                 f"{round(o['vulnerability'] * 100)}th percentile (CDC SVI), at the midpoint between the projects")
+                 f"{ordinal(round(o['vulnerability'] * 100))} percentile (CDC SVI), at the midpoint between the projects")
     lines += [f"- {FLAGS.get(f, f)}" for f in o["flags"]]
     if o["overlap_m"] > 0:
         lines.append(f"- Parallel corridor within 1 mile: {o['overlap_m'] / MILE_M:.1f} mi")
