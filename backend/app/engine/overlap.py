@@ -8,12 +8,15 @@ from app.engine.scoring import score, tier_for, time_overlap
 PAIRS_SQL = """
 WITH j AS (
   SELECT id, org_id, name, endpoints, horizon, geom, work_window, in_service,
-         ST_GeometryType(geom::geometry) = 'ST_LineString' AS is_line
+         ST_GeometryType(geom::geometry) = 'ST_LineString' AS is_line,
+         CASE WHEN ST_GeometryType(geom::geometry) = 'ST_LineString'
+              THEN ST_Centroid(ST_MakeLine(ST_StartPoint(geom::geometry), ST_EndPoint(geom::geometry)))
+              ELSE ST_Centroid(geom::geometry) END::geography AS center  -- organizer rule: midpoint of the two named endpoints
   FROM job WHERE horizon = %(horizon)s
 )
 SELECT a.id AS job_a, b.id AS job_b, a.name AS a_name, b.name AS b_name, a.endpoints AS a_endpoints, b.endpoints AS b_endpoints,
        ST_Distance(a.geom, b.geom) AS distance_m,
-       ST_Distance(ST_Centroid(a.geom::geometry)::geography, ST_Centroid(b.geom::geometry)::geography, false) AS center_distance_m,
+       ST_Distance(a.center, b.center, false) AS center_distance_m,
        ST_Intersects(a.geom, b.geom) AS touches,
        CASE WHEN a.is_line AND b.is_line AND ST_DWithin(a.geom, b.geom, 1600)
          THEN LEAST(ST_Length(ST_Intersection(a.geom, ST_Buffer(b.geom, 1600))),
