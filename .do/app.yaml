@@ -20,6 +20,26 @@ services:
       - key: DATABASE_URL
         scope: RUN_TIME
         type: SECRET
+      - key: SUPABASE_URL
+        scope: RUN_TIME
+      - key: SUPABASE_PUBLISHABLE_KEY
+        scope: RUN_TIME
+      - key: SUPABASE_SECRET_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: VITE_SUPABASE_URL
+        scope: BUILD_TIME
+      - key: VITE_SUPABASE_PUBLISHABLE_KEY
+        scope: BUILD_TIME
+      - key: HAZARDS_REFRESH_MINUTES
+        scope: RUN_TIME
+        value: "180"
+      - key: CREWLY_PROACTIVE_MINUTES
+        scope: RUN_TIME
+        value: "30"
+      - key: LIVE_POLL_MINUTES
+        scope: RUN_TIME
+        value: "30"
       - key: GEMINI_API_KEY
         scope: RUN_TIME
         type: SECRET

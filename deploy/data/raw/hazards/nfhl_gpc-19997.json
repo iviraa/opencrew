@@ -1,0 +1,1 @@
+{"sfha": {"displayFieldName": "FLD_AR_ID", "fieldAliases": {"FLD_ZONE": "FLD_ZONE"}, "fields": [{"name": "FLD_ZONE", "type": "esriFieldTypeString", "alias": "FLD_ZONE", "length": 17}], "features": [{"attributes": {"FLD_ZONE": "A"}}, {"attributes": {"FLD_ZONE": "A"}}, {"attributes": {"FLD_ZONE": "A"}}]}}
