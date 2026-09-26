@@ -51,19 +51,56 @@ function jobPopup(p: Record<string, unknown>) {
   </div>`;
 }
 
+const far = (o: Opportunity) => o.drive_min != null && o.drive_min > 45;
+
 function oppFeatures(opps: Opportunity[]): GeoJSON.FeatureCollection {
-  return {
-    type: "FeatureCollection",
-    features: opps.flatMap((o) => {
-      const [p, q] = o.link.coordinates;
-      const mid = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
-      const props = { id: o.id, tier: o.tier, score: o.score, far: o.drive_min != null && o.drive_min > 45 };
-      return [
-        { type: "Feature", properties: props, geometry: o.link },
-        { type: "Feature", properties: { ...props, marker: true }, geometry: { type: "Point", coordinates: mid } },
-      ] as GeoJSON.Feature[];
-    }),
-  };
+  const links = opps.map((o) => ({ type: "Feature", properties: { id: o.id, tier: o.tier, score: o.score, far: far(o) }, geometry: o.link }));
+  const spots = new Map<string, Opportunity[]>();  // pairs that meet at the same spot share one bubble
+  for (const o of [...opps].sort((a, b) => b.score - a.score)) {
+    const [p, q] = o.link.coordinates;
+    const key = `${((p[0] + q[0]) / 2).toFixed(3)},${((p[1] + q[1]) / 2).toFixed(3)}`;
+    spots.set(key, [...(spots.get(key) ?? []), o]);
+  }
+  const markers = [...spots.values()].map((group) => {
+    const top = group[0];
+    const [p, q] = top.link.coordinates;
+    return { type: "Feature", geometry: { type: "Point", coordinates: [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2] },
+      properties: { marker: true, id: top.id, ids: `,${group.map((o) => o.id).join(",")},`, count: group.length, tier: top.tier, score: top.score, far: group.every(far) } };
+  });
+  return { type: "FeatureCollection", features: [...links, ...markers] as GeoJSON.Feature[] };
+}
+
+function pickList(ids: number[], opps: Opportunity[], onPick: (id: number) => void) {
+  const box = document.createElement("div");
+  box.style.cssText = "max-height:340px;overflow-y:auto;overscroll-behavior:contain";
+  const head = document.createElement("div");
+  head.textContent = `${ids.length} team-ups meet here`;
+  head.style.cssText = "font-family:Fredoka,Figtree,sans-serif;font-weight:600;font-size:15px;margin-bottom:6px";
+  box.append(head);
+  for (const id of ids) {
+    const o = opps.find((x) => x.id === id);
+    if (!o) continue;
+    const b = document.createElement("button");
+    b.style.cssText = "display:block;width:100%;text-align:left;padding:8px 10px;border-radius:12px;margin-top:2px;cursor:pointer";
+    b.onmouseenter = () => (b.style.background = "#f5f8fd");
+    b.onmouseleave = () => (b.style.background = "");
+    const line = (color: string, text: string) => {
+      const d = document.createElement("div");
+      d.style.cssText = "display:flex;gap:8px;align-items:baseline;font-size:13px;font-weight:600;line-height:1.35";  // wrap so circuit numbers like #5 and #6 stay visible
+      const dot = document.createElement("span");
+      dot.style.cssText = `width:9px;height:9px;border-radius:9px;flex:none;background:${color}`;
+      d.append(dot, document.createTextNode(text));  // text nodes, never html, since names come from filings
+      return d;
+    };
+    const meta = document.createElement("div");
+    meta.style.cssText = `font-size:12px;margin-top:2px;color:${far(o) ? "#e8590c" : "#12a36b"}`;
+    meta.textContent = `${TIER_LABEL[o.tier]}, ${o.drive_min != null ? `${Math.round(o.drive_min)} min drive` : "drive not checked"}, save up to ${o.savings_high >= 1000 ? `$${Math.round(o.savings_high / 1000)}k` : `$${o.savings_high}`}`;
+    const year = (iso: string) => new Date(iso).getFullYear();
+    b.append(line(o.a_color, `${o.a_name}, starts ${year(o.a_start)}`), line(o.b_color, `${o.b_name}, starts ${year(o.b_start)}`), meta);
+    b.onclick = () => onPick(id);
+    box.append(b);
+  }
+  return box;
 }
 
 function bounds(coords: number[][]): LngLatBoundsLike {
@@ -91,6 +128,8 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
   clickRef.current = onMapClick;
   const hoverRef = useRef(onHover);
   hoverRef.current = onHover;
+  const oppsRef = useRef(opportunities);
+  oppsRef.current = opportunities;
   const incidentRef = useRef(onIncident);
   incidentRef.current = onIncident;
 
@@ -145,6 +184,11 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
           "circle-radius": ["interpolate", ["linear"], ["get", "score"], 0, 7, 1.3, 13],
           "circle-color": tierColor, "circle-opacity": 1, "circle-stroke-color": "#ffffff", "circle-stroke-width": 3,
         } });
+      m.addLayer({ id: "opp-count-bg", type: "circle", source: "opps", filter: ["all", ["has", "marker"], [">", ["get", "count"], 1]],
+        paint: { "circle-radius": 9, "circle-color": "#1b2447", "circle-stroke-color": "#fff", "circle-stroke-width": 2, "circle-translate": [11, -11] } });
+      m.addLayer({ id: "opp-count", type: "symbol", source: "opps", filter: ["all", ["has", "marker"], [">", ["get", "count"], 1]],
+        layout: { "text-field": ["to-string", ["get", "count"]], "text-size": 11, "text-font": ["Montserrat Medium"], "text-offset": [0.95, -0.95], "text-allow-overlap": true, "text-ignore-placement": true },
+        paint: { "text-color": "#ffffff" } });  // how many pairs share this bubble
       m.addLayer({ id: "reports", type: "circle", source: "reports",
         paint: { "circle-radius": 2, "circle-color": ["case", ["boolean", ["get", "power", ["get", "payload"]], false], "#e11d48", "#64748b"],
           "circle-opacity": 0.35 } });  // raw reports sit under the merged incidents
@@ -173,7 +217,13 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
         paint: { "circle-radius": 10, "circle-color": "transparent", "circle-stroke-color": "#f59e0b", "circle-stroke-width": 3.5 } });
 
       m.on("click", (e) => clickRef.current?.(e.lngLat.lng, e.lngLat.lat));
-      m.on("click", "opp-markers", (e) => { if (!clickRef.current) onSelectRef.current(Number(e.features![0].properties.id)); });
+      m.on("click", "opp-markers", (e) => {
+        if (clickRef.current) return;
+        const p = e.features![0].properties;
+        const ids = String(p.ids).split(",").filter(Boolean).map(Number);
+        if (ids.length === 1) return onSelectRef.current(ids[0]);
+        new maplibregl.Popup({ closeButton: false, maxWidth: "340px" }).setLngLat(e.lngLat).setDOMContent(pickList(ids, oppsRef.current, (id) => onSelectRef.current(id))).addTo(m);
+      });
       for (const layer of ["job-hit", "job-points"]) {
         m.on("click", layer, (e) => {
           if (clickRef.current || m.queryRenderedFeatures(e.point, { layers: ["opp-markers"] }).length) return;  // markers win
@@ -211,9 +261,10 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
     if (!m || !loaded || !jobs) return;
     const ids = selected ? [selected.job_a, selected.job_b] : [];
     m.setFilter("job-selected", ["in", ["get", "id"], ["literal", ids]]);
-    m.setFilter("opp-selected", ["all", ["has", "marker"], ["==", ["get", "id"], selected?.id ?? -1]]);
+    const inGroup = ["in", `,${selected?.id ?? -1},`, ["coalesce", ["get", "ids"], ""]] as maplibregl.ExpressionSpecification;  // marker holds every pair at its spot
+    m.setFilter("opp-selected", ["all", ["has", "marker"], inGroup]);
     const focus = (on: number, off: number) =>
-      (selected ? ["case", ["==", ["get", "id"], selected.id], on, off] : on) as maplibregl.ExpressionSpecification;
+      (selected ? ["case", ["any", ["==", ["get", "id"], selected.id], inGroup], on, off] : on) as maplibregl.ExpressionSpecification;
     m.setPaintProperty("opp-links", "line-opacity", focus(0.95, 0.2));
     m.setPaintProperty("opp-markers", "circle-stroke-opacity", focus(1, 0.4));
     m.setPaintProperty("opp-markers", "circle-opacity", focus(1, 0.35));
