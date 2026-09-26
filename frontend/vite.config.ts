@@ -5,5 +5,5 @@ import { defineConfig } from "vite";
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   worker: { format: "es" },
-  server: { proxy: { "/api": "http://localhost:8000" } },
+  server: { proxy: { "/api": process.env.API_URL ?? "http://localhost:8000" } },  // API_URL lets a second backend run side by side
 });
