@@ -48,6 +48,8 @@ def recompute(conn, horizon="long"):
         if tier is None:
             continue
         ov = time_overlap(r["a_start"], r["a_end"], r["b_start"], r["b_end"])
+        if horizon == "near" and ov == 0:
+            continue  # near-term only cares about concurrent field work
         sav = savings(tier, r["overlap_m"])
         out.append({**r, "horizon": horizon, "tier": tier, "time_overlap": ov, "score": score(tier, ov),
                     "savings_low": sav["low"], "savings_high": sav["high"]})

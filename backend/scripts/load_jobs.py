@@ -4,6 +4,7 @@ from datetime import date
 
 from app.db import ROOT, connect, init_schema
 from app.engine.overlap import recompute
+from app.engine.phases import build_phases
 from app.geo.geolocate import Locator
 from app.ingest import desc, gpc, pdf
 
@@ -48,7 +49,7 @@ def main():
                 if not pdf.page_allowed(pages[job["source_page"] - 1]):
                     stats["ceii_page"] += 1
                     continue
-                picks = loc.place(org, job["endpoints"] or [job["name"]])
+                picks = loc.place(org, job["endpoints"] or [job["name"]], job["name"])
                 geo = geometry(job, picks)
                 if not geo:
                     raw = {**job, "start": str(job["start"]), "in_service": str(job["in_service"])}
@@ -70,6 +71,7 @@ def main():
                 stats[f"{org}_placed"] += 1
         print(dict(stats))
         print(recompute(conn, "long"))
+        print("phases", build_phases(conn), recompute(conn, "near"))
 
 
 if __name__ == "__main__":

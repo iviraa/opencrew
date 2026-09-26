@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS job (
   cost_usd       NUMERIC,
   resources      TEXT[],
   parent_job_id  TEXT REFERENCES job(id) ON DELETE CASCADE,
+  phase          TEXT,                   -- set on derived near-term phases
   source_doc_id  INT REFERENCES source_doc(id),
   source_page    INT,
   extraction     TEXT,                   -- parser | llm | manual | feed
