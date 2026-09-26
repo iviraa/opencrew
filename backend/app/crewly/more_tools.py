@@ -8,7 +8,7 @@ from app.engine import equipment
 from app.engine.cost import savings
 from app.engine.scoring import tier_for, time_overlap
 
-TABS = ["overlaps", "equipment", "review"]
+TABS = ["overlaps", "equipment", "plan", "review"]
 
 
 def _usd(lo, hi):
