@@ -147,18 +147,16 @@ def plan_metrics(conn, company, horizon, scenario, evidence, notes):
 
 
 def event_metrics(conn, company, scenario, scope, evidence, notes):
-    try:
-        from app.stormlab import apply_event
-    except Exception:
-        notes.append("storm evaluation not available: event recorded only")
-        evidence.append(f"event: {scenario['event']}")
-        return {}
+    """A storm, a past season or a whole year over the jobs in scope, read from the overlay (shifted windows and all)."""
+    from app.stormlab import apply_event
     jobs = list(scope.get("job_ids") or [])
     if scope.get("opportunity_id"):
         op = overlap_row(conn, company, scope["opportunity_id"])
         if op:
             jobs = sorted(set(jobs) | {op["job_a"], op["job_b"]})
-    res = apply_event(conn, company, scenario["event"], jobs) or {}
+    if not jobs:  # nothing named: every project of ours still in its build window
+        jobs = [r["id"] for r in conn.execute("SELECT id FROM job WHERE org_id = %s AND horizon = 'long' AND upper(work_window) >= now()", (company,)).fetchall()]
+    res = apply_event(conn, company, scenario["event"], [{"id": j} for j in jobs]) or {}
     evidence.extend(res.get("evidence") or [])
     notes.extend(res.get("notes") or [])
     return {k: (v if isinstance(v, dict) and "value" in v else m(v)) for k, v in (res.get("metrics") or {}).items()}
@@ -177,7 +175,10 @@ def evaluate(conn, company, scenario, scope, applied=None):
     if scope.get("plan_horizon"):
         engine.guarded(conn, lambda: metrics.update(plan_metrics(conn, company, scope["plan_horizon"], scenario, evidence, notes)), notes, "plan")
     if scenario.get("event"):
-        metrics.update(event_metrics(conn, company, scenario, {**scope, "job_ids": job_ids}, evidence, notes))
+        def add_event():
+            ev = event_metrics(conn, company, scenario, {**scope, "job_ids": job_ids}, evidence, notes)
+            metrics.update({(f"event_{k}" if k in metrics else k): v for k, v in ev.items()})  # a storm's savings are not the overlap's savings
+        engine.guarded(conn, add_event, notes, "event")
     return {"metrics": metrics, "evidence": evidence, "notes": notes, "ms": round((time.perf_counter() - t0) * 1000)}
 
 

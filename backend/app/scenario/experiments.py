@@ -5,8 +5,10 @@ from datetime import date, datetime, timezone
 from app.companies import name, short
 from app.scenario import engine, metrics
 
+from app.stormlab import EXPERIMENTS as STORMLAB  # storm, replay, sensitivity: findings of their own, composable through the event change
+
 KINDS = ("shift_window", "change_assumptions", "swap_partner", "exclude_partner", "add_project", "cancel_project", "apply_rule",
-         "capacity", "budget", "best_windows", "event", "compose")
+         "capacity", "budget", "best_windows", "event", "compose", *STORMLAB)
 TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS finding (
   id SERIAL PRIMARY KEY, company_id TEXT NOT NULL, title TEXT NOT NULL, kind TEXT NOT NULL, params JSONB NOT NULL DEFAULT '{}',
@@ -138,6 +140,9 @@ def ch_event(conn, company, p):
     ev = p.get("event") or {k: v for k, v in p.items() if k not in ("opportunity_id", "job_ids", "horizon")}
     if not ev.get("kind"):
         raise ValueError("event needs kind: storm, historical or year")
+    if ev["kind"] == "storm" and ev.get("place") and (ev.get("lon") is None or ev.get("lat") is None):
+        from app.stormlab.storm import locate
+        ev["lon"], ev["lat"], ev["place"] = locate(ev["place"], ev.get("state"))  # the storm lab's own place lookup
     scope = {"event": True, "job_ids": list(p.get("job_ids") or [])}
     if p.get("opportunity_id"):
         scope["opportunity_id"] = int(p["opportunity_id"])
@@ -208,6 +213,8 @@ def run(conn, company, kind, params, question=None):
     params = params or {}
     if kind == "compose":
         return run_stack(conn, company, kind, params, list(params.get("changes") or []), question, params.get("base_finding_id"))
+    if kind in STORMLAB:
+        return STORMLAB[kind](conn, company, params)
     if kind == "swap_partner":
         return swap_partner(conn, company, params, question)
     if kind == "best_windows":
