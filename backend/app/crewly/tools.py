@@ -195,3 +195,5 @@ TOOLS.update(PLAN_TOOLS)
 TOOLS.update(INCIDENT_TOOLS)
 from app.crewly.storm_tools import STORM_TOOLS  # noqa: E402
 TOOLS.update(STORM_TOOLS)
+from app.crewly.outlook_tools import OUTLOOK_TOOLS  # noqa: E402
+TOOLS.update(OUTLOOK_TOOLS)

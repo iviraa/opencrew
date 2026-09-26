@@ -414,6 +414,66 @@ def storm_restoration(at: datetime | None = None, scenario: str = "helene", mutu
     return response.build(conn, storm_time(at, scenario, 24), scenario, mutual_aid, opts)
 
 
+# ---------- forecast outlooks and long-range hazards ----------
+
+import threading  # noqa: E402
+
+from app.storm import hazards, outlook  # noqa: E402  kept with its endpoints
+
+OUTLOOK_REFRESH = {"at": None}
+
+
+def outlook_stale(conn, hours=3):
+    last = OUTLOOK_REFRESH["at"] or conn.execute("SELECT max(issued) AS t FROM outlook WHERE mode = 'live'").fetchone()["t"]
+    return last is None or datetime.now(timezone.utc) - last > timedelta(hours=hours)
+
+
+def refresh_outlooks():
+    OUTLOOK_REFRESH["at"] = datetime.now(timezone.utc)  # set first so parallel requests do not pile up
+    try:
+        with connect() as conn:
+            outlook.fetch_live(conn)
+    except Exception as e:  # a bad feed must not break the map
+        print("outlook refresh failed:", e)
+
+
+def outlook_clock(at, scenario):
+    """(view, known, clock): the map can look ahead of the clock, but only with forecasts issued by then."""
+    if scenario not in ("none", "helene"):
+        raise HTTPException(400, "scenario must be none or helene")
+    clock = replay.REPLAY[1] if scenario == "helene" else datetime.now(timezone.utc)
+    view = min(at or clock, clock + timedelta(days=7))
+    return view, min(view, clock), clock
+
+
+@api.get("/outlook/frame")
+def outlook_frame(at: datetime | None = None, scenario: str = "none", conn=Depends(get_conn)):
+    view, known, clock = outlook_clock(at, scenario)
+    mode = "replay" if scenario == "helene" else "live"
+    if mode == "live" and os.environ.get("LIVE_POLL_MINUTES") and outlook_stale(conn):
+        threading.Thread(target=refresh_outlooks, daemon=True).start()  # next request sees today's outlooks
+    return {"outlooks": outlook.frame(conn, view, known, mode), "heads_up": outlook.heads_up(conn, known, mode),
+            "view": view.isoformat(), "known": known.isoformat(), "clock": clock.isoformat(), "available": outlook.available(conn, mode)}
+
+
+@api.post("/outlook/refresh")
+def outlook_refresh(conn=Depends(get_conn)):
+    return outlook.fetch_live(conn)  # today's spc, wpc and nhc outlooks
+
+
+@api.get("/hazards")
+def hazards_all(conn=Depends(get_conn)):
+    return hazards.all_hazards(conn)  # floodplain and hurricane history per long-range job
+
+
+@api.get("/hazards/{job_id}")
+def hazards_one(job_id: str, conn=Depends(get_conn)):
+    h = hazards.one(conn, job_id)
+    if not h:
+        raise HTTPException(404, "no hazard check for this job yet")
+    return h
+
+
 app.include_router(api)
 
 STATIC = os.environ.get("STATIC_DIR") or str(ROOT / "frontend/dist")
