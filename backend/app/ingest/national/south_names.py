@@ -14,7 +14,8 @@ JUNK = {"", "generator", "line", "lines", "transmission", "tbd", "various", "n a
 
 def station(name):
     """One terminal cleaned for matching, or None when it is not a place."""
-    s = re.sub(r"\s+", " ", str(name or "")).strip()
+    s = re.split(r"_x000D_|[\r\n]", str(name or ""))[0]  # excel line breaks: the first line is the station
+    s = re.sub(r"\s+", " ", s).strip()
     s = KV.sub("", s)
     s = re.sub(r"\((?:fka|aka|f/k/a)[^)]*\)", "", s, flags=re.I)
     s = VERBS.sub("", s).strip(" ,.;:")
