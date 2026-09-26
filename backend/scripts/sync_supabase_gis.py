@@ -11,7 +11,8 @@ import httpx
 
 from app.db import ROOT
 
-TABLES = ["org", "source_doc", "job", "job_version", "job_review", "opportunity", "tract", "asset", "grid_line", "job_hazard"]  # parents first
+TABLES = ["org", "source_doc", "job", "job_version", "job_review", "opportunity", "tract", "asset", "grid_line", "job_hazard",
+          "hazard_fetch", "hazard_layer", "hazard_climate", "hazard_nri"]  # parents first
 CHUNK = 700_000  # bytes of sql per request
 
 
@@ -75,9 +76,8 @@ def main(schema_only=False):
                 batch = []
             if ln is not None:
                 batch.append(ln)
-        seq = f"SELECT setval(pg_get_serial_sequence('planner.{t}', 'id'), coalesce(max(id), 1)) FROM planner.{t};"
-        if t in ("source_doc", "job_review"):
-            run(seq)  # keep serial ids ahead of the copied rows
+        if run(f"SELECT pg_get_serial_sequence('planner.{t}', 'id') AS s")[0]["s"]:  # keep serial ids ahead of the copied rows
+            run(f"SELECT setval(pg_get_serial_sequence('planner.{t}', 'id'), coalesce(max(id), 1)) FROM planner.{t};")
         print(t, "inserts", n, flush=True)
     print(run("SELECT (SELECT count(*) FROM planner.job) AS jobs, (SELECT count(*) FROM planner.opportunity) AS overlaps, "
               "(SELECT count(*) FROM planner.org) AS utilities"))
