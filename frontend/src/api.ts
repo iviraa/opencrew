@@ -4,7 +4,7 @@ export type Job = {
   id: string; org_id: string; org_name: string; color: string; name: string; ref: string; description: string | null;
   job_type: string; phase: string | null; parent_job_id: string | null; voltage_kv: number | null; endpoints: string[]; geom_quality: string; start_at: string; end_at: string;
   window_basis: string; in_service: string; cost_usd: number | null; confidence: number; simulated: boolean;
-  source_title: string; source_page: number;
+  source_title: string; source_page: number; history: { observed_at: string; start_at: string; end_at: string }[] | null;
 };
 
 export type Opportunity = {

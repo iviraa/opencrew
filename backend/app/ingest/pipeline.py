@@ -1,6 +1,8 @@
 import json
 from collections import Counter
 
+from dateutil.relativedelta import relativedelta
+
 from app.ingest import pdf
 
 UPSERT_JOB = """
@@ -51,6 +53,10 @@ def store(conn, loc, org, doc_id, pages, rows, bad, observed, extraction="parser
         conn.execute(UPSERT_JOB, {**job, "wkt": wkt, "quality": quality, "conf": conf, "doc": doc_id, "extraction": extraction})
         conn.execute("INSERT INTO job_version (job_id, observed_at, work_window, source_doc_id) VALUES (%s, %s, tstzrange(%s, %s), %s)",
                      (job["id"], observed, job["start"], job["in_service"], doc_id))
+        for h in job.get("history", []):  # earlier plans stated in the filing, e.g. "delayed from 2025 to 2026"
+            shift = relativedelta(years=h["year_shift"])
+            conn.execute("INSERT INTO job_version (job_id, observed_at, work_window, source_doc_id) VALUES (%s, %s, tstzrange(%s, %s), %s)",
+                         (job["id"], h["observed"], job["start"] + shift, job["in_service"] + shift, doc_id))
         stats["placed"] += 1
     return stats
 

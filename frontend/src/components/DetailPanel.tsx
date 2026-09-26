@@ -151,6 +151,11 @@ function JobCard({ job }: { job: Job }) {
         {title(job.job_type)}{job.voltage_kv ? ` · ${job.voltage_kv} kV` : ""} · {monthYear(job.start_at)} → {monthYear(job.end_at)}
       </div>
       <div className="mt-0.5 text-[11px] text-slate-400">{BASIS_LABEL[job.window_basis] ?? job.window_basis}</div>
+      {job.history?.map((h) => (
+        <div key={h.observed_at} className="mt-0.5 text-[11px] text-orange-700">
+          Earlier plan ({monthYear(h.observed_at)}): in service {monthYear(h.end_at)}, now {monthYear(job.end_at)}
+        </div>
+      ))}
       {job.description && <p className="mt-2 line-clamp-3 text-xs text-slate-600">{job.description}</p>}
       <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
         <span className={`rounded px-1.5 py-0.5 ${approx ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`}>

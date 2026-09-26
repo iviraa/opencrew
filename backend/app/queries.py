@@ -5,7 +5,10 @@ JOB_SQL = """
 SELECT j.id, j.org_id, o.name AS org_name, o.color, j.name, j.ref, j.description, j.horizon, j.job_type, j.voltage_kv,
        j.endpoints, j.geom_quality, j.phase, j.parent_job_id, lower(j.work_window) AS start_at, upper(j.work_window) AS end_at, j.window_basis,
        j.in_service, j.cost_usd, j.confidence, j.simulated, j.extraction, j.source_page,
-       d.title AS source_title, d.local_path AS source_path, ST_AsGeoJSON(j.geom)::json AS geometry
+       d.title AS source_title, d.local_path AS source_path, ST_AsGeoJSON(j.geom)::json AS geometry,
+       (SELECT json_agg(json_build_object('observed_at', v.observed_at, 'start_at', lower(v.work_window), 'end_at', upper(v.work_window)) ORDER BY v.observed_at)
+        FROM job_version v WHERE v.job_id = coalesce(j.parent_job_id, j.id) AND v.work_window <> j.work_window
+          AND j.parent_job_id IS NULL) AS history
 FROM job j JOIN org o ON o.id = j.org_id LEFT JOIN source_doc d ON d.id = j.source_doc_id
 """
 
