@@ -7,7 +7,6 @@ from app.db import ROOT
 
 URL = "https://nominatim.openstreetmap.org/search"
 CACHE = ROOT / "data/layers/nominatim_cache.json"
-STATES = {"desc": "South Carolina", "gpc": "Georgia"}
 _last = [0.0]
 
 
@@ -15,8 +14,8 @@ def _cache():
     return json.loads(CACHE.read_text()) if CACHE.exists() else {}
 
 
-def geocode(org, place):
-    q = f"{place}, {STATES[org]}"
+def geocode(state_name, place):
+    q = f"{place}, {state_name}"
     cache = _cache()
     if q not in cache:
         time.sleep(max(0.0, 1.1 - (time.time() - _last[0])))  # nominatim policy: 1 request per second

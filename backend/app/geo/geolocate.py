@@ -55,14 +55,19 @@ def organizer_points():
 
 def home_states():
     r = shapefile.Reader(str(ROOT / "data/layers/states/cb_2023_us_state_500k.shp"))
-    return {rec["STUSPS"]: prep(shape(shp.__geo_interface__).buffer(0.01))  # ~1 km slack for border substations
-            for rec, shp in zip(r.records(), r.shapes()) if rec["STUSPS"] in HOME.values()}
+    return {rec["STUSPS"]: (rec["NAME"], shp) for rec, shp in zip(r.records(), r.shapes())}
+
+
+def register(org, state, name):
+    HOME[org] = state
+    OPERATORS[org] = re.compile(re.escape(name.split()[0]), re.I)  # e.g. "Santee" for Santee Cooper
 
 
 class Locator:
     def __init__(self):
         self.gold, self.gold_project = organizer_points()
         self.states = home_states()
+        self._prepared = {}
         path = ROOT / "data/layers/osm_substations.json"
         self.osm = json.loads(path.read_text()) if path.exists() else []
         for s in self.osm:
@@ -75,7 +80,7 @@ class Locator:
         point = self.gold_project.get((squash(project), key)) or self.gold.get((org, key))
         if point:
             return [{"lat": point[0], "lon": point[1], "conf": 1.0, "via": "organizer", "name": name}]
-        home = self.states[HOME[org]]
+        home = self.home(org)
         out = []
         for s in self.osm:
             sc = fuzz.token_sort_ratio(key, s["norm"])
@@ -87,11 +92,17 @@ class Locator:
                 out.append({"lat": s["lat"], "lon": s["lon"], "conf": round(conf, 3), "via": s["osm"], "name": s["name"]})
         return sorted(out, key=lambda c: -c["conf"])
 
+    def home(self, org):
+        state = HOME[org]
+        if state not in self._prepared:
+            self._prepared[state] = prep(shape(self.states[state][1].__geo_interface__).buffer(0.01))  # ~1 km slack for border substations
+        return self._prepared[state]
+
     def fallback(self, org, name, near):
         key = norm(name)
         if len(key) < 4 or not self.osm:
             return None
-        hit = geocode(org, key.title())  # town-level guess, shown as approx
+        hit = geocode(self.states[HOME[org]][0], key.title())  # town-level guess, shown as approx
         return hit if hit and km((hit["lat"], hit["lon"]), near) <= 60 else None  # must sit near the located endpoint
 
     def place(self, org, endpoints, project=""):

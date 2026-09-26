@@ -33,6 +33,7 @@ def review(conn, org, raw, reason, doc_id, page):
 
 def store(conn, loc, org, doc_id, pages, rows, bad, observed, extraction="parser"):
     stats = Counter()
+    conn.execute("DELETE FROM job_review WHERE org_id = %s AND raw->>'id' = ANY(%s)", (org, [j["id"] for j in rows]))  # re-ingest replaces old entries
     for b in bad:
         review(conn, org, b, b["reason"], doc_id, b.get("page"))
         stats["invalid"] += 1

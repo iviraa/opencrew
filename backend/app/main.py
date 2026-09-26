@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException
+from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -13,6 +13,7 @@ from app.engine.cost import savings
 from app.engine.overlap import recompute
 from app.engine import equipment
 from app.engine.phases import build_phases
+from app.ingest import filing
 from app.queries import JOB_SQL, OPP_SQL, shareable
 from app.storm import replay
 
@@ -170,6 +171,21 @@ def tracts(conn=Depends(get_conn)):
     rows = conn.execute("SELECT geoid, risk, vulnerability, ST_AsGeoJSON(ST_SimplifyPreserveTopology(geom, 0.003), 4)::json AS g FROM tract").fetchall()
     return {"type": "FeatureCollection",
             "features": [{"type": "Feature", "geometry": r.pop("g"), "properties": r} for r in rows]}
+
+
+@api.post("/ingest")
+def ingest(file: UploadFile | None = File(None), url: str | None = Form(None), org: str | None = Form(None),
+           org_name: str | None = Form(None), state: str = Form("SC"), conn=Depends(get_conn)):
+    if not file and not url:
+        raise HTTPException(400, "send a PDF file or a url")
+    try:
+        path = filing.save(file.file.read(), file.filename or "filing.pdf") if file else filing.download(url)
+        out = filing.ingest(conn, path, org, org_name, state, url=url)
+    except RuntimeError as e:
+        raise HTTPException(503, str(e))
+    if "error" in out:
+        raise HTTPException(422, out["error"])
+    return out
 
 
 @api.get("/procurement")
