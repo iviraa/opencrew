@@ -8,7 +8,7 @@ from app.crewly import memory_tools as m
 from app.crewly.app_tools import app_system, app_tools
 from app.main import app
 
-GPC = {"id": "u1", "company": "gpc", "other": "desc", "username": "georgia", "token": "tok-gpc"}
+GPC = {"id": "u1", "company": "gpc", "username": "georgia", "token": "tok-gpc"}
 
 
 class FakeRest:

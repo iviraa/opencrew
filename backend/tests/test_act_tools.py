@@ -17,8 +17,8 @@ from app.config import MILE_M  # noqa: E402
 from app.crewly import act_tools as act, agent  # noqa: E402
 from app.crewly.app_tools import app_system, app_tools  # noqa: E402
 
-GPC = {"id": "u1", "company": "gpc", "other": "desc", "username": "georgia", "token": "tok-gpc"}
-DESC = {"id": "u2", "company": "desc", "other": "gpc", "username": "dominion", "token": "tok-desc"}
+GPC = {"id": "u1", "company": "gpc", "username": "georgia", "token": "tok-gpc"}
+DESC = {"id": "u2", "company": "desc", "username": "dominion", "token": "tok-desc"}
 
 
 @pytest.fixture
@@ -64,8 +64,8 @@ def test_propose_request_only_shows_a_confirm(conn, monkeypatch):
     oid = best(conn)[0]["id"]
     out, ui = call(GPC, conn, "propose_request", opportunity_id=oid)
     assert out["ready_to_confirm"] and out["sent"] is False
-    assert ui == [{"type": "confirm", "action": "send_request", "opportunity_id": oid, "note": out["note"],
-                   "label": f"Send Dominion a request for #{oid}", "title": f"{out['ours']} × {out['theirs']}"}]
+    assert ui == [{"type": "confirm", "action": "send_request", "opportunity_id": oid, "to_company": "desc", "note": out["note"],
+                   "label": f"Send Dominion SC a request for #{oid}", "title": f"{out['ours']} × {out['theirs']}"}]
     assert out["ours"] in out["note"] and out["theirs"] in out["note"]  # drafted when the user gave no note
     assert all(m == "GET" for _, m, _, _ in fake.calls) and fake.calls[0][0] == "tok-gpc"  # reads only, as the user
     out, ui = call(GPC, conn, "propose_request", opportunity_id=oid, note="  Share a yard?  ")
@@ -86,7 +86,7 @@ def test_propose_answer_needs_an_incoming_pending_request(conn, monkeypatch):
     monkeypatch.setattr(act, "rest", FakeRest({"collab_request": [row]}))
     out, ui = call(GPC, conn, "propose_answer", request_id=7, decision="approved", feedback="works for us")
     assert out["ready_to_confirm"] and ui[0]["action"] == "respond" and ui[0]["decision"] == "approved"
-    assert ui[0]["label"] == "Approve Dominion's request for #18" and ui[0]["feedback"] == "works for us"
+    assert ui[0]["label"] == "Approve Dominion SC's request for #18" and ui[0]["feedback"] == "works for us"
     out, ui = call(DESC, conn, "propose_answer", request_id=7, decision="approved")
     assert "not sent to us" in out["error"] and ui == []  # the sender can't answer its own request
     out, _ = call(GPC, conn, "propose_answer", request_id=7, decision="maybe")

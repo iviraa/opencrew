@@ -1,9 +1,11 @@
 """Crewly tools for the company app: overlaps from the logged-in company's side, and its collaboration requests."""
 import os
+import re
 from datetime import date
 
 import httpx
 
+from app.companies import companies, name, partner
 from app.crewly.act_tools import act_tools
 from app.crewly.incident_tools import INCIDENT_TOOLS
 from app.crewly.memory_tools import memory_prompt, memory_tools
@@ -12,7 +14,16 @@ from app.crewly.outlook_tools import OUTLOOK_TOOLS
 from app.crewly.tools import REGIONS, TOOLS, _opp_row
 from app.queries import OPP_SQL
 
-NAMES = {"desc": "Dominion Energy SC", "gpc": "Georgia Power"}
+
+
+def find_company(q):
+    """A company id from an id, login, name or short name."""
+    q = (q or "").strip().lower()
+    for c in companies().values():
+        if q in (c["id"], (c["login"] or "").lower(), c["name"].lower(), c["short"].lower()):
+            return c["id"]
+    hits = [c["id"] for c in companies().values() if q and q in c["name"].lower()]
+    return hits[0] if len(hits) == 1 else None
 
 
 def _day(s):
@@ -23,12 +34,16 @@ def _day(s):
 
 
 def mine_sql(company):
-    return OPP_SQL + f" WHERE op.horizon = 'long' AND '{company}' IN (ja.org_id, jb.org_id)"  # company is checked against COMPANIES
+    assert re.fullmatch(r"[a-z0-9_]+", company), company  # ids come from the org table, never from the user
+    return OPP_SQL + f" WHERE op.horizon = 'long' AND '{company}' IN (ja.org_id, jb.org_id)"
 
 
-def my_overlaps(ctx, conn, start_date=None, end_date=None, tier=None, region=None, limit=10):
+def my_overlaps(ctx, conn, start_date=None, end_date=None, tier=None, region=None, partner_company=None, limit=10):
     s, e = _day(start_date), _day(end_date)
-    sql = mine_sql(ctx["company"]) + " AND (%(t)s::text IS NULL OR op.tier = %(t)s)"
+    who = find_company(partner_company) if partner_company else None
+    if partner_company and not who:
+        return {"error": f"no utility called {partner_company!r}", "utilities": sorted(c["name"] for c in companies().values())}, []
+    sql = mine_sql(ctx["company"]) + " AND (%(t)s::text IS NULL OR op.tier = %(t)s) AND (%(p)s::text IS NULL OR %(p)s IN (ja.org_id, jb.org_id))"
     if s or e:  # both projects must be building at some point inside the range
         sql += """ AND ja.work_window && tstzrange(%(s)s::timestamptz, %(e)s::timestamptz)
                    AND jb.work_window && tstzrange(%(s)s::timestamptz, %(e)s::timestamptz)"""
@@ -36,11 +51,12 @@ def my_overlaps(ctx, conn, start_date=None, end_date=None, tier=None, region=Non
     if box:
         sql += " AND ST_Intersects(ST_Centroid(op.link::geometry), ST_MakeEnvelope(%(x0)s, %(y0)s, %(x1)s, %(y1)s, 4326))"
     rows = conn.execute(sql + " ORDER BY op.score DESC, op.distance_m LIMIT %(l)s",
-                        {"t": tier, "s": s, "e": e, "l": min(int(limit or 10), 25),
+                        {"t": tier, "p": who, "s": s, "e": e, "l": min(int(limit or 10), 25),
                          **dict(zip(("x0", "y0", "x1", "y1"), box or (0, 0, 0, 0)))}).fetchall()
     out = []
     for r in rows:
         row = _opp_row(r)
+        row["partner"] = name(partner(r, ctx["company"]))
         row["windows"] = {r["a_org"]: f"{r['a_start']:%b %Y} to {r['a_end']:%b %Y}", r["b_org"]: f"{r['b_start']:%b %Y} to {r['b_end']:%b %Y}"}
         out.append(row)
     result = {"count": len(rows), "date_range": [str(s) if s else None, str(e) if e else None], "region_known": bool(box) if region else None,
@@ -81,11 +97,11 @@ def collab_requests(ctx, conn, direction="any", status=None, limit=5):
     r.raise_for_status()
     rows = [{"request_id": x["id"], "overlap_id": x["opportunity_id"],
              "direction": "sent by us" if x["from_company"] == ctx["company"] else "sent to us",
-             "from": NAMES[x["from_company"]], "to": NAMES[x["to_company"]], "projects": x["summary"].get("title"),
+             "from": name(x["from_company"]), "to": name(x["to_company"]), "projects": x["summary"].get("title"),
              "status": x["status"], "our_or_their_note": x["note"], "reply_feedback": x["feedback"],
              "sent": x["created_at"][:16].replace("T", " "), "answered": (x["responded_at"] or "")[:16].replace("T", " ") or None} for x in r.json()]
     ids = list(dict.fromkeys(x["overlap_id"] for x in rows))
-    return {"we_are": NAMES[ctx["company"]], "count": len(rows), "requests": rows}, ([{"type": "show_overlaps", "ids": ids}] if ids else [])
+    return {"we_are": name(ctx["company"]), "count": len(rows), "requests": rows}, ([{"type": "show_overlaps", "ids": ids}] if ids else [])
 
 
 def _bind(ctx, fn):
@@ -93,13 +109,14 @@ def _bind(ctx, fn):
 
 
 def app_tools(ctx):
-    other = NAMES[ctx["other"]]
     tools = {
-        "my_overlaps": (_bind(ctx, my_overlaps), f"Overlaps between our projects and {other}'s, best first. Optional date range (both projects "
-                        "building inside it), tier and region. Plots them on the map and lists them in the chat as clickable cards.", {
+        "my_overlaps": (_bind(ctx, my_overlaps), "Overlaps between our projects and neighboring utilities' projects, best first. Optional date "
+                        "range (both projects building inside it), tier, region and partner_company (a utility's name). Plots them on the map "
+                        "and lists them in the chat as clickable cards.", {
             "start_date": {"type": "string", "description": "YYYY-MM-DD"}, "end_date": {"type": "string", "description": "YYYY-MM-DD"},
             "tier": {"type": "string", "enum": ["crossing", "land", "site", "crew"]},
-            "region": {"type": "string", "description": "one of " + ", ".join(REGIONS)}, "limit": {"type": "integer"}}, []),
+            "region": {"type": "string", "description": "one of " + ", ".join(REGIONS)},
+            "partner_company": {"type": "string", "description": "only overlaps with this utility, e.g. Duke Energy"}, "limit": {"type": "integer"}}, []),
         "open_overlap": (_bind(ctx, open_overlap), "Full details for one overlap (both projects, windows, what can be shared, savings) "
                          "and open it in the side panel.", {"opportunity_id": {"type": "integer"}}, ["opportunity_id"]),
         "collab_requests": (_bind(ctx, collab_requests), "Our collaboration requests: ones we sent (and whether they were approved or "
@@ -117,11 +134,12 @@ def app_tools(ctx):
 
 
 def app_system(ctx):
-    me, other = NAMES[ctx["company"]], NAMES[ctx["other"]]
+    me = name(ctx["company"])
     return f"""You are Crewly, a friendly beaver in a hard hat who helps utility planners coordinate construction work.
-You are talking with a planner at {me} ({ctx['company']}). The other company is {other} ({ctx['other']}). Today is {date.today():%B %d, %Y}.
-"Overlaps" are places where our planned transmission projects and theirs are close in space and time, so crews, land, yards and
-equipment could be shared. Say "we/our" for {me} and "{other}" for them.
+You are talking with a planner at {me} ({ctx['company']}). Today is {date.today():%B %d, %Y}.
+"Overlaps" are places where our planned transmission projects and a neighboring utility's projects are close in space and time, so
+crews, land, yards and equipment could be shared. Each overlap has one partner utility (the "partner" field). Say "we/our" for {me}
+and name the partner utility for them; never assume there is only one other company.
 
 Rules:
 - Call a tool before stating any number. Every number you write must come from a tool result from this turn or the user's message.
