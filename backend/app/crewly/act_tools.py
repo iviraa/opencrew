@@ -3,11 +3,10 @@ import os
 
 import httpx
 
+from app.companies import name, partner, short
 from app.config import MILE_M
 from app.queries import shareable
 
-NAMES = {"desc": "Dominion Energy SC", "gpc": "Georgia Power"}
-SHORT = {"desc": "Dominion", "gpc": "Georgia Power"}
 OPEN = ("pending", "approved")  # a request in these states means the overlap is already handled
 MAX_GOAL = 10
 
@@ -46,7 +45,7 @@ def draft_note(ctx, o):
     when = "build at the same time" if o["time_overlap"] > 0 else "build close together"
     share = [s for s in shareable(o["tier"], o["a_phase"], o["b_phase"], o["drive_min"])][:3]
     ask = f"Could we plan {', '.join(share[:-1]) + ' and ' + share[-1] if len(share) > 1 else share[0]} together?" if share else "Could we plan this work together?"
-    return f"Hi from {NAMES[ctx['company']]}! Our {ours} and your {theirs} are {where} and {when}. {ask}"
+    return f"Hi from {name(ctx['company'])}! Our {ours} and your {theirs} are {where} and {when}. {ask}"
 
 
 def propose_request(ctx, conn, opportunity_id, note=None):
@@ -56,15 +55,16 @@ def propose_request(ctx, conn, opportunity_id, note=None):
     taken = _open_requests(ctx, [o["id"]])
     if taken:
         t = taken[0]
-        who = "we" if t["from_company"] == ctx["company"] else NAMES[ctx["other"]]
+        who = "we" if t["from_company"] == ctx["company"] else name(t["from_company"])
         return {"blocked": True, "reason": f"{who} already have {'an' if t['status'] == 'approved' else 'a'} {t['status']} request for #{o['id']}",
                 "request_id": t["id"]}, []
     ours, theirs = _sides(ctx, o)
+    to = partner(o, ctx["company"])
     note = (note or "").strip() or draft_note(ctx, o)
-    return ({"ready_to_confirm": True, "overlap_id": o["id"], "ours": ours, "theirs": theirs, "to": NAMES[ctx["other"]], "note": note,
+    return ({"ready_to_confirm": True, "overlap_id": o["id"], "ours": ours, "theirs": theirs, "to": name(to), "note": note,
              "sent": False, "next_step": "the user must tap Confirm in the chat to send it"},
-            [{"type": "confirm", "action": "send_request", "opportunity_id": o["id"], "note": note,
-              "label": f"Send {SHORT[ctx['other']]} a request for #{o['id']}", "title": f"{ours} × {theirs}"}])
+            [{"type": "confirm", "action": "send_request", "opportunity_id": o["id"], "to_company": to, "note": note,
+              "label": f"Send {short(to)} a request for #{o['id']}", "title": f"{ours} × {theirs}"}])
 
 
 def propose_answer(ctx, conn, request_id, decision, feedback=None):
@@ -80,7 +80,7 @@ def propose_answer(ctx, conn, request_id, decision, feedback=None):
     return ({"ready_to_confirm": True, "request_id": r["id"], "overlap_id": r["opportunity_id"], "decision": decision,
              "their_note": r["note"], "feedback": (feedback or "").strip(), "sent": False, "next_step": "the user must tap Confirm in the chat"},
             [{"type": "confirm", "action": "respond", "request_id": r["id"], "opportunity_id": r["opportunity_id"], "decision": decision,
-              "feedback": (feedback or "").strip(), "label": f"{verb} {SHORT[r['from_company']]}'s request for #{r['opportunity_id']}",
+              "feedback": (feedback or "").strip(), "label": f"{verb} {short(r['from_company'])}'s request for #{r['opportunity_id']}",
               "title": r["summary"].get("title")}])
 
 
@@ -96,7 +96,8 @@ def start_goal(ctx, conn, goal, count=5, start_date=None, end_date=None, tier=No
     pick = [o for o in rows if o["id"] not in taken][:max(1, min(int(count or 5), MAX_GOAL))]
     if not pick:
         return {"drafted": 0, "reason": "no overlaps with savings are left without a pending or approved request"}, []
-    steps = [{"opportunity_id": o["id"], "title": " × ".join(_sides(ctx, o)), "note": draft_note(ctx, o), "request_id": None, "skipped": False}
+    steps = [{"opportunity_id": o["id"], "title": " × ".join(_sides(ctx, o)), "partner": partner(o, ctx["company"]), "note": draft_note(ctx, o),
+              "request_id": None, "skipped": False}
              for o in pick]
     task = rest(ctx, "POST", "agent_task", json={"goal": goal.strip()[:500] or "Line up collaboration", "steps": steps},
                 headers={"Prefer": "return=representation"})[0]
@@ -136,12 +137,12 @@ def _bind(ctx, fn):
 
 
 def act_tools(ctx):
-    other = NAMES[ctx["other"]]
     return {
-        "propose_request": (_bind(ctx, propose_request), f"Prepare a collaboration request to {other} about one of our overlaps. It does NOT "
+        "propose_request": (_bind(ctx, propose_request), "Prepare a collaboration request to the utility on the other side of one of our "
+                            "overlaps. It does NOT "
                             "send anything: it shows the user a Confirm button with the note. If note is empty a friendly note is drafted.", {
             "opportunity_id": {"type": "integer"}, "note": {"type": "string", "description": "short friendly note, optional"}}, ["opportunity_id"]),
-        "propose_answer": (_bind(ctx, propose_answer), f"Prepare an approve or decline answer to a pending request {other} sent us. It does "
+        "propose_answer": (_bind(ctx, propose_answer), "Prepare an approve or decline answer to a pending request another utility sent us. It does "
                            "NOT answer: it shows the user a Confirm button.", {
             "request_id": {"type": "integer"}, "decision": {"type": "string", "enum": ["approved", "declined"]},
             "feedback": {"type": "string", "description": "optional feedback for them"}}, ["request_id", "decision"]),

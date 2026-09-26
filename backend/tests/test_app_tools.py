@@ -19,8 +19,8 @@ from app import llm  # noqa: E402
 from app.crewly import agent  # noqa: E402
 from app.crewly.app_tools import app_system, app_tools, busy_years  # noqa: E402
 
-GPC = {"id": "u1", "company": "gpc", "other": "desc", "username": "georgia", "token": "tok-gpc"}
-DESC = {"id": "u2", "company": "desc", "other": "gpc", "username": "dominion", "token": "tok-desc"}
+GPC = {"id": "u1", "company": "gpc", "username": "georgia", "token": "tok-gpc"}
+DESC = {"id": "u2", "company": "desc", "username": "dominion", "token": "tok-desc"}
 
 
 @pytest.fixture
@@ -111,7 +111,8 @@ def test_collab_requests_reads_with_the_users_login(conn, monkeypatch):
 
 def test_system_prompt_knows_who_is_asking():
     s = app_system(DESC)
-    assert "Dominion Energy SC (desc)" in s and "Georgia Power (gpc)" in s and datetime.now().strftime("%Y") in s
+    assert "Dominion Energy SC (desc)" in s and "Georgia Power" not in s and datetime.now().strftime("%Y") in s  # partners come per overlap
+    assert "neighboring utility" in s
 
 
 def _fake_gemini(replies):
@@ -160,3 +161,24 @@ def test_every_model_spent_raises_quota_error(monkeypatch):
     monkeypatch.setattr(llm, "SPENT", {m: today for m in llm.FALLBACKS})
     with pytest.raises(RuntimeError, match="RESOURCE_EXHAUSTED"):
         llm.gemini(lambda client, model: pytest.fail("no model should be tried"))
+
+
+def test_a_third_utility_shows_up_as_a_partner(conn):
+    """Any number of companies: a new utility's overlap with us names it as the partner and can be filtered by name."""
+    from app import companies as co
+    conn.execute("INSERT INTO org (id, name, kind, state, short, login) VALUES ('zzthird', 'Third Test Power', 'utility', 'NC', 'Third', 'zzthird')")
+    job = conn.execute("SELECT id FROM job WHERE org_id = 'desc' LIMIT 1").fetchone()["id"]
+    conn.execute("""INSERT INTO job (id, org_id, name, horizon, job_type, geom, geom_quality, work_window, window_basis, in_service, confidence, resources)
+                    SELECT 'zzthird-1', 'zzthird', 'Third Line Rebuild', horizon, job_type, geom, geom_quality, work_window, window_basis,
+                           in_service, confidence, resources FROM job WHERE id = %s""", (job,))
+    oid = conn.execute("""INSERT INTO opportunity (job_a, job_b, horizon, distance_m, center_distance_m, overlap_m, tier, time_overlap, risk,
+                                                   vulnerability, score, flags, savings_low, savings_high, status, link)
+                          SELECT %s, 'zzthird-1', 'long', 100, 100, 0, 'site', 1, 0.5, 0.5, 9, '{}', 1000, 2000, 'not_contacted', geom
+                          FROM job WHERE id = %s RETURNING id""", (job, job)).fetchone()["id"]
+    co.companies(conn, fresh=True)
+    try:
+        out, ui = call(DESC, conn, "my_overlaps", partner_company="Third Test Power", limit=25)
+        assert [o["id"] for o in out["overlaps"]] == [oid] and out["overlaps"][0]["partner"] == "Third Test Power"
+        assert call(DESC, conn, "my_overlaps", partner_company="nobody at all")[0]["error"].startswith("no utility")
+    finally:
+        co._cache["at"] = 0  # the next caller reloads without the test org

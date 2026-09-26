@@ -7,7 +7,8 @@ import httpx
 import jwt
 from fastapi import Header, HTTPException
 
-COMPANIES = ("desc", "gpc")
+from app.companies import companies
+
 _seen: dict[str, tuple[float, dict]] = {}  # token -> (expires, claims) for projects that still sign with a shared secret
 
 
@@ -47,7 +48,7 @@ def current_user(authorization: str | None = Header(None)):
     except jwt.PyJWTError as e:
         raise HTTPException(401, f"please log in again ({e})")
     company = (claims.get("app_metadata") or {}).get("company_id")
-    if company not in COMPANIES:
+    if company not in companies() and company not in companies(fresh=True):  # a utility added since the last refresh
         raise HTTPException(403, "this login is not linked to a company")
-    return {"id": claims["sub"], "company": company, "other": next(c for c in COMPANIES if c != company),
+    return {"id": claims["sub"], "company": company,
             "username": (claims.get("user_metadata") or {}).get("username"), "token": token}

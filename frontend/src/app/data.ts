@@ -5,15 +5,36 @@ export const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.m
 
 export const EMAIL_DOMAIN = "crewly.test";  // people log in with a username; auth wants an email
 
-export type CompanyId = "desc" | "gpc";
-export const COMPANY: Record<CompanyId, { name: string; short: string; color: string; soft: string }> = {
-  desc: { name: "Dominion Energy SC", short: "Dominion", color: "#2f6bff", soft: "#e5edff" },
-  gpc: { name: "Georgia Power", short: "Georgia Power", color: "#ff5d5d", soft: "#ffe8e8" },
+export type CompanyId = string;
+export type Company = { id: CompanyId; name: string; short: string; color: string; state?: string | null; planner?: string | null; login?: string | null };
+
+// every utility on crewly, filled from the api; the first two are known before it answers
+const PALETTE = ["#7c4dff", "#00b8a9", "#ff9f1c", "#e84393", "#2ec4b6", "#8e5cf7", "#f4a261", "#3a86ff", "#06d6a0", "#ef476f",
+  "#118ab2", "#ffb703", "#9b5de5", "#00a6fb", "#f15bb5", "#43aa8b", "#fb8500", "#577590", "#c77dff", "#52b788"];
+const registry: Record<CompanyId, Company> = {
+  desc: { id: "desc", name: "Dominion Energy SC", short: "Dominion SC", color: "#2f6bff", state: "SC" },
+  gpc: { id: "gpc", name: "Georgia Power", short: "Georgia Power", color: "#ff5d5d", state: "GA" },
 };
 
-export type Me = { company: CompanyId; name: string; other: CompanyId; other_name: string; username: string };
+export function colorFor(id: CompanyId) {
+  let h = 0;
+  for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return PALETTE[h % PALETTE.length];
+}
 
-export type Overlap = Opportunity & { a_end: string; b_end: string };
+export function setCompanies(list: Company[]) {
+  list.forEach((c) => { registry[c.id] = { ...c, color: c.color || colorFor(c.id) }; });
+}
+
+export function company(id: CompanyId): Company {
+  return registry[id] ?? { id, name: id, short: id, color: colorFor(id) };
+}
+
+export type Me = { company: CompanyId; name: string; short: string; color: string; state: string | null; username: string };
+
+export type Overlap = Opportunity & { a_end: string; b_end: string; partner?: CompanyId };
+
+export const partnerOf = (me: Me, o: Opportunity) => (o.a_org === me.company ? o.b_org : o.a_org);  // the other side of an overlap
 export type OverlapDetail = OpportunityDetail & { a_end: string; b_end: string };
 export type Jobs = GeoJSON.FeatureCollection<GeoJSON.Geometry, Job>;
 
@@ -53,6 +74,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   me: () => call<Me>("/api/app/me"),
+  companies: () => call<Company[]>("/api/app/companies"),
   projects: () => call<Jobs>("/api/app/projects"),
   overlaps: () => call<{ overlaps: Overlap[]; jobs: Jobs }>("/api/app/overlaps"),
   overlap: (id: number) => call<OverlapDetail>(`/api/opportunities/${id}`),
@@ -84,7 +106,7 @@ export const requests = {
     };
     const { data: user } = await supabase.auth.getUser();
     const { data, error } = await supabase.from("collab_request").insert({
-      opportunity_id: op.id, from_company: me.company, to_company: me.other, summary, note: note.trim() || null, created_by: user.user?.id,
+      opportunity_id: op.id, from_company: me.company, to_company: partnerOf(me, op), summary, note: note.trim() || null, created_by: user.user?.id,
     }).select().single();
     if (error) throw error;
     return data as CollabRequest;

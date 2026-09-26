@@ -5,13 +5,13 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 
-from app.crewly.app_tools import NAMES, mine_sql
+from app.companies import name, partner
+from app.crewly.app_tools import mine_sql
 from app.weather_api import weather
 
 FOLLOW_UP_AFTER = timedelta(days=2)
 MAX_DRIVE_MIN = 45
 COLD_TOP = 3
-OTHER = {"desc": "gpc", "gpc": "desc"}
 
 
 def _rest(path, method="GET", **kw):
@@ -39,7 +39,7 @@ def _ours(company, o):
 
 def request_takes(conn, company, requests):
     """A second opinion on every request waiting for us."""
-    out, other = [], NAMES[OTHER[company]]
+    out = []
     for r in requests:
         if r["to_company"] != company or r["status"] != "pending":
             continue
@@ -57,7 +57,7 @@ def request_takes(conn, company, requests):
             lean = "Worth a look: savings only show up if one side shifts its schedule."
         else:
             lean = f"Worth a look: the drive is over {MAX_DRIVE_MIN} min, so crews and yards are hard to share."
-        out.append({"dedup_key": f"req-take:{r['id']}", "title": f"Crewly's take on {other}'s request for #{o['id']}"[:80],
+        out.append({"dedup_key": f"req-take:{r['id']}", "title": f"Crewly's take on {name(r['from_company'])}'s request for #{o['id']}"[:80],
                     "body": f"{', '.join(facts)}. {lean}", "action": {"type": "open_request", "id": r["id"]}})
     return out
 
@@ -85,7 +85,7 @@ def weather_risks(conn, company, days=3, scenario="none"):
         first = next(iter(jobs.values()))
         body = f"{first}{f' and {n - 1} more' if n > 1 else ''} {'is' if n == 1 else 'are'} under construction inside the {kind.lower()} outlook."
         if best:
-            body += f" Ask {NAMES[OTHER[company]]} about sharing a staging yard near #{best['id']}?"
+            body += f" Ask {name(partner(best, company))} about sharing a staging yard near #{best['id']}?"
         out.append({"dedup_key": f"wx:{kind}:{h['first']}", "title": f"{kind} risk {when} at {n} active site{'s' if n != 1 else ''}"[:80],
                     "body": body, "action": {"type": "open_overlap", "id": best["id"]} if best else {"type": "weather"}})
     return out
@@ -111,7 +111,6 @@ def follow_ups(company, requests, tasks, now=None):
     """Goal steps whose request has waited too long for an answer."""
     now, out = now or datetime.now(timezone.utc), []
     by_id = {r["id"]: r for r in requests}
-    other = NAMES[OTHER[company]]
     for t in tasks:
         for s in t.get("steps") or []:
             r = by_id.get(s.get("request_id"))
@@ -120,7 +119,7 @@ def follow_ups(company, requests, tasks, now=None):
             sent = datetime.fromisoformat(r["created_at"])
             if now - sent < FOLLOW_UP_AFTER:
                 continue
-            out.append({"dedup_key": f"followup:{r['id']}", "title": f"Follow up with {other} on #{r['opportunity_id']}?"[:80],
+            out.append({"dedup_key": f"followup:{r['id']}", "title": f"Follow up with {name(r['to_company'])} on #{r['opportunity_id']}?"[:80],
                         "body": f"Our request from {sent:%b %d} for \"{t['goal'][:60]}\" is still waiting for an answer.",
                         "action": {"type": "open_request", "id": r["id"]}})
     return out

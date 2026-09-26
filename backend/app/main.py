@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from app.config import ASSUMPTIONS, MAX_DRIVE_MIN, STATUSES
 from app import app_api, outreach, vendors, weather_api
-from app.auth import COMPANIES
+from app.companies import companies
 from app.crewly import agent, brief, proactive
 from app.db import ROOT, connect, get_conn
 from app.engine.cost import savings_for
@@ -49,7 +49,7 @@ async def lifespan(_app):
 
     async def suggest():
         while True:
-            for company in COMPANIES:
+            for company in companies():
                 try:
                     await asyncio.to_thread(suggest_once, company)
                 except Exception as e:  # one bad scan must not stop the others
