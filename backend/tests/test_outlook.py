@@ -166,6 +166,7 @@ def conn():
         from app.db import connect, init_schema
         c = connect()
         init_schema(c)
+        c.commit()  # release the schema locks before the api test opens its own connection
     except Exception:
         pytest.skip("database not reachable")
     if not c.execute("SELECT 1 FROM job LIMIT 1").fetchone():
