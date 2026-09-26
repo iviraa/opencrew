@@ -1,10 +1,8 @@
-import os
 from datetime import date
 
-from google import genai
 
 from app.config import ASSUMPTIONS, MAX_DRIVE_MIN, MILE_M
-from app.llm import MODEL, unsourced
+from app.llm import generate, provider, unsourced
 from app.engine.cost import savings
 from app.queries import JOB_SQL, OPP_SQL, shareable
 
@@ -44,14 +42,13 @@ def template_summary(o, a, b):
 
 
 def llm_summary(o, a, b):
-    key = os.environ.get("GEMINI_API_KEY")
-    if not key:
+    if not provider():
         return None
     prompt = (f"Write two plain sentences for utility planners explaining why these two projects should coordinate. "
               f"Do not include any numbers, dates or dollar amounts.\nProject A: {a['name']} ({a['org_name']}): {a['description']}\n"
               f"Project B: {b['name']} ({b['org_name']}): {b['description']}\nShareable: {', '.join(shareable(o['tier'], o['a_phase'], o['b_phase'], o['drive_min']))}")
     try:
-        text = genai.Client(api_key=key).models.generate_content(model=MODEL, contents=prompt).text.strip()
+        text = generate(prompt)
     except Exception:
         return None
     return None if unsourced(text, "") else text  # any number means the model broke the rule

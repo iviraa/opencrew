@@ -2,7 +2,6 @@ import csv
 import hashlib
 import io
 import json
-import os
 import re
 import zipfile
 from datetime import datetime, timedelta, timezone
@@ -12,7 +11,7 @@ from pydantic import BaseModel, ValidationError, field_validator
 
 from app.db import ROOT
 from app.geo import nominatim
-from app.llm import MODEL
+from app.llm import generate_json, provider
 from app.storm.incidents import POWER_KINDS, classify, customers, domain, utility
 
 NEWS = ROOT / "data/raw/helene/news"
@@ -143,10 +142,7 @@ def squash(text):
 
 
 def _llm(prompt):
-    from google import genai
-    from google.genai import types
-    config = types.GenerateContentConfig(response_mime_type="application/json", response_json_schema=SCHEMA, temperature=0)
-    return genai.Client(api_key=os.environ["GEMINI_API_KEY"]).models.generate_content(model=MODEL, contents=prompt, config=config).text
+    return generate_json(prompt, SCHEMA)  # gemini, or the local model when there is no key
 
 
 def llm_extract(row, text):
@@ -220,7 +216,7 @@ def place_point(where_text, row):
 
 
 def items_for(row, text, use_llm=None):
-    use_llm = bool(os.environ.get("GEMINI_API_KEY")) if use_llm is None else use_llm
+    use_llm = bool(provider()) if use_llm is None else use_llm
     ts, body = row_time(row), text or row["title"]
     source = {"type": "news", "name": row["domain"], "url": row["url"], "title": row["title"], "ts": ts.isoformat()}
     items = []

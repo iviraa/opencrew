@@ -2,10 +2,9 @@ import os
 from datetime import datetime, timezone
 
 import httpx
-from google import genai
 
 from app.config import MILE_M
-from app.llm import MODEL, unsourced
+from app.llm import generate, provider, unsourced
 from app.queries import OPP_SQL, shareable
 
 RESEND = "https://api.resend.com/emails"
@@ -25,14 +24,13 @@ def contacts(conn, opp_id):
 
 
 def opener(o):
-    key = os.environ.get("GEMINI_API_KEY")
     fallback = "Our planning teams have nearby transmission work, and we think there may be room to coordinate."
-    if not key:
+    if not provider():
         return fallback
     prompt = (f"Write one friendly, professional sentence opening an email from one utility planner to another about coordinating nearby "
               f"projects '{o['a_name']}' and '{o['b_name']}'. No numbers, dates or dollar amounts.")
     try:
-        text = genai.Client(api_key=key).models.generate_content(model=MODEL, contents=prompt).text.strip()
+        text = generate(prompt)
     except Exception:
         return fallback
     return fallback if unsourced(text, "") else text

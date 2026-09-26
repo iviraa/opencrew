@@ -1,16 +1,13 @@
 import json
-import os
 import re
 from datetime import date
 
-from google import genai
-from google.genai import types
 from pydantic import BaseModel, ValidationError, field_validator
 
 from app.config import DEFAULT_DURATION_MONTHS
 from app.ingest.classify import endpoints, job_type, shift_months, voltage
 from app.ingest.pdf import page_allowed
-from app.llm import MODEL
+from app.llm import generate_json, provider
 
 PAGES_PER_CALL = 8
 SCHEMA = {"type": "object", "properties": {"projects": {"type": "array", "items": {"type": "object", "properties": {
@@ -46,18 +43,14 @@ def slug(text):
 
 
 def extract(org, pages):
-    key = os.environ.get("GEMINI_API_KEY")
-    if not key:
-        raise RuntimeError("this filing layout needs Gemini extraction; set GEMINI_API_KEY")
-    client = genai.Client(api_key=key)
-    config = types.GenerateContentConfig(response_mime_type="application/json", response_json_schema=SCHEMA, temperature=0)
+    if not provider():
+        raise RuntimeError("this filing layout needs an LLM; set GEMINI_API_KEY or LOCAL_LLM_URL")
     allowed = [(i + 1, p) for i, p in enumerate(pages) if page_allowed(p)]  # CEII pages never leave the machine
     rows, bad = [], []
     for k in range(0, len(allowed), PAGES_PER_CALL):
         chunk = allowed[k:k + PAGES_PER_CALL]
         text = "\n".join(f"=== page {n} ===\n{p}" for n, p in chunk)
-        resp = client.models.generate_content(model=MODEL, contents=f"{PROMPT}\n\n{text}", config=config)
-        for item in json.loads(resp.text or "{}").get("projects", []):
+        for item in json.loads(generate_json(f"{PROMPT}\n\n{text}", SCHEMA) or "{}").get("projects", []):
             try:
                 r = Row(**item)
             except ValidationError as e:

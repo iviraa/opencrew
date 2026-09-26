@@ -1,11 +1,11 @@
 import json
-import os
 import re
 import sys
 
 from app.crewly import agent
 from app.crewly.tools import TOOLS
 from app.db import connect
+from app.llm import provider
 
 
 def opp(conn, a, b, horizon="long"):
@@ -90,7 +90,7 @@ def online(conn, q, calls):
 
 
 def main():
-    live = bool(os.environ.get("GEMINI_API_KEY"))
+    live = bool(provider()) and "--offline" not in sys.argv
     rows, passed = [], 0
     with connect() as conn:
         for i, (q, calls, facts) in enumerate(CASES, 1):
