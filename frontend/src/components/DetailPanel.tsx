@@ -1,0 +1,137 @@
+import { useEffect, useState } from "react";
+import { api, type Assumption, type Job, type OpportunityDetail, type Savings } from "../api";
+import { BASIS_LABEL, QUALITY_LABEL, STATUSES, miles, monthYear, pct, title, usd } from "../format";
+import { TierChip } from "./OpportunityList";
+
+type Props = {
+  detail: OpportunityDetail;
+  assumptions: Record<string, Assumption>;
+  onClose: () => void;
+  onStatus: (id: number, status: string) => void;
+};
+
+type Values = Record<string, { low: number; high: number }>;
+
+export default function DetailPanel({ detail, assumptions, onClose, onStatus }: Props) {
+  const [values, setValues] = useState<Values>({});
+  const [savings, setSavings] = useState<Savings>(detail.savings);
+
+  useEffect(() => {
+    setValues(Object.fromEntries(Object.entries(assumptions).map(([k, a]) => [k, { low: a.low, high: a.high }])));
+    setSavings(detail.savings);
+  }, [detail, assumptions]);
+
+  const change = (key: string, end: "low" | "high", v: number) => {
+    const next = { ...values, [key]: { ...values[key], [end]: v } };
+    setValues(next);
+    api.savings(detail.id, next).then(setSavings);
+  };
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+        <div className="flex items-center gap-2">
+          <TierChip tier={detail.tier} />
+          <span className="text-xs text-slate-500">score {detail.score.toFixed(2)}</span>
+        </div>
+        <button onClick={onClose} className="rounded px-2 py-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
+      </div>
+      <div className="flex-1 space-y-5 overflow-y-auto px-4 py-4">
+        <div className="space-y-3">
+          <JobCard job={detail.a} />
+          <JobCard job={detail.b} />
+        </div>
+
+        <section className="grid grid-cols-2 gap-2">
+          <Metric label="Closest distance" value={miles(detail.distance_m)} />
+          <Metric label="Center to center" value={miles(detail.center_distance_m)} />
+          <Metric label="Build window overlap" value={pct(detail.time_overlap)} />
+          <Metric label="In-service gap" value={detail.time_gap_days == null ? "n/a" : `${detail.time_gap_days} days`} />
+          {detail.overlap_m > 0 && <Metric label="Parallel corridor" value={miles(detail.overlap_m)} />}
+        </section>
+
+        <section>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">What they could share</h3>
+          <div className="flex flex-wrap gap-1.5">
+            {detail.shareable.map((s) => <span key={s} className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-700">{s}</span>)}
+          </div>
+        </section>
+
+        <section className="rounded-lg bg-emerald-50 p-3 ring-1 ring-emerald-200">
+          <div className="text-xs font-semibold uppercase tracking-wide text-emerald-800">Estimated savings</div>
+          <div className="mt-1 text-2xl font-semibold text-emerald-900">{usd(savings.low)} – {usd(savings.high)}</div>
+          <table className="mt-2 w-full text-xs text-emerald-900">
+            <tbody>
+              {Object.entries(savings.items).map(([k, v]) => (
+                <tr key={k}><td className="py-0.5">{k}</td><td className="text-right">{usd(v.low)} – {usd(v.high)}</td></tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="mt-2 text-[11px] text-emerald-800/80">Assumes both jobs are scheduled together. Ranges come from the assumptions below, not from AI.</p>
+        </section>
+
+        <section>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Assumptions</h3>
+          <div className="space-y-3">
+            {Object.entries(assumptions).map(([key, a]) => values[key] && (
+              <div key={key}>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-medium text-slate-700">{a.label}</span>
+                  <span className="text-slate-500">
+                    {values[key].low.toLocaleString()}–{values[key].high.toLocaleString()} {a.unit}
+                    {!a.verified && <span className="ml-1 rounded bg-amber-100 px-1 text-[10px] font-semibold text-amber-800">placeholder</span>}
+                  </span>
+                </div>
+                <div className="mt-1 flex gap-2">
+                  {(["low", "high"] as const).map((end) => (
+                    <input key={end} type="range" className="w-full accent-emerald-600" min={0} max={a.high * 3} step={a.high / 50}
+                      value={values[key][end]} onChange={(e) => change(key, end, Number(e.target.value))} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Coordination status</h3>
+          <select value={detail.status} onChange={(e) => onStatus(detail.id, e.target.value)}
+            className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm">
+            {STATUSES.map((s) => <option key={s} value={s}>{title(s)}</option>)}
+          </select>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
+      <div className="text-[11px] text-slate-500">{label}</div>
+      <div className="text-sm font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function JobCard({ job }: { job: Job }) {
+  const approx = job.confidence < 0.7 || job.geom_quality !== "matched_point";
+  return (
+    <div className="rounded-lg border border-slate-200 p-3" style={{ borderLeft: `4px solid ${job.color}` }}>
+      <div className="text-[11px] font-medium" style={{ color: job.color }}>{job.org_name}</div>
+      <div className="text-sm font-semibold leading-5">{job.name}</div>
+      <div className="mt-1 text-xs text-slate-600">
+        {title(job.job_type)}{job.voltage_kv ? ` · ${job.voltage_kv} kV` : ""} · {monthYear(job.start_at)} → {monthYear(job.end_at)}
+      </div>
+      <div className="mt-0.5 text-[11px] text-slate-400">{BASIS_LABEL[job.window_basis] ?? job.window_basis}</div>
+      {job.description && <p className="mt-2 line-clamp-3 text-xs text-slate-600">{job.description}</p>}
+      <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+        <span className={`rounded px-1.5 py-0.5 ${approx ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`}>
+          {QUALITY_LABEL[job.geom_quality] ?? job.geom_quality}
+        </span>
+        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600">location {pct(job.confidence)}</span>
+        <span className="text-slate-400">{job.source_title}, p.{job.source_page}</span>
+      </div>
+    </div>
+  );
+}

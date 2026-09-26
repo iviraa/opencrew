@@ -1,0 +1,17 @@
+[project]
+name = "opencrew"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "psycopg[binary]",
+    "python-dotenv",
+    "pypdfium2>=5.13.0",
+    "openpyxl>=3.1.5",
+    "rapidfuzz>=3.14.6",
+    "httpx>=0.28.1",
+]
+
+[dependency-groups]
+dev = ["pytest"]

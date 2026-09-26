@@ -1,0 +1,12 @@
+services:
+  db:
+    image: timescale/timescaledb-ha:pg17
+    environment:
+      POSTGRES_PASSWORD: opencrew
+      POSTGRES_DB: opencrew
+    ports:
+      - "5433:5432"
+    volumes:
+      - dbdata:/home/postgres/pgdata
+volumes:
+  dbdata:
