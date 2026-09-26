@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from app.config import ASSUMPTIONS, MAX_DRIVE_MIN, STATUSES
 from app import app_api, outreach, vendors, weather_api
+from app.hazards import api as hazards_api
 from app.companies import companies
 from app.crewly import agent, brief, proactive
 from app.db import ROOT, connect, get_conn
@@ -496,6 +497,7 @@ def hazards_one(job_id: str, conn=Depends(get_conn)):
 app.include_router(api)
 app.include_router(app_api.router)
 app.include_router(weather_api.router)
+app.include_router(hazards_api.router)
 
 STATIC = os.environ.get("STATIC_DIR") or str(ROOT / "frontend/dist")
 if os.path.isdir(STATIC):

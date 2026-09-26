@@ -108,6 +108,24 @@ def _bind(ctx, fn):
     return lambda conn, **kw: fn(ctx, conn, **kw)
 
 
+def hazard_exposure_tool(ctx):
+    from app.hazards.exposure import PERIODS, assess
+
+    def run(conn, site_or_zone, period="now7", month=None):
+        kind = "zone" if str(site_or_zone).lstrip("#").isdigit() else "site"
+        out = assess(conn, kind, str(site_or_zone).lstrip("#"), period if period in PERIODS else "now7", month)
+        if not out:
+            return {"error": f"no {kind} {site_or_zone}"}, []
+        brief = {**out, "hazards": [{k: v for k, v in h.items() if k != "live"} | {"active": [x["label"] for x in h["live"][:3]]} for h in out["hazards"]]}
+        return brief, [{"type": "hazards", "kind": kind, "id": out["id"], "period": out["period"], "month": month}]
+
+    return (run, "Hazard exposure of one site (project id) or overlap zone (#id) in a period: which work-affecting hazards touch it "
+                 "and the affected days (forecast for now7; low/high from ten years of history for weeks, season, month or the build "
+                 "window). Assessment only. Opens the hazards view.", {
+        "site_or_zone": {"type": "string", "description": "project id like gpc-123 or overlap #18"},
+        "period": {"type": "string", "enum": list(PERIODS)}, "month": {"type": "integer", "description": "1-12, with period month"}}, ["site_or_zone"])
+
+
 def app_tools(ctx):
     tools = {
         "my_overlaps": (_bind(ctx, my_overlaps), "Overlaps between our projects and neighboring utilities' projects, best first. Optional date "
@@ -133,6 +151,7 @@ def app_tools(ctx):
         tools[name] = (fn, desc, {**props, "org": {"type": "string", "description": "company id, e.g. " + ", ".join(list(companies())[:4])}}, req)
     tools.update(act_tools(ctx))
     tools.update(memory_tools(ctx))
+    tools["hazard_exposure"] = hazard_exposure_tool(ctx)
     return tools
 
 
@@ -160,4 +179,6 @@ Rules:
 - For multi-step asks like "line up collaboration on our top 5 overlaps" call start_goal once; it drafts one request per
   overlap into a goal panel where the user reviews and sends them. For "how is my goal going" call goal_status.
 - Weather and storm questions use outlook, weather_alerts or site_hazards; damage news uses incidents_near.
+- For "how exposed is site/overlap X in <period>" call hazard_exposure. Report affected days as an assessment of the period
+  (exposure, risk, likely affected days); never tell crews whether to work or send anyone anywhere.
 - Keep replies short and warm: one to three sentences or a compact list. Refer to overlaps as "#id" with both project names.""" + memory_prompt(ctx.get("memories"))
