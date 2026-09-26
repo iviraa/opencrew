@@ -1,6 +1,6 @@
-import { CalendarDays, ChevronUp, CloudLightning, FilePlus2, MapPinned, MoreHorizontal, Sparkles, X } from "lucide-react";
+import { CalendarDays, ChevronUp, CloudLightning, FilePlus2, MapPinned, MoreHorizontal, Radio, Sparkles, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { api, type Assumption, type CrewlyAction, type JointPlan as Plan, type PlanConstraints, type ReviewItem, type StormFrame, type JobCollection, type Opportunity, type OpportunityDetail, type Tier } from "./api";
+import { api, type Assumption, type CrewlyAction, type JointPlan as Plan, type PlanConstraints, type ReviewItem, type LiveFrame, type NewsPin, type JobCollection, type Opportunity, type OpportunityDetail, type Tier } from "./api";
 import BriefModal from "./components/BriefModal";
 import CrewLanes from "./components/CrewLanes";
 import Crewly from "./components/Crewly";
@@ -12,17 +12,17 @@ import PhaseRisks from "./components/PhaseRisks";
 import MapView from "./components/MapView";
 import OpportunityList from "./components/OpportunityList";
 import ReviewPanel from "./components/ReviewPanel";
-import StormReplay from "./components/StormReplay";
+import LiveBar from "./components/LiveBar";
+import NewsCard from "./components/NewsCard";
 import Timeline from "./components/Timeline";
 
 const LANDFALL = Date.parse("2024-09-27T03:10:00Z");
-const STORM_START = LANDFALL - 72 * 3600e3;
-const STORM_END = LANDFALL + 24 * 3600e3;
+const LIVE_REFRESH_MS = 60e3;
 
 const HORIZONS = [
   { id: "long", label: "Plans", hint: "Multi-year construction plans", icon: MapPinned },
   { id: "near", label: "Phases", hint: "Which work phases run at the same time", icon: CalendarDays },
-  { id: "emergency", label: "Storm", hint: "Hurricane Helene replay and live weather", icon: CloudLightning },
+  { id: "emergency", label: "Live", hint: "What is happening now: weather, news and active work, plus storm scenarios", icon: Radio },
 ];
 
 export default function App() {
@@ -41,8 +41,10 @@ export default function App() {
   const [placingId, setPlacingId] = useState<number | null>(null);
   const [reload, setReload] = useState(0);
   const [ingestOpen, setIngestOpen] = useState(false);
-  const [stormAt, setStormAt] = useState(LANDFALL - 12 * 3600e3);
-  const [storm, setStorm] = useState<StormFrame | null>(null);
+  const [liveAt, setLiveAt] = useState<number | null>(null);  // null means now
+  const [scenario, setScenario] = useState<"none" | "helene">("none");
+  const [storm, setStorm] = useState<LiveFrame | null>(null);
+  const [newsPin, setNewsPin] = useState<NewsPin | null>(null);
   const [fly, setFly] = useState<{ bbox: [number, number, number, number]; at: number } | null>(null);
   const [zone, setZone] = useState<GeoJSON.Feature | null>(null);
   const [roadOnly, setRoadOnly] = useState(false);
@@ -57,7 +59,6 @@ export default function App() {
   const [plan, setPlan] = useState<Plan | null>(null);
   const [solving, setSolving] = useState(false);
   const [pending, setPending] = useState<{ constraints: PlanConstraints; rules: string[] } | null>(null);
-  const [liveMode, setLiveMode] = useState(false);
   const [incidentId, setIncidentId] = useState<number | null>(null);
   const [stormTick, setStormTick] = useState(0);
   const [drawer, setDrawer] = useState(false);
@@ -74,15 +75,27 @@ export default function App() {
   useEffect(() => {
     if (horizon !== "emergency") { setStorm(null); return; }
     setStormLoading(true);
-    const id = setTimeout(() => api.storm(liveMode ? null : stormAt, liveMode ? "live" : "replay").then(setStorm)
+    const id = setTimeout(() => api.liveFrame(liveAt, scenario).then(setStorm)
       .catch((e) => setError(String(e))).finally(() => setStormLoading(false)), 120);
     return () => clearTimeout(id);
-  }, [horizon, stormAt, liveMode, stormTick]);
+  }, [horizon, liveAt, scenario, stormTick]);
+
+  useEffect(() => {
+    if (horizon !== "emergency" || scenario !== "none" || liveAt != null) return;
+    const id = setInterval(() => setStormTick((n) => n + 1), LIVE_REFRESH_MS);  // live view keeps itself current
+    return () => clearInterval(id);
+  }, [horizon, scenario, liveAt]);
+
+  const playScenario = (s: "none" | "helene") => {
+    setScenario(s); setNewsPin(null); setIncidentId(null);
+    setLiveAt(s === "helene" ? LANDFALL - 12 * 3600e3 : null);
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       if (incidentId != null) setIncidentId(null);  // close the top-most thing only
+      else if (newsPin != null) setNewsPin(null);
       else if (ingestOpen) setIngestOpen(false);
       else if (placingId != null) setPlacingId(null);
       else if (crewlyOpen) setCrewlyOpen(false);
@@ -91,7 +104,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [ingestOpen, placingId, crewlyOpen, selectedId, reviewOpen]);
+  }, [ingestOpen, placingId, crewlyOpen, selectedId, reviewOpen, incidentId, newsPin]);
 
   useEffect(() => {
     setZone(null);
@@ -139,7 +152,7 @@ export default function App() {
 
   const switchHorizon = (h: string) => {
     setHorizon(h); setSelectedId(null); setCrewlyIds(null);
-    if (h !== "emergency") setIncidentId(null);  // incident cards belong to the storm view
+    if (h !== "emergency") { setIncidentId(null); setNewsPin(null); }  // incident and news cards belong to the live view
     if (h === "emergency") setFly({ bbox: [-85.2, 30.6, -79.0, 35.0], at: Date.now() });
   };
 
@@ -147,8 +160,8 @@ export default function App() {
     for (const a of actions) {
       if (a.type === "filter") { setHorizon(a.horizon); setTier(a.tier); setCrewlyIds(a.opportunity_ids); }
       if (a.type === "select") { if (a.horizon) setHorizon(a.horizon); setSelectedId(a.opportunity_id); }
-      if (a.type === "storm") { setHorizon("emergency"); setLiveMode(false); setStormAt(Date.parse(a.at)); }
-      if (a.type === "live") { setHorizon("emergency"); setLiveMode(true); }
+      if (a.type === "storm") { setHorizon("emergency"); setScenario("helene"); setLiveAt(Date.parse(a.at)); }
+      if (a.type === "live") { setHorizon("emergency"); setScenario("none"); setLiveAt(null); }
       if (a.type === "fly") setFly({ bbox: a.bbox, at: Date.now() });
       if (a.type === "reload") setReload((n) => n + 1);
       if (a.type === "status") { setOpps((xs) => xs.map((o) => (o.id === a.opportunity_id ? { ...o, status: a.status } : o))); setDetail((d) => (d && d.id === a.opportunity_id ? { ...d, status: a.status } : d)); }
@@ -162,17 +175,18 @@ export default function App() {
   };
 
   const selected = opps.find((o) => o.id === selectedId) ?? null;
-  const live = (iso: string) => horizon !== "emergency" || (!liveMode && Date.parse(iso) <= stormAt);  // replay shows what has happened by now; live hides helene jobs
+  const live = (iso: string) => horizon !== "emergency" || (scenario === "helene" && Date.parse(iso) <= (liveAt ?? 0));  // the scenario shows what has happened by then; live hides helene jobs
   const shown = useMemo(() => opps.filter((o) => (!tier || o.tier === tier) && (!crewlyIds || crewlyIds.includes(o.id)) && live(o.a_start) && live(o.b_start)
     && (!roadOnly || o.drive_min == null || o.drive_min <= 45)),
-    [opps, tier, crewlyIds, horizon, stormAt, roadOnly, liveMode]);  // stable arrays so hover renders don't re-upload map data
+    [opps, tier, crewlyIds, horizon, liveAt, roadOnly, scenario]);  // stable arrays so hover renders don't re-upload map data
+  const listItems = useMemo(() => (horizon === "emergency" ? opps.filter((o) => live(o.a_start) && live(o.b_start)) : opps), [opps, horizon, liveAt, scenario]);  // chip counts match what is on screen
   const visibleJobs = useMemo(() => (jobs && horizon === "emergency" ? { ...jobs, features: jobs.features.filter((f) => live(f.properties.start_at)) } : jobs),
-    [jobs, horizon, stormAt, liveMode]);
+    [jobs, horizon, liveAt, scenario]);
 
   const lanes = planView && horizon === "long" && !reviewOpen;
   const bottom = horizon === "emergency"
-    ? <StormReplay frame={storm} at={stormAt} onAt={setStormAt} start={STORM_START} end={STORM_END} landfall={LANDFALL} loading={stormLoading}
-        live={liveMode} onLive={setLiveMode} onIncident={setIncidentId} onPoll={() => api.livePoll().then(() => setStormTick((n) => n + 1))} />
+    ? <LiveBar frame={storm} scenario={scenario} at={liveAt} onAt={setLiveAt} loading={stormLoading} onScenario={playScenario}
+        onIncident={setIncidentId} onPoll={() => api.livePoll().then(() => setStormTick((n) => n + 1))} />
     : lanes
     ? <CrewLanes rows={plan?.schedule ?? []} colors={Object.fromEntries((jobs?.features ?? []).map((f) => [f.properties.org_id, f.properties.color]))}
         selected={selected ? [selected.job_a, selected.job_b] : []} />
@@ -207,6 +221,7 @@ export default function App() {
               <div className="absolute right-0 z-40 mt-2 w-[280px] rounded-[var(--radius-bubble)] bg-surface p-2 shadow-float" onMouseLeave={() => setMenu(false)}>
                 <MenuItem icon={<FilePlus2 size={18} />} title="Add a utility filing" hint="Drop in a PDF of planned projects" onClick={() => { setIngestOpen(true); setMenu(false); }} />
                 <MenuItem icon={<MapPinned size={18} />} title={`Place ${review.length} projects by hand`} hint="Projects we could not find on the map" onClick={() => { setReviewOpen(true); setMenu(false); }} />
+                <MenuItem icon={<CloudLightning size={18} />} title="Play a storm scenario" hint="Replay Hurricane Helene as if it were live" onClick={() => { switchHorizon("emergency"); playScenario("helene"); setMenu(false); }} />
               </div>
             )}
           </div>
@@ -228,20 +243,30 @@ export default function App() {
         <aside className="w-[410px] shrink-0 overflow-hidden rounded-[var(--radius-bubble)] bg-surface shadow-float">
           {reviewOpen
             ? <ReviewPanel items={review} placingId={placingId} onPlace={setPlacingId} onClose={() => { setReviewOpen(false); setPlacingId(null); }} />
-            : <OpportunityList items={opps} shown={shown} selectedId={selectedId} tier={tier} onTier={setTier} onSelect={setSelectedId}
+            : <OpportunityList items={listItems} shown={shown} selectedId={selectedId} tier={tier} onTier={setTier} onSelect={setSelectedId}
             crewlyFiltered={crewlyIds !== null} onClearCrewly={() => setCrewlyIds(null)} loading={loading} roadOnly={roadOnly} onRoadOnly={setRoadOnly} tabRequest={listTab} onTab={(t) => setPlanView(t === "plan")}
             planPanel={<JointPlan plan={plan} solving={solving} onSolve={solvePlan} pending={pending} onDiscardPending={() => setPending(null)} selectedId={selectedId} onSelect={setSelectedId} />}
-            emptyText={horizon === "emergency" ? "No restoration team-ups yet at this moment. Move the storm slider forward." : "Try another filter, or clear the one you picked."} />}
+            emptyText={horizon === "emergency" ? (scenario === "helene" ? "No restoration team-ups yet at this moment. Move the storm slider forward." : "No storm damage to coordinate right now. Play the Helene scenario to see how a storm plays out.") : "Try another filter, or clear the one you picked."} />}
         </aside>
         <section className="relative min-w-0 flex-1 overflow-hidden rounded-[var(--radius-bubble)] shadow-float">
           <MapView jobs={visibleJobs} opportunities={shown} selected={selected} onSelect={setSelectedId} fly={fly} storm={storm} zone={zone} onMapClick={placingId != null ? placeAt : null}
-            hoverKey={hover?.key ?? null} onHover={(key) => setHover(key ? { key, from: "map" } : null)} onIncident={setIncidentId} />
+            hoverKey={hover?.key ?? null} onHover={(key) => setHover(key ? { key, from: "map" } : null)} onIncident={setIncidentId} onNews={(p) => { setIncidentId(null); setNewsPin(p); }} />
           {placingId != null && (
             <div className="absolute left-1/2 top-4 z-20 -translate-x-1/2 rounded-full bg-crew px-5 py-2 text-[14px] font-semibold text-ink shadow-float">Click the map where this project is</div>
           )}
           {horizon === "near" && <div className="absolute left-1/2 top-4 z-10 -translate-x-1/2"><PhaseRisks /></div>}
+          {horizon === "emergency" && scenario === "helene" && (
+            <div className="absolute left-1/2 top-16 z-20 flex -translate-x-1/2 items-center gap-3 whitespace-nowrap rounded-full bg-ink py-1.5 pl-4 pr-1.5 text-[14px] text-white shadow-float">
+              <CloudLightning size={16} /> Scenario: Hurricane Helene, replayed from real NOAA and news data
+              <button onClick={() => playScenario("none")} className="rounded-full bg-white/15 px-3 py-1 font-semibold hover:bg-white/25">Back to live</button>
+            </div>
+          )}
+          {horizon === "emergency" && storm?.storm_active && <StormSlot />}
+          {newsPin != null && incidentId == null && (
+            <div className="absolute bottom-[236px] left-3 top-16 z-30 w-[360px]"><NewsCard pin={newsPin} onClose={() => setNewsPin(null)} /></div>
+          )}
           {incidentId != null && (
-            <div className="absolute bottom-3 left-3 top-3 z-30 w-[360px]"><IncidentCard id={incidentId} onClose={() => setIncidentId(null)} /></div>
+            <div className="absolute bottom-[236px] left-3 top-16 z-30 w-[360px]"><IncidentCard id={incidentId} onClose={() => setIncidentId(null)} /></div>
           )}
           {sheetOpen && (
             <div className="absolute bottom-3 right-3 top-3 z-20 w-[440px] overflow-hidden rounded-[var(--radius-bubble)] bg-surface shadow-float">
@@ -275,6 +300,10 @@ export default function App() {
       </main>
     </div>
   );
+}
+
+function StormSlot() {
+  return null;  // slot: the pre-storm briefing panel renders here while a storm is active
 }
 
 function MenuItem({ icon, title, hint, onClick }: { icon: React.ReactNode; title: string; hint: string; onClick: () => void }) {

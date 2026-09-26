@@ -52,3 +52,10 @@ export function usd(n: number) {
   if (n >= 1e3) return `$${Math.round(n / 1e3)}k`;
   return `$${Math.round(n)}`;
 }
+
+export const NEWS_TOPIC: Record<"damage" | "outage" | "work" | "other", { label: string; color: string }> = {
+  damage: { label: "power damage", color: "#e03131" },
+  outage: { label: "outages", color: "#f08c00" },
+  work: { label: "construction and utility work", color: "#2f6bff" },
+  other: { label: "other", color: "#8a94b0" },
+};

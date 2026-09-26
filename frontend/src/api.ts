@@ -45,11 +45,22 @@ export type OutreachItem = {
   sent_at: string | null; reply_summary: string | null; email: string | null; org_name: string;
 };
 
+export type NewsArticle = { title: string; source: string; url: string; quote: string; published: string | null; topic: NewsTopic; copies: number };
+export type NewsTopic = "damage" | "outage" | "work" | "other";
+export type NewsPin = { ts: string; topic: NewsTopic; count: number; articles: NewsArticle[]; near_name: string; near_mi: number; verified: boolean };
+export type WindRisk = { job_id: string; site: string; day: string; gust_mph: number; work: string; alert: string };
+
 export type StormFrame = {
   at: string; landfall: string; window: [string, string];
   cone: GeoJSON.FeatureCollection; track: GeoJSON.FeatureCollection; warnings: GeoJSON.FeatureCollection;
   reports: GeoJSON.FeatureCollection; staging: GeoJSON.FeatureCollection; exposure: Record<string, number>;
   incidents: GeoJSON.FeatureCollection; mode?: string;
+};
+
+export type LiveFrame = StormFrame & {
+  scenario: "none" | "helene"; range: [string, string]; is_live: boolean; storm_active: boolean;
+  news: GeoJSON.FeatureCollection<GeoJSON.Point, NewsPin>; active_phases: GeoJSON.FeatureCollection; active_labels: GeoJSON.FeatureCollection;
+  wind_risks: WindRisk[];
 };
 
 export type IncidentSource = { type: string; name: string; url?: string; title?: string; quote_evidence?: string; method?: string };
@@ -151,6 +162,8 @@ export const api = {
   brief: (id: number) => call<{ markdown: string; summary_source: string }>(`/opportunities/${id}/brief`, { method: "POST" }),
   tracts: () => call<GeoJSON.FeatureCollection>("/layers/tracts"),
   grid: () => call<GeoJSON.FeatureCollection>("/layers/grid"),
+  liveFrame: (at: number | null, scenario: "none" | "helene") =>
+    call<LiveFrame>(`/live/frame?scenario=${scenario}${at == null ? "" : `&at=${new Date(at).toISOString()}`}`),
   storm: (at: number | null, mode = "replay") =>
     call<StormFrame>(`/storm/frame?mode=${mode}${at == null ? "" : `&at=${new Date(at).toISOString()}`}`),
   incident: (id: number) => call<IncidentDetail>(`/incidents/${id}`),

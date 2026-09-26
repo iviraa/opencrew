@@ -2,7 +2,8 @@ import * as maplibregl from "maplibre-gl";
 import type { GeoJSONSource, LngLatBoundsLike } from "maplibre-gl";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { useEffect, useRef, useState } from "react";
-import { api, type JobCollection, type Opportunity, type StormFrame } from "../api";
+import { api, type JobCollection, type LiveFrame, type NewsPin, type Opportunity } from "../api";
+import { NEWS_TOPIC } from "../format";
 import { Layers, X } from "lucide-react";
 import { DESC_COLOR, FAR_COLOR, GPC_COLOR, QUALITY_LABEL, TIER_COLOR, TIER_LABEL, monthYear, title } from "../format";
 import { kindColorExpression } from "./IncidentCard";
@@ -13,7 +14,8 @@ type Props = {
   selected: Opportunity | null;
   onSelect: (id: number) => void;
   fly: { bbox: [number, number, number, number]; at: number } | null;
-  storm: StormFrame | null;
+  storm: LiveFrame | null;
+  onNews?: (pin: NewsPin) => void;
   onMapClick?: ((lon: number, lat: number) => void) | null;
   hoverKey: string | null;
   onHover: (key: string | null) => void;
@@ -115,7 +117,7 @@ function coordsOf(g: GeoJSON.Geometry): number[][] {
   return [];
 }
 
-export default function MapView({ jobs, opportunities, selected, onSelect, fly, storm, onMapClick, hoverKey, onHover, zone, onIncident }: Props) {
+export default function MapView({ jobs, opportunities, selected, onSelect, fly, storm, onMapClick, hoverKey, onHover, zone, onIncident, onNews }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -131,6 +133,9 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
   const oppsRef = useRef(opportunities);
   oppsRef.current = opportunities;
   const incidentRef = useRef(onIncident);
+  const newsRef = useRef(onNews);
+  newsRef.current = onNews;
+  const newsMarkers = useRef<maplibregl.Marker[]>([]);
   incidentRef.current = onIncident;
 
   useEffect(() => {
@@ -173,6 +178,17 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
           "circle-stroke-color": ["case", ["==", ["get", "geom_quality"], "partial_point"], ["get", "color"], "#ffffff"], "circle-stroke-width": 2.5,
           "circle-opacity": faded, "circle-stroke-opacity": faded,
         } });
+      m.addSource("active", { type: "geojson", data: EMPTY });
+      m.addSource("active-labels", { type: "geojson", data: EMPTY });
+      m.addLayer({ id: "active-casing", type: "line", source: "active", layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": "#ffffff", "line-width": 10, "line-opacity": 0.95 } });
+      m.addLayer({ id: "active-lines", type: "line", source: "active", layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": ["get", "color"], "line-width": 6 } });  // work happening right now, drawn bolder than plans
+      m.addLayer({ id: "active-points", type: "circle", source: "active", filter: ["==", ["geometry-type"], "Point"],
+        paint: { "circle-radius": 8, "circle-color": ["get", "color"], "circle-stroke-color": "#fff", "circle-stroke-width": 3 } });
+      m.addLayer({ id: "active-labels", type: "symbol", source: "active-labels", minzoom: 7,
+        layout: { "text-field": ["get", "phase"], "text-size": 12, "text-font": ["Montserrat Medium"], "text-offset": [0, 1.4], "text-allow-overlap": false },
+        paint: { "text-color": ["get", "color"], "text-halo-color": "#ffffff", "text-halo-width": 2.5 } });
       m.addLayer({ id: "job-hit", type: "line", source: "jobs", filter: ["==", ["geometry-type"], "LineString"],
         paint: { "line-color": "#000", "line-width": 14, "line-opacity": 0.01 } });  // wide invisible target for hover and click
       m.addLayer({ id: "job-selected", type: "line", source: "jobs", filter: ["in", ["get", "id"], ["literal", []]],
@@ -297,6 +313,18 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
     for (const key of ["cone", "track", "warnings", "reports", "staging", "incidents"] as const) {
       (m.getSource(key) as GeoJSONSource).setData(storm ? storm[key] : EMPTY);
     }
+    (m.getSource("active") as GeoJSONSource).setData(storm?.active_phases ?? EMPTY);
+    (m.getSource("active-labels") as GeoJSONSource).setData(storm?.active_labels ?? EMPTY);
+    for (const mk of newsMarkers.current) mk.remove();
+    newsMarkers.current = (storm?.news.features ?? []).map((f) => {
+      const el = newsPin(f.properties);
+      el.addEventListener("click", (e) => { e.stopPropagation(); newsRef.current?.(f.properties); });
+      return new maplibregl.Marker({ element: el, anchor: "bottom" }).setLngLat(f.geometry.coordinates as [number, number]).addTo(m);
+    });
+    const size = () => newsMarkers.current.forEach((mk) => mk.getElement().classList.toggle("news-pin-small", m.getZoom() < 7));  // compact when zoomed out
+    size();
+    m.on("zoom", size);
+    return () => { m.off("zoom", size); };
   }, [storm, loaded]);
 
   useEffect(() => {
@@ -329,6 +357,26 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
       <LayersMenu layers={layers} onToggle={(key) => setLayers((l) => ({ ...l, [key]: !l[key] }))} storm={!!storm} />
     </div>
   );
+}
+
+const NEWS_ICON = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></svg>`;  // static lucide newspaper, never news text
+
+function newsPin(p: NewsPin) {
+  const t = NEWS_TOPIC[p.topic];
+  const el = document.createElement("button");
+  el.type = "button";
+  el.className = "news-pin";
+  el.title = p.articles[0]?.title ?? "News";  // attribute text, not html
+  el.setAttribute("aria-label", `News near ${p.near_name}: ${p.articles[0]?.title ?? ""}`);
+  el.style.setProperty("--ring", t.color);
+  el.innerHTML = NEWS_ICON;
+  if (p.count > 1) {
+    const n = document.createElement("span");
+    n.className = "news-pin-count";
+    n.textContent = String(p.count);
+    el.append(n);
+  }
+  return el;
 }
 
 function OrgKey({ jobs }: { jobs: JobCollection | null }) {
@@ -378,6 +426,11 @@ function LayersMenu({ layers, onToggle, storm }: { layers: Record<LayerKey, bool
               <KeyRow swatch={<span className="h-3.5 w-3.5 rounded-full border-2 border-red-600 bg-white" />}>News only, not confirmed</KeyRow>
               <KeyRow swatch={<span className="h-2 w-2 rounded-full bg-slate-400" />}>Damage report</KeyRow>
               <KeyRow swatch={<span className="h-4 w-4 rounded-full border-2 border-white bg-save shadow" />}>Shared staging point</KeyRow>
+              <KeyRow swatch={<span className="h-2 w-6 rounded-full bg-desc ring-2 ring-white" />}>Construction happening now</KeyRow>
+              <KeyRow swatch={<span className="h-3 w-6 rounded-sm bg-sky-400/40" />}>Weather alert area</KeyRow>
+              {Object.values(NEWS_TOPIC).map((t) => (
+                <KeyRow key={t.label} swatch={<span className="grid h-5 w-5 place-items-center rounded-full bg-white text-[10px] shadow" style={{ boxShadow: `0 0 0 2.5px ${t.color}` }}>N</span>}>News: {t.label}</KeyRow>
+              ))}
             </div>
           ) : (
             <div className="mt-2 space-y-1.5 text-[13px] text-muted">
