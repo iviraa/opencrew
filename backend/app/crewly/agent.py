@@ -13,14 +13,18 @@ SYSTEM = """You are Crewly, the coordination assistant inside OpenCrew. OpenCrew
 and Georgia Power (gpc) planned transmission work overlaps in space and time so planners can share crews, land and equipment.
 
 Rules:
-- Every number you state (distances, dates, percentages, dollars, counts, scores, ids) must come from a tool result in this turn.
-  Never calculate, estimate or convert numbers yourself. If you need a number, call a tool first.
-- Use tools to drive the UI: find_overlaps filters the list and map, get_opportunity and focus_map move the map.
-- Refer to opportunities by project names and #id. Keep replies short: a few sentences or a compact list.
-- Say plainly when a location is approximate (straight_line, partial_point) or a window is derived.
-- You can draft outreach but never send it. A person must approve every email in the UI.
+- Call a tool before stating any number. Every number you write (distances, dates, years, percentages, dollars, counts, scores, ids)
+  must appear in a tool result from this turn or in the user's message. Never calculate, estimate, convert or add numbers yourself.
+- Prefer ids: refer to opportunities as "#id" plus both project names. Use project_details or search_projects to resolve a project name first.
+- Say plainly when something is approximate: straight_line or partial_point locations, confidence under 70%, derived windows
+  (window_basis default_duration or derived), near-term phases (derived), and cost assumptions marked placeholder.
+- Use tools to drive the UI: find_overlaps and switch_view change the list and map, get_opportunity and focus_map move the map,
+  timeline_filter narrows the timeline, draft_brief opens the brief.
+- You can draft outreach and change a status when asked, but never send email and never say an email was sent.
+  A person must approve every email in the UI.
+- If a request is ambiguous, ask at most one short clarifying question; otherwise act.
 - Storm questions are about the Hurricane Helene replay (Sept 2024); use storm_status.
-- Data comes from public filings only."""
+- Keep replies short: a few sentences or a compact list. Data comes from public filings only."""
 
 def _declarations():
     return [types.FunctionDeclaration(name=name, description=desc,
@@ -36,7 +40,8 @@ def run(conn, messages):
     contents = [types.Content(role="model" if m["role"] == "model" else "user", parts=[types.Part.from_text(text=m["text"])]) for m in messages]
     config = types.GenerateContentConfig(system_instruction=SYSTEM, temperature=0.2, tools=[types.Tool(function_declarations=_declarations())],
                                          automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True))
-    ui, calls_log, tool_text = [], [], ""
+    ui, calls_log = [], []
+    tool_text = next((m["text"] for m in reversed(messages) if m["role"] != "model"), "")  # numbers the user gave are allowed back
     for _ in range(MAX_STEPS):
         resp = client.models.generate_content(model=MODEL, contents=contents, config=config)
         calls = resp.function_calls or []
@@ -53,7 +58,7 @@ def run(conn, messages):
                 conn.rollback()
                 result, actions = {"error": str(e)}, []
             ui += actions
-            tool_text += json.dumps(result, default=str)
+            tool_text += json.dumps(result, default=str) + json.dumps(call.args or {}, default=str)
             calls_log.append({"name": call.name, "args": call.args or {}})
             parts.append(types.Part.from_function_response(name=call.name, response={"result": json.loads(json.dumps(result, default=str))}))
         contents.append(types.Content(role="user", parts=parts))
