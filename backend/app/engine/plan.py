@@ -44,7 +44,7 @@ WHERE a.id = ANY(%(ids)s) AND b.id = ANY(%(ids)s)
 """
 
 OPPS_SQL = """
-SELECT op.id, op.job_a, op.job_b, {drive} AS drive_min FROM opportunity op WHERE op.horizon = 'long' ORDER BY op.id
+SELECT op.id, op.job_a, op.job_b, op.drive_min FROM opportunity op WHERE op.horizon = 'long' ORDER BY op.id
 """
 
 SITES_SQL = """
@@ -75,8 +75,7 @@ def merge(constraints):
 def load(conn, yard_km):
     jobs = conn.execute(JOBS_SQL).fetchall()
     ids = [j["id"] for j in jobs]
-    has_drive = conn.execute("SELECT 1 FROM information_schema.columns WHERE table_name = 'opportunity' AND column_name = 'drive_min'").fetchone()
-    opps = conn.execute(OPPS_SQL.format(drive="op.drive_min" if has_drive else "NULL::real")).fetchall()
+    opps = conn.execute(OPPS_SQL).fetchall()
     pairs = conn.execute(PAIRS_SQL, {"ids": ids}).fetchall()
     sites, near = {}, {}
     for r in conn.execute(SITES_SQL, {"ids": ids, "m": yard_km * 1000}).fetchall():

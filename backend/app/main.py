@@ -286,15 +286,21 @@ def crewly(body: Chat, conn=Depends(get_conn)):
     return agent.run(conn, body.messages)
 
 
-class PlanLimits(BaseModel):
-    max_delay_months: int | None = None
-    max_drive_min: int | None = None
-    min_overlap_months: int | None = None
+class PlanConstraints(BaseModel):
+    constraints: dict = {}
 
 
-@api.post("/plan/run")
-def plan_run(body: PlanLimits, conn=Depends(get_conn)):
-    return plan.run(conn, body.model_dump())
+@api.post("/plan/constraints")
+def plan_constraints(body: PlanConstraints, conn=Depends(get_conn)):
+    return plan.validate(conn, body.constraints)
+
+
+@api.post("/plan/solve")
+def plan_solve(body: PlanConstraints, conn=Depends(get_conn)):
+    checked = plan.validate(conn, body.constraints)
+    if not checked["valid"]:
+        raise HTTPException(422, "; ".join(checked["errors"]))
+    return plan.run(conn, checked["constraints"])
 
 
 @api.get("/plan")
