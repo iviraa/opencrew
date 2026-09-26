@@ -192,3 +192,31 @@ ALTER TABLE opportunity ADD COLUMN IF NOT EXISTS meet_lon REAL;
 ALTER TABLE opportunity ADD COLUMN IF NOT EXISTS meet_lat REAL;
 ALTER TABLE opportunity ADD COLUMN IF NOT EXISTS meet_road TEXT;
 ALTER TABLE opportunity ADD COLUMN IF NOT EXISTS meet_min REAL;
+
+CREATE TABLE IF NOT EXISTS outlook (
+  id          BIGSERIAL,
+  mode        TEXT NOT NULL,              -- live | replay
+  product     TEXT NOT NULL,              -- spc | spc48 | wpc_ero | nhc_gtwo | nhc_wsp
+  day         INT,                        -- outlook day, 1 = the day it was issued
+  issued      TIMESTAMPTZ NOT NULL,
+  valid_from  TIMESTAMPTZ NOT NULL,
+  valid_to    TIMESTAMPTZ NOT NULL,
+  level       TEXT,                       -- SLGT, Moderate, 40%, ...
+  rank        INT,                        -- 1 low to 5 high, for color and sorting
+  label       TEXT,
+  props       JSONB,
+  source_url  TEXT,
+  geom        GEOGRAPHY
+);
+SELECT create_hypertable('outlook', by_range('valid_from'), if_not_exists => TRUE);
+
+CREATE TABLE IF NOT EXISTS job_hazard (
+  job_id           TEXT PRIMARY KEY,      -- long-range job id, survives job reloads
+  in_floodplain    BOOLEAN,
+  flood_zones      TEXT[],
+  hurricanes_50mi  INT,
+  storms_50mi      INT,
+  peak_month       INT,
+  since_year       INT,
+  checked_at       TIMESTAMPTZ DEFAULT now()
+);
