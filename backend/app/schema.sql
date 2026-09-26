@@ -65,6 +65,14 @@ CREATE TABLE IF NOT EXISTS asset (
 );
 CREATE INDEX IF NOT EXISTS asset_geom_idx ON asset USING GIST (geom);
 
+CREATE TABLE IF NOT EXISTS grid_line (
+  id       TEXT PRIMARY KEY,               -- osm way id
+  voltage  INT,                            -- highest circuit voltage in kV
+  operator TEXT,
+  geom     GEOMETRY(LineString, 4326)
+);
+CREATE INDEX IF NOT EXISTS grid_line_geom_idx ON grid_line USING GIST (geom);
+
 CREATE TABLE IF NOT EXISTS job_review (
   id             SERIAL PRIMARY KEY,
   org_id         TEXT REFERENCES org(id),

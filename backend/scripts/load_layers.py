@@ -1,5 +1,6 @@
 import csv
 import io
+import json
 import zipfile
 
 import httpx
@@ -48,6 +49,23 @@ def nri(state):
         offset += len(feats)
 
 
+def kv(tag):
+    vals = [int(v) // 1000 for v in (tag or "").replace(",", ";").split(";") if v.strip().isdigit()]
+    return max(vals) if vals else None
+
+
+def grid_lines(conn):
+    path = LAYERS / "osm_lines.json"
+    if not path.exists():
+        return 0
+    rows = [(w["osm"], kv(w["voltage"]), w["operator"], "LINESTRING(" + ", ".join(f"{x} {y}" for x, y in w["coords"]) + ")")
+            for w in json.loads(path.read_text()) if len(w["coords"]) >= 2]
+    conn.execute("TRUNCATE grid_line")
+    with conn.cursor() as cur:
+        cur.executemany("INSERT INTO grid_line VALUES (%s, %s, %s, ST_GeomFromText(%s, 4326)) ON CONFLICT DO NOTHING", rows)
+    return len(rows)
+
+
 def main():
     with connect() as conn:
         init_schema(conn)
@@ -58,6 +76,7 @@ def main():
             with conn.cursor() as cur:
                 cur.executemany("INSERT INTO tract VALUES (%s, %s, ST_GeomFromText(%s, 4326), %s, %s)", rows)
             print(abbr, len(rows), "tracts,", len(vul), "svi,", len(risk), "nri")
+        print("grid lines", grid_lines(conn))
 
 
 if __name__ == "__main__":

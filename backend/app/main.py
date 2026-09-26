@@ -201,6 +201,13 @@ def storm_frame(at: datetime, conn=Depends(get_conn)):
     return replay.frame(conn, at)
 
 
+@api.get("/layers/grid")
+def grid(conn=Depends(get_conn)):
+    rows = conn.execute("""SELECT voltage, ST_AsGeoJSON(ST_Simplify(geom, 0.0005), 4)::json AS g FROM grid_line
+                           WHERE voltage >= 100""").fetchall()  # transmission only, lightly simplified
+    return {"type": "FeatureCollection", "features": [{"type": "Feature", "geometry": r["g"], "properties": {"voltage": r["voltage"]}} for r in rows]}
+
+
 @api.get("/review")
 def review(conn=Depends(get_conn)):
     return conn.execute("""SELECT id, org_id, reason, source_page, raw->>'name' AS name, raw->>'in_service' AS in_service,

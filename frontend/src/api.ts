@@ -79,6 +79,7 @@ export const api = {
     call<Savings>(`/opportunities/${id}/savings`, { method: "POST", body: JSON.stringify({ assumptions }) }),
   brief: (id: number) => call<{ markdown: string; summary_source: string }>(`/opportunities/${id}/brief`, { method: "POST" }),
   tracts: () => call<GeoJSON.FeatureCollection>("/layers/tracts"),
+  grid: () => call<GeoJSON.FeatureCollection>("/layers/grid"),
   storm: (at: number) => call<StormFrame>(`/storm/frame?at=${new Date(at).toISOString()}`),
   ingest: (form: FormData) => call<IngestResult>("/ingest", { method: "POST", body: form }),
   procurement: () => call<ProcurementGroup[]>("/procurement"),

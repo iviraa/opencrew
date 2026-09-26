@@ -52,8 +52,9 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
   const box = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const [loaded, setLoaded] = useState(false);
-  const [layers, setLayers] = useState({ risk: false, vulnerability: false });
+  const [layers, setLayers] = useState({ grid: false, risk: false, vulnerability: false });
   const tractsLoaded = useRef(false);
+  const gridLoaded = useRef(false);
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
   const clickRef = useRef(onMapClick);
@@ -68,6 +69,10 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
         m.addLayer({ id: `tract-${key}`, type: "fill", source: "tracts", layout: { visibility: "none" },
           paint: { "fill-color": color, "fill-opacity": ["interpolate", ["linear"], ["coalesce", ["get", key], 0], 0, 0, 1, 0.45] } });
       }
+      m.addSource("grid", { type: "geojson", data: EMPTY });
+      m.addLayer({ id: "grid", type: "line", source: "grid", layout: { visibility: "none" },
+        paint: { "line-color": "#94a3b8", "line-opacity": 0.7,
+          "line-width": ["interpolate", ["linear"], ["coalesce", ["get", "voltage"], 115], 115, 0.6, 230, 1.2, 500, 2.2] } });
       for (const src of ["cone", "track", "warnings", "reports", "staging"]) m.addSource(src, { type: "geojson", data: EMPTY });
       m.addLayer({ id: "cone-fill", type: "fill", source: "cone", paint: { "fill-color": "#f43f5e", "fill-opacity": 0.12 } });
       m.addLayer({ id: "cone-line", type: "line", source: "cone", paint: { "line-color": "#e11d48", "line-width": 1.5, "line-dasharray": [2, 2] } });
@@ -162,6 +167,11 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
       tractsLoaded.current = true;
       api.tracts().then((d) => (m.getSource("tracts") as GeoJSONSource).setData(d));
     }
+    if (layers.grid && !gridLoaded.current) {
+      gridLoaded.current = true;
+      api.grid().then((d) => (m.getSource("grid") as GeoJSONSource).setData(d));
+    }
+    m.setLayoutProperty("grid", "visibility", layers.grid ? "visible" : "none");
     m.setLayoutProperty("tract-risk", "visibility", layers.risk ? "visible" : "none");
     m.setLayoutProperty("tract-vulnerability", "visibility", layers.vulnerability ? "visible" : "none");
   }, [layers, loaded]);
@@ -189,7 +199,7 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
       <div ref={box} className="h-full w-full" />
       <Legend jobs={jobs} />
       <div className="absolute right-12 top-3 flex gap-1.5 text-[11px]">
-        {([["risk", "Hurricane risk"], ["vulnerability", "Social vulnerability"]] as const).map(([key, label]) => (
+        {([["grid", "Existing grid"], ["risk", "Hurricane risk"], ["vulnerability", "Social vulnerability"]] as const).map(([key, label]) => (
           <button key={key} onClick={() => setLayers((l) => ({ ...l, [key]: !l[key] }))}
             className={`rounded-md px-2 py-1 font-medium shadow-sm ring-1 ${layers[key] ? "bg-slate-900 text-white ring-slate-900" : "bg-white text-slate-700 ring-slate-200"}`}>
             {label}
