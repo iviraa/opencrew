@@ -9,6 +9,8 @@ import { Button, Chip, CloseButton, PairBubble, Stat, TierPill } from "./ui";
 import { Disclosure, inputClass } from "./ui-extra";
 import Vendors from "./Vendors";
 
+type Sourced = Assumption & { url?: string | null; page?: string; note?: string; scope?: string };  // cited cost ranges from /api/assumptions
+
 type Props = {
   detail: OpportunityDetail;
   assumptions: Record<string, Assumption>;
@@ -55,7 +57,7 @@ export default function DetailPanel({ detail, assumptions, onClose, onStatus, on
   };
 
   const share = detail.shareable;
-  const allPlaceholder = Object.values(assumptions).every((a) => !a.verified);
+  const sourced = Object.entries(assumptions as Record<string, Sourced>).filter(([, a]) => a.scope !== "storm");  // storm crew costs belong to the storm plan
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between px-5 pt-4">
@@ -127,21 +129,27 @@ export default function DetailPanel({ detail, assumptions, onClose, onStatus, on
           )}
 
           <Disclosure title="Cost assumptions" open={!!open.costs} onToggle={() => toggle("costs")}>
-            <p className="text-[13px] text-muted">Every dollar figure comes from these ranges, not from AI. Drag to see how the savings change.</p>
-            {allPlaceholder && <p className="mt-1 text-[13px] text-warn">These are placeholder values until real costs are sourced.</p>}
+            <p className="text-[13px] text-muted">Every dollar figure comes from these ranges, not from AI. Each range cites its document. Drag to see how the savings change.</p>
             {Object.keys(savings.items).length > 0 && (
               <dl className="mt-3 divide-y divide-line rounded-2xl bg-save-soft/60 px-4">
                 {Object.entries(savings.items).map(([k, v]) => <Row key={k} label={capital(k)} value={`${usd(v.low)} to ${usd(v.high)}`} />)}
               </dl>
             )}
             <div className="mt-4 space-y-4">
-              {Object.entries(assumptions).map(([key, a]) => values[key] && (
+              {sourced.map(([key, a]) => values[key] && (
                 <div key={key}>
                   <div className="flex items-baseline justify-between gap-2">
-                    <span className="text-[14px] font-semibold">{a.label}</span>
+                    <span className="flex items-center gap-1.5 text-[14px] font-semibold">
+                      {a.label}
+                      {!a.verified && <Chip tone="warn">estimate</Chip>}
+                    </span>
                     <span className="text-[13px] text-muted">{values[key].low.toLocaleString()} to {values[key].high.toLocaleString()} {a.unit}</span>
                   </div>
-                  {!a.verified && !allPlaceholder && <div className="mt-0.5 text-[12px] text-warn">Placeholder value, not yet sourced</div>}
+                  {a.note && <p className="mt-0.5 text-[12px] leading-snug text-faint">{a.note}</p>}
+                  {a.url
+                    ? <a href={a.url} target="_blank" rel="noopener noreferrer" className="mt-0.5 inline-block text-[12px] font-semibold text-desc hover:underline"
+                        title={a.source}>Source: {a.source.length > 60 ? `${a.source.slice(0, 58)}…` : a.source}{a.page ? `, p. ${a.page}` : ""}</a>
+                    : <span className="mt-0.5 block text-[12px] text-faint">Source: {a.source}</span>}
                   <div className="mt-1.5 grid grid-cols-2 gap-3">
                     {(["low", "high"] as const).map((end) => (
                       <label key={end} className="text-[12px] text-faint">
