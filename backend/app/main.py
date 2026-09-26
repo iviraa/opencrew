@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, Uplo
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app.config import ASSUMPTIONS, MAX_DRIVE_MIN
+from app.config import ASSUMPTIONS, MAX_DRIVE_MIN, STATUSES
 from app import outreach, vendors
 from app.crewly import agent, brief
 from app.db import ROOT, get_conn
@@ -22,7 +22,6 @@ from app.storm import replay
 app = FastAPI(title="OpenCrew")
 api = APIRouter(prefix="/api")
 
-STATUSES = ["not_contacted", "drafted", "sent", "replied", "call_scheduled", "agreed", "declined"]
 
 @api.get("/orgs")
 def orgs(conn=Depends(get_conn)):

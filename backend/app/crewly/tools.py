@@ -1,4 +1,4 @@
-from rapidfuzz import fuzz, process
+from rapidfuzz import fuzz, process, utils
 
 from datetime import datetime
 
@@ -79,7 +79,7 @@ def estimate_savings(conn, opportunity_id, assumptions=None):
 def search_projects(conn, query, org=None):
     rows = conn.execute("SELECT j.id, j.name, j.org_id, j.in_service, j.geom_quality FROM job j WHERE j.horizon = 'long' AND (%s::text IS NULL OR j.org_id = %s)",
                         (org, org)).fetchall()
-    hits = process.extract(query, {r["id"]: r["name"] for r in rows}, scorer=fuzz.WRatio, limit=5)
+    hits = process.extract(query, {r["id"]: r["name"] for r in rows}, scorer=fuzz.WRatio, processor=utils.default_process, limit=5)
     by_id = {r["id"]: r for r in rows}
     out = []
     for _, sc, jid in hits:
@@ -179,6 +179,10 @@ TOOLS = {
     "ingest_filing": (ingest_filing, "Ingest a public utility filing PDF from a link: CEII check, parse, place projects, recompute overlaps.", {
         "url": {"type": "string"}, "utility_id": {"type": "string", "description": "short id for a new utility, e.g. santee"},
         "utility_name": {"type": "string"}, "state": {"type": "string", "description": "two-letter home state"}}, ["url"]),
-    "focus_map": (focus_map, "Fly the map to an opportunity or a named region.", {
+    "focus_map": (focus_map, "Fly the map to an opportunity or a named region (" + ", ".join(REGIONS) + ").", {
         "opportunity_id": {"type": "integer"}, "region": {"type": "string"}}, []),
 }
+
+from app.crewly.more_tools import MORE_TOOLS  # noqa: E402  kept at the bottom so tools stay one registry
+
+TOOLS.update(MORE_TOOLS)

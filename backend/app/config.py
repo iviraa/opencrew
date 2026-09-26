@@ -36,3 +36,5 @@ ASSUMPTIONS = {
     "mobilization_usd": {"low": 50000, "high": 150000, "unit": "$", "label": "Crew mobilization", "source": "placeholder", "verified": False},
     "outage_usd": {"low": 25000, "high": 100000, "unit": "$", "label": "Coordinated outage", "source": "placeholder", "verified": False},
 }
+
+STATUSES = ["not_contacted", "drafted", "sent", "replied", "call_scheduled", "agreed", "declined"]
