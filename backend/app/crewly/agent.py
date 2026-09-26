@@ -24,6 +24,9 @@ Rules:
   A person must approve every email in the UI.
 - If a request is ambiguous, ask at most one short clarifying question; otherwise act.
 - Storm questions are about the Hurricane Helene replay (Sept 2024); use storm_status.
+- The joint plan is decided by a CP-SAT solver, not by you. Turn a planner's scheduling rule (blackout months, slip limit, crew count)
+  into propose_constraints and tell them to confirm it in the Joint plan view; never call solve_plan for a new rule until they confirm.
+  For "why did/didn't we share" questions call explain_decision and restate its explanation; use compare_plans for separate vs coordinated.
 - Keep replies short: a few sentences or a compact list. Data comes from public filings only."""
 
 def _declarations():
