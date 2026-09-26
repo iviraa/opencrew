@@ -1,0 +1,54 @@
+from datetime import date, datetime
+
+from app.engine.cost import savings
+from app.engine.scoring import score, tier_for, time_overlap
+from app.ingest.classify import endpoints, job_type, parse_date, voltage
+
+
+def dt(y, m=1):
+    return datetime(y, m, 1)
+
+
+def test_tiers():
+    assert tier_for(0, touches=True) == "crossing"
+    assert tier_for(1599) == "land"
+    assert tier_for(7999) == "site"
+    assert tier_for(40000) == "crew"
+    assert tier_for(41000) is None  # past 25 mi
+
+
+def test_time_overlap_uses_shorter_window():
+    assert time_overlap(dt(2024), dt(2026), dt(2025), dt(2025, 7)) == 1.0
+    assert time_overlap(dt(2024), dt(2025), dt(2026), dt(2027)) == 0.0
+    assert round(time_overlap(dt(2024), dt(2026), dt(2025), dt(2027)), 2) == 0.5
+
+
+def test_score():
+    assert score("crossing", 0.8) == 1.0
+    assert score("crew", 0.0) == 0.3 * 0.2
+    assert score("land", 0.3, risk=0.5) == 0.8 * 0.5 * 1.5
+
+
+def test_savings_stack_and_range():
+    crew, site = savings("crew", 0), savings("site", 0)
+    assert crew["low"] < crew["high"]
+    assert set(site["items"]) == {"crew mobilization", "staging yard"}
+    land = savings("land", 2000)
+    assert "shared right-of-way" in land["items"]
+    assert savings("land", 0)["items"].keys() == site["items"].keys()  # no corridor, no land savings
+
+
+def test_savings_overrides():
+    s = savings("crew", 0, {"mobilization_usd": {"low": 1000, "high": 2000}})
+    assert (s["low"], s["high"]) == (1000, 2000)
+
+
+def test_name_parsing():
+    assert endpoints("Stevens Creek - Hooks 115kV/LR Plumb Branch 46kV Rebuilds") == ["Stevens Creek", "Hooks"]
+    assert endpoints("SAV: GOSHEN (SAV) - MCINTOSH 115KV LINE REBUILD") == ["GOSHEN (SAV)", "MCINTOSH"]
+    assert endpoints("Union Pier 115-13.8 kV Sub: Tap") == ["Union Pier"]
+    assert voltage("Okatie 230-115kV Substation, Jasper – Yemassee 230kV #1 Fold-in") == 230
+    assert job_type("Jasper – Okatie 230 kV #2: Construct") == "new_line"
+    assert job_type("EVANS PRIMARY - THURMOND DAM (USA) #5 115KV REBUILD") == "line_upgrade"
+    assert job_type("SAV: MCINTOSH - PURRYSBURG 230KV REACTORS") == "substation"
+    assert parse_date("12/31/2025 (phase 1) and 10/01/2026") == date(2026, 10, 1)
