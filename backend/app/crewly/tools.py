@@ -193,3 +193,5 @@ from app.crewly.plan_tools import PLAN_TOOLS  # noqa: E402
 TOOLS.update(MORE_TOOLS)
 TOOLS.update(PLAN_TOOLS)
 TOOLS.update(INCIDENT_TOOLS)
+from app.crewly.storm_tools import STORM_TOOLS  # noqa: E402
+TOOLS.update(STORM_TOOLS)
