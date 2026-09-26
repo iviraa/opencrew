@@ -59,7 +59,11 @@ export default function Shell() {
   // who am I, my projects, requests and notifications
   useEffect(() => {
     api.me().then((m) => { setMe(m); beaver("wave"); }).catch((e) => setErr(String(e.message ?? e)));
-    api.projects().then(setProjects).catch((e) => setErr(String(e.message ?? e)));
+    api.projects().then((p) => {
+      setProjects(p);
+      const b = bboxOf([p]);
+      if (b) setFit({ bbox: b, key: "mine" });  // start on our own service area
+    }).catch((e) => setErr(String(e.message ?? e)));
   }, []);
 
   const reload = useCallback(() => {
@@ -192,15 +196,15 @@ export default function Shell() {
     const hot = sel ? new Set([sel.job_a, sel.job_b]) : null;
     ov.jobs.features.filter((f) => involved.has(f.properties.id)).forEach((f) => {
       const on = !hot || hot.has(f.properties.id);
-      add(f, { color: COMPANY[f.properties.org_id as "desc" | "gpc"].color, width: on && hot ? 5 : 3, radius: on && hot ? 7 : 5, opacity: on ? 0.95 : 0.18,
+      add(f, { color: COMPANY[f.properties.org_id as "desc" | "gpc"].color, width: on && hot ? 5 : 3, radius: on && hot ? 7 : 5, opacity: on ? 0.95 : 0.12,
         title: `<b>${esc(f.properties.name)}</b><br/>${esc(COMPANY[f.properties.org_id as "desc" | "gpc"].name)}` });
     });
     visible.forEach((o) => {
       const on = !sel || sel.id === o.id;
       const s = sides(me, o);
       const title = `<b>#${o.id} ${esc(TIER_LABEL[o.tier]?.label)}</b><br/>${esc(s.ours.name)}<br/><span style="color:#5e6a8a">with ${esc(s.theirs.name)}</span>`;
-      lines.push({ type: "Feature", geometry: o.link, properties: { color: TIER_LABEL[o.tier]?.color, width: 2.5, dash: true, opacity: on ? 1 : 0.2, title, pick: `op:${o.id}` } });
-      points.push({ type: "Feature", geometry: mid(o.link), properties: { color: TIER_LABEL[o.tier]?.color, radius: sel?.id === o.id ? 10 : 7, stroke: "#111014", opacity: on ? 1 : 0.25, title, pick: `op:${o.id}` } });
+      lines.push({ type: "Feature", geometry: o.link, properties: { color: TIER_LABEL[o.tier]?.color, width: 2.5, dash: true, opacity: on ? 1 : 0.12, title, pick: `op:${o.id}` } });
+      points.push({ type: "Feature", geometry: mid(o.link), properties: { color: TIER_LABEL[o.tier]?.color, radius: sel?.id === o.id ? 9 : 5.5, stroke: sel?.id === o.id ? "#111014" : "#ffffff", opacity: on ? 1 : 0.15, title, pick: `op:${o.id}` } });
     });
     return { lines: { type: "FeatureCollection", features: lines }, points: { type: "FeatureCollection", features: points } };
   }, [me, mode, ov, projects, visible, selected]);
@@ -231,6 +235,7 @@ export default function Shell() {
   );
 
   const chatOpen = top?.kind === "chat";
+  const roomy = (n: React.ReactNode) => n && (chatOpen ? n : <div className="flex min-h-0 flex-1 flex-col pb-[60px]">{n}</div>);  // keep lists clear of the chat bubble
 
   return (
     <div className="relative h-full w-full" onClick={() => pop && setPop(null)}>
@@ -259,7 +264,7 @@ export default function Shell() {
         {err && <p className="mb-2 rounded-xl bg-warn-soft px-3 py-2 text-sm text-warn">{err}</p>}
 
         {me && tab === "overlaps" && (
-          <Split side={panel ?? overlapsSide} map={
+          <Split side={roomy(panel ?? overlapsSide)} map={
             <MapPane scene={scene} fit={fit} onPick={(p) => p.startsWith("op:") && openOverlap(Number(p.slice(3)))}>
               {mode === "projects" && projects && (
                 <div className="pop-in absolute inset-x-0 bottom-6 flex justify-center">
@@ -287,14 +292,14 @@ export default function Shell() {
             </MapPane>
           } />
         )}
-        {me && tab === "weather" && <WeatherTab projects={projects} side={panel} />}
-        {me && tab === "news" && <NewsTab projects={projects} side={panel} />}
+        {me && tab === "weather" && <WeatherTab projects={projects} side={roomy(panel)} />}
+        {me && tab === "news" && <NewsTab projects={projects} side={roomy(panel)} />}
         {!me && !err && <div className="grid flex-1 place-items-center text-muted"><span className="dots">Getting your projects</span></div>}
 
         {!chatOpen && me && (
           <button onClick={() => push({ kind: "chat" })} aria-label="Ask Crewly"
-            className="pop-in absolute bottom-5 right-5 z-20 grid h-16 w-16 place-items-center rounded-full bg-white transition hover:scale-105">
-            <svg viewBox="0 0 64 64" className="h-16 w-16" aria-hidden>
+            className="pop-in absolute bottom-4 right-5 z-20 grid h-14 w-14 place-items-center rounded-full bg-white transition hover:scale-105">
+            <svg viewBox="0 0 64 64" className="h-14 w-14" aria-hidden>
               <path d="M32 6c14.9 0 26 10.3 26 23.5S46.9 53 32 53c-3.4 0-6.6-.5-9.6-1.5L9 57l3.6-11.3C8.4 41.5 6 35.8 6 29.5 6 16.3 17.1 6 32 6z"
                 fill="#fff" stroke="#111014" strokeWidth="3.2" strokeLinejoin="round" />
               <circle cx="21" cy="30" r="3.2" fill="#111014" /><circle cx="32" cy="30" r="3.2" fill="#111014" /><circle cx="43" cy="30" r="3.2" fill="#111014" />
