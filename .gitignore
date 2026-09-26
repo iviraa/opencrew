@@ -1,0 +1,24 @@
+# agent + local notes
+CLAUDE.md
+.claude/
+NOTES.md
+
+# env
+.env
+
+# python
+__pycache__/
+*.pyc
+.venv/
+
+# node
+node_modules/
+dist/
+
+# data
+data/raw/
+data/layers/
+.DS_Store
+
+# private docs
+*.md
