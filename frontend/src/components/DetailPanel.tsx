@@ -55,6 +55,8 @@ export default function DetailPanel({ detail, assumptions, onClose, onStatus }: 
           <Metric label="Center to center" value={miles(detail.center_distance_m)} />
           <Metric label="Build window overlap" value={pct(detail.time_overlap)} />
           <Metric label="In-service gap" value={detail.time_gap_days == null ? "n/a" : `${detail.time_gap_days} days`} />
+          <Metric label="Hurricane risk (FEMA NRI)" value={`${Math.round(detail.risk * 100)} / 100`} />
+          <Metric label="Social vulnerability (CDC SVI)" value={`${Math.round(detail.vulnerability * 100)}th pct`} />
           {detail.overlap_m > 0 && <Metric label="Parallel corridor" value={miles(detail.overlap_m)} />}
         </section>
 

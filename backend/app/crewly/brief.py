@@ -74,6 +74,8 @@ def build(conn, opp_id):
         f"- Build windows overlap: {round(o['time_overlap'] * 100)}% of the shorter window",
         f"- In-service dates are {o['time_gap_days']} days apart" if o["time_gap_days"] is not None else "- In-service gap: unknown",
     ]
+    lines.append(f"- Area context: hurricane risk {round(o['risk'] * 100)}/100 (FEMA NRI), social vulnerability "
+                 f"{round(o['vulnerability'] * 100)}th percentile (CDC SVI), at the midpoint between the projects")
     if o["overlap_m"] > 0:
         lines.append(f"- Parallel corridor within 1 mile: {o['overlap_m'] / MILE_M:.1f} mi")
     lines += ["", "## What could be shared", *[f"- {r}" for r in shareable(o["tier"])], "",

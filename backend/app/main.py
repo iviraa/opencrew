@@ -92,6 +92,13 @@ def assumptions():
     return ASSUMPTIONS
 
 
+@api.get("/layers/tracts")
+def tracts(conn=Depends(get_conn)):
+    rows = conn.execute("SELECT geoid, risk, vulnerability, ST_AsGeoJSON(ST_SimplifyPreserveTopology(geom, 0.003), 4)::json AS g FROM tract").fetchall()
+    return {"type": "FeatureCollection",
+            "features": [{"type": "Feature", "geometry": r.pop("g"), "properties": r} for r in rows]}
+
+
 @api.get("/review")
 def review(conn=Depends(get_conn)):
     return conn.execute("SELECT id, org_id, reason, source_page, raw->>'name' AS name FROM job_review ORDER BY id").fetchall()

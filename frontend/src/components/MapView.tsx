@@ -2,7 +2,7 @@ import * as maplibregl from "maplibre-gl";
 import type { GeoJSONSource, LngLatBoundsLike } from "maplibre-gl";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { useEffect, useRef, useState } from "react";
-import type { JobCollection, Opportunity } from "../api";
+import { api, type JobCollection, type Opportunity } from "../api";
 import { TIER_COLOR, TIER_LABEL } from "../format";
 
 type Props = {
@@ -50,6 +50,8 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly }
   const box = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [layers, setLayers] = useState({ risk: false, vulnerability: false });
+  const tractsLoaded = useRef(false);
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
 
@@ -57,6 +59,11 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly }
     const m = new maplibregl.Map({ container: box.current!, style: STYLE, center: [-81.6, 32.9], zoom: 6.3 });
     m.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
     m.on("load", () => {
+      m.addSource("tracts", { type: "geojson", data: EMPTY });
+      for (const [key, color] of [["risk", "#dc2626"], ["vulnerability", "#7c3aed"]] as const) {
+        m.addLayer({ id: `tract-${key}`, type: "fill", source: "tracts", layout: { visibility: "none" },
+          paint: { "fill-color": color, "fill-opacity": ["interpolate", ["linear"], ["coalesce", ["get", key], 0], 0, 0, 1, 0.45] } });
+      }
       m.addSource("jobs", { type: "geojson", data: EMPTY });
       m.addSource("opps", { type: "geojson", data: EMPTY });
       const faded = ["case", ["<", ["get", "confidence"], 0.7], 0.45, 0.95] as maplibregl.ExpressionSpecification;
@@ -125,6 +132,17 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly }
   }, [selected, jobs, loaded]);
 
   useEffect(() => {
+    const m = map.current;
+    if (!m || !loaded) return;
+    if ((layers.risk || layers.vulnerability) && !tractsLoaded.current) {
+      tractsLoaded.current = true;
+      api.tracts().then((d) => (m.getSource("tracts") as GeoJSONSource).setData(d));
+    }
+    m.setLayoutProperty("tract-risk", "visibility", layers.risk ? "visible" : "none");
+    m.setLayoutProperty("tract-vulnerability", "visibility", layers.vulnerability ? "visible" : "none");
+  }, [layers, loaded]);
+
+  useEffect(() => {
     if (!fly || !map.current) return;
     const [x0, y0, x1, y1] = fly.bbox;
     map.current.fitBounds([[x0, y0], [x1, y1]], { padding: 40, duration: 900 });
@@ -134,6 +152,14 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly }
     <div className="relative h-full w-full">
       <div ref={box} className="h-full w-full" />
       <Legend jobs={jobs} />
+      <div className="absolute right-12 top-3 flex gap-1.5 text-[11px]">
+        {([["risk", "Hurricane risk"], ["vulnerability", "Social vulnerability"]] as const).map(([key, label]) => (
+          <button key={key} onClick={() => setLayers((l) => ({ ...l, [key]: !l[key] }))}
+            className={`rounded-md px-2 py-1 font-medium shadow-sm ring-1 ${layers[key] ? "bg-slate-900 text-white ring-slate-900" : "bg-white text-slate-700 ring-slate-200"}`}>
+            {label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
