@@ -935,7 +935,7 @@ def validate(conn, constraints):
             errors.append(f"{b['label']} window must be fractions with 0 <= start < end <= 1")
         if b["mob_low_k"] < 0 or b["mob_low_k"] > b["mob_high_k"]:
             errors.append(f"{b['label']} cost range must be 0 <= low <= high")
-        if name in (constraints.get("bursts") or {}):
+        if any(b[k] != BURSTS[name][k] for k in BURST_KEYS):  # only mention assumptions that differ from the defaults
             notes.append(f"{b['label'].capitalize()}: {weeks_text(b['weeks'])} in {b['phase']} ({round(lo * 100)}-{round(hi * 100)}%), "
                          f"${b['mob_low_k']:,.0f}k-${b['mob_high_k']:,.0f}k per mobilization" + ("" if b["enabled"] else ", turned off"))
     if c["burst_gap_weeks"] < 0:

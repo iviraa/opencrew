@@ -82,3 +82,12 @@ def test_crewly_proposes_but_does_not_solve(client, solved):
         after = conn.execute("SELECT max(id) AS n FROM joint_plan").fetchone()["n"]
     assert before == after  # proposing never runs the solver
     assert actions[0]["type"] == "pending_constraints" and out["rules"]
+
+
+def test_crewly_proposes_specialty_and_contracting_rules(client, solved):
+    with connect() as conn:
+        out, actions = TOOLS["propose_constraints"][0](conn, burst={"type": "wire_stringing", "weeks": 6}, joint_contracting=True)
+        summary, _ = TOOLS["compare_plans"][0](conn)
+    assert any(r.startswith("Wire stringing: 6 weeks") for r in out["rules"]) and any("one contractor" in r for r in out["rules"])
+    assert out["proposed"]["joint_contracting"] is True and actions[0]["type"] == "pending_constraints"
+    assert "strict_headline" in summary and "joint_contracting_headline" in summary

@@ -13,12 +13,17 @@ def _summary(p):
     if p.get("status") in ("infeasible", "empty"):
         return {"status": p["status"], "problem": p.get("problem")}
     shared = [d["sentence"] for d in p["decisions"] if d["decision"] == "share"][:5]
-    return {"status": p["status"], "headline": {k: v for k, v in p["headline"].items() if k != "crews"},
-            "separate": p["baseline"], "coordinated": p["coordinated"], "shared_crews": shared,
+    h = p["headline"]
+    jc = h.get("joint_contracting")
+    return {"status": p["status"], "solver": h.get("solver"),
+            "strict_headline": {k: v for k, v in h.items() if k not in ("crews", "joint_contracting", "solver")},
+            "joint_contracting_headline": jc or "off (turn it on to see its separate headline; it assumes one contractor serves both utilities)",
+            "separate": p["baseline"], "coordinated": p["coordinated"], "shared_resources": shared,
             "moved_projects": [r["why"] for r in p["schedule"] if r.get("why")][:5]}
 
 
-def propose_constraints(conn, blackout=None, max_slip=None, crew_count=None, max_advance_months=None):
+def propose_constraints(conn, blackout=None, max_slip=None, crew_count=None, max_advance_months=None, burst=None,
+                        burst_gap_weeks=None, joint_contracting=None):
     c = _current(conn)
     changes = []
     if blackout:
@@ -33,6 +38,16 @@ def propose_constraints(conn, blackout=None, max_slip=None, crew_count=None, max
         c.setdefault("crew_counts", {}).setdefault(crew_count["org"], {})[str(crew_count["year"])] = int(crew_count["count"])
     if max_advance_months is not None:
         c["max_advance_months"] = int(max_advance_months)
+    if burst:  # specialty assumptions: duration, typical window (% of the phase), cost per mobilization
+        spec = {k: burst[k] for k in ("weeks", "mob_low_k", "mob_high_k", "enabled") if burst.get(k) is not None}
+        if burst.get("window_start_pct") is not None or burst.get("window_end_pct") is not None:
+            cur = plan.merge(c)["bursts"].get(burst.get("type"), {}).get("window", [0, 1])
+            spec["window"] = [burst.get("window_start_pct", cur[0] * 100) / 100, burst.get("window_end_pct", cur[1] * 100) / 100]
+        c.setdefault("bursts", {}).setdefault(burst.get("type"), {}).update(spec)
+    if burst_gap_weeks is not None:
+        c["burst_gap_weeks"] = int(burst_gap_weeks)
+    if joint_contracting is not None:
+        c["joint_contracting"] = bool(joint_contracting)
     checked = plan.validate(conn, c)
     changes = checked["notes"]
     out = {"proposed": checked["constraints"], "rules": changes, "errors": checked["errors"],
@@ -48,7 +63,7 @@ def solve_plan(conn, constraints=None):
 
 
 def compare_plans(conn):
-    return _summary(plan.latest(conn)), [{"type": "plan"}]
+    return _summary(plan.latest(conn)), [{"type": "plan"}]  # strict headline plus the joint contracting one when it is on
 
 
 def explain_decision(conn, opportunity_id=None, project=None):
@@ -68,19 +83,28 @@ MONTHS = {"type": "array", "items": {"type": "integer"}, "description": "calenda
 PLAN_TOOLS = {
     "propose_constraints": (propose_constraints, "Turn a planner's rule into structured joint-plan constraints for them to CONFIRM in the UI. "
                             "Does not solve. Use for blackouts (no energization/outage work at a site in some months), slip limits "
-                            "(overall or per project) and crew counts per utility per year.", {
+                            "(overall or per project), crew counts per utility per year, specialty burst assumptions (heavy haul, "
+                            "crane lift, wire stringing, commissioning: weeks, window, cost), the burst gap, and the joint contracting toggle.", {
         "blackout": {"type": "object", "properties": {"site": {"type": "string", "description": "part of a project name, or * for all"},
                                                        "months": MONTHS, "phase_kind": {"type": "string", "enum": plan.PHASE_NAMES}}},
         "max_slip": {"type": "object", "properties": {"project": {"type": "string"}, "months": {"type": "integer"}}},
         "crew_count": {"type": "object", "properties": {"org": {"type": "string", "enum": ["desc", "gpc"]}, "year": {"type": "integer"},
                                                          "count": {"type": "integer"}}},
-        "max_advance_months": {"type": "integer"}}, []),
+        "max_advance_months": {"type": "integer"},
+        "burst": {"type": "object", "description": "change a specialty assumption", "properties": {
+            "type": {"type": "string", "enum": list(plan.BURSTS)}, "weeks": {"type": "integer"},
+            "window_start_pct": {"type": "number"}, "window_end_pct": {"type": "number"},
+            "mob_low_k": {"type": "number"}, "mob_high_k": {"type": "number"}, "enabled": {"type": "boolean"}}},
+        "burst_gap_weeks": {"type": "integer", "description": "longest a shared specialty crew may wait between two jobs"},
+        "joint_contracting": {"type": "boolean", "description": "assumption: one contractor serves both utilities' concurrent jobs"}}, []),
     "solve_plan": (solve_plan, "Solve the joint schedule (CP-SAT) with the planner's confirmed constraints and report separate vs "
                    "coordinated results. Only call when the planner asks to solve or has confirmed constraints.", {
         "constraints": {"type": "object", "description": "confirmed constraints; omit to reuse the current ones"}}, []),
-    "compare_plans": (compare_plans, "Separate (each utility alone) vs coordinated joint plan: mobilizations, yards, slip, late projects, "
-                      "savings range.", {}, []),
-    "explain_decision": (explain_decision, "Explain why the joint plan did or did not share a crew or yard for an opportunity or a project "
+    "compare_plans": (compare_plans, "Separate (each utility alone) vs coordinated joint plan: the strict headline (specialty crews and "
+                      "yards shared, general crews stay with their utility) and, when turned on, the joint contracting headline, which is "
+                      "an assumption. Mobilizations by type, yards, slip, late projects, savings ranges, solver status.", {}, []),
+    "explain_decision": (explain_decision, "Explain why the joint plan did or did not share a specialty crew (crane, stringing crew, "
+                         "heavy-haul rig, commissioning team) or yard for an opportunity or a project "
                          "(by name), and why a project's work moved. Returns the binding rule, numbers and a ready sentence; restate it.", {
         "opportunity_id": {"type": "integer"}, "project": {"type": "string", "description": "part of a project name, e.g. Jasper"}}, []),
 }

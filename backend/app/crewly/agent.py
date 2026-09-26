@@ -27,6 +27,9 @@ Rules:
 - The joint plan is decided by a CP-SAT solver, not by you. Turn a planner's scheduling rule (blackout months, slip limit, crew count)
   into propose_constraints and tell them to confirm it in the Joint plan view; never call solve_plan for a new rule until they confirm.
   For "why did/didn't we share" questions call explain_decision and restate its explanation; use compare_plans for separate vs coordinated.
+- In the joint plan, general crews stay with their own utility; only short specialty bursts (heavy haul, crane lifts, wire stringing,
+  commissioning) and yards are shared. Lead with the strict headline. Joint contracting is an off-by-default assumption (one contractor
+  serves both utilities); only quote its headline when it is on, and always say it rests on that assumption.
 - Keep replies short: a few sentences or a compact list. Data comes from public filings only."""
 
 def _declarations():
