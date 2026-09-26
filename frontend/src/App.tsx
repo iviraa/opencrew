@@ -1,15 +1,20 @@
 import { useEffect, useState } from "react";
-import { api, type Assumption, type CrewlyAction, type JobCollection, type Opportunity, type OpportunityDetail, type Tier } from "./api";
+import { api, type Assumption, type CrewlyAction, type StormFrame, type JobCollection, type Opportunity, type OpportunityDetail, type Tier } from "./api";
 import Crewly from "./components/Crewly";
 import DetailPanel from "./components/DetailPanel";
 import MapView from "./components/MapView";
 import OpportunityList from "./components/OpportunityList";
+import StormReplay from "./components/StormReplay";
 import Timeline from "./components/Timeline";
+
+const LANDFALL = Date.parse("2024-09-27T03:10:00Z");
+const STORM_START = LANDFALL - 72 * 3600e3;
+const STORM_END = LANDFALL + 24 * 3600e3;
 
 const HORIZONS = [
   { id: "long", label: "Long-range", ready: true },
   { id: "near", label: "Near-term", ready: true },
-  { id: "emergency", label: "Storm replay", ready: false },
+  { id: "emergency", label: "Storm replay", ready: true },
 ];
 
 export default function App() {
@@ -24,6 +29,8 @@ export default function App() {
   const [crewlyOpen, setCrewlyOpen] = useState(false);
   const [crewlyIds, setCrewlyIds] = useState<number[] | null>(null);
   const [review, setReview] = useState(0);
+  const [stormAt, setStormAt] = useState(LANDFALL - 12 * 3600e3);
+  const [storm, setStorm] = useState<StormFrame | null>(null);
   const [fly, setFly] = useState<{ bbox: [number, number, number, number]; at: number } | null>(null);
 
   useEffect(() => {
@@ -31,6 +38,12 @@ export default function App() {
       .then(([j, o, a]) => { setJobs(j); setOpps(o); setAssumptions(a); })
       .catch((e) => setError(String(e)));
   }, [horizon]);
+
+  useEffect(() => {
+    if (horizon !== "emergency") { setStorm(null); return; }
+    const id = setTimeout(() => api.storm(stormAt).then(setStorm).catch((e) => setError(String(e))), 120);
+    return () => clearTimeout(id);
+  }, [horizon, stormAt]);
 
   useEffect(() => { api.review().then((r) => setReview(r.length)).catch(() => {}); }, []);
 
@@ -56,7 +69,10 @@ export default function App() {
 
   const counts = new Map<string, number>();
   jobs?.features.forEach((f) => counts.set(f.properties.org_name, (counts.get(f.properties.org_name) ?? 0) + 1));
-  const switchHorizon = (h: string) => { setHorizon(h); setSelectedId(null); setCrewlyIds(null); };
+  const switchHorizon = (h: string) => {
+    setHorizon(h); setSelectedId(null); setCrewlyIds(null);
+    if (h === "emergency") setFly({ bbox: [-85.2, 30.6, -79.0, 35.0], at: Date.now() });
+  };
 
   const applyActions = (actions: CrewlyAction[]) => {
     for (const a of actions) {
@@ -67,7 +83,9 @@ export default function App() {
   };
 
   const selected = opps.find((o) => o.id === selectedId) ?? null;
-  const shown = opps.filter((o) => (!tier || o.tier === tier) && (!crewlyIds || crewlyIds.includes(o.id)));
+  const live = (iso: string) => horizon !== "emergency" || Date.parse(iso) <= stormAt;  // storm replay only shows what has happened by now
+  const shown = opps.filter((o) => (!tier || o.tier === tier) && (!crewlyIds || crewlyIds.includes(o.id)) && live(o.a_start) && live(o.b_start));
+  const visibleJobs = jobs && horizon === "emergency" ? { ...jobs, features: jobs.features.filter((f) => live(f.properties.start_at)) } : jobs;
 
   return (
     <div className="flex h-full flex-col">
@@ -82,7 +100,7 @@ export default function App() {
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-4 text-xs text-slate-500">
-          {[...counts].map(([org, n]) => <span key={org}>{org}: <b className="text-slate-800">{n}</b> {horizon === "near" ? "phases" : "projects"}</span>)}
+          {[...counts].map(([org, n]) => <span key={org}>{org}: <b className="text-slate-800">{n}</b> {horizon === "near" ? "phases" : horizon === "emergency" ? "restoration jobs" : "projects"}</span>)}
           <span>Opportunities: <b className="text-slate-800">{opps.length}</b></span>
           {review > 0 && <span className="rounded bg-amber-100 px-2 py-0.5 text-amber-800" title="Projects parsed from filings but not yet placed on the map">{review} need location review</span>}
           <button onClick={() => setCrewlyOpen((o) => !o)}
@@ -99,7 +117,7 @@ export default function App() {
         </aside>
         <section className="flex min-w-0 flex-1 flex-col">
           <div className="relative min-h-0 flex-1">
-            <MapView jobs={jobs} opportunities={shown} selected={selected} onSelect={setSelectedId} fly={fly} />
+            <MapView jobs={visibleJobs} opportunities={shown} selected={selected} onSelect={setSelectedId} fly={fly} storm={storm} />
             {crewlyOpen && (
               <div className="absolute bottom-3 right-3 top-3 z-20 w-[360px]">
                 <Crewly onActions={applyActions} onClose={() => setCrewlyOpen(false)} />
@@ -107,7 +125,9 @@ export default function App() {
             )}
           </div>
           <div className="h-[210px] shrink-0 border-t border-slate-200">
-            <Timeline jobs={jobs} opportunities={shown} selected={selected} onSelect={setSelectedId} />
+            {horizon === "emergency"
+              ? <StormReplay frame={storm} at={stormAt} onAt={setStormAt} start={STORM_START} end={STORM_END} landfall={LANDFALL} />
+              : <Timeline jobs={jobs} opportunities={shown} selected={selected} onSelect={setSelectedId} />}
           </div>
         </section>
         {selectedId != null && (

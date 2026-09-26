@@ -25,7 +25,7 @@ export default function OpportunityList({ items, shown, crewlyFiltered, onClearC
     <div className="flex h-full flex-col">
       <div className="border-b border-slate-200 px-4 pb-3 pt-4">
         <h2 className="text-sm font-semibold text-slate-900">Coordination opportunities</h2>
-        <p className="mt-0.5 text-xs text-slate-500">{shown.length} cross-utility pairs within 25 mi, ranked by score</p>
+        <p className="mt-0.5 text-xs text-slate-500">{shown.length} of {items.length} cross-utility pairs within 25 mi, ranked by score</p>
         {crewlyFiltered && (
           <button onClick={onClearCrewly} className="mt-2 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 ring-1 ring-blue-200 hover:bg-blue-100">
             Filtered by Crewly · clear

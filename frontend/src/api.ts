@@ -11,8 +11,8 @@ export type Opportunity = {
   id: number; job_a: string; job_b: string; distance_m: number; center_distance_m: number; overlap_m: number; tier: Tier;
   time_overlap: number; time_gap_days: number | null; risk: number; vulnerability: number; score: number; flags: string[]; savings_low: number; savings_high: number;
   status: string; link: GeoJSON.LineString;
-  a_name: string; a_phase: string | null; a_org: string; a_color: string; a_conf: number; a_quality: string;
-  b_name: string; b_phase: string | null; b_org: string; b_color: string; b_conf: number; b_quality: string;
+  a_name: string; a_phase: string | null; a_start: string; a_org: string; a_color: string; a_conf: number; a_quality: string;
+  b_name: string; b_phase: string | null; b_start: string; b_org: string; b_color: string; b_conf: number; b_quality: string;
 };
 
 export type Savings = { low: number; high: number; items: Record<string, { low: number; high: number }> };
@@ -33,6 +33,12 @@ export type Contact = { id: number; org_id: string; org_name: string; role: stri
 export type OutreachItem = {
   id: number; opportunity_id: number; contact_id: number; subject: string; body: string; state: string; approved_by: string | null;
   sent_at: string | null; reply_summary: string | null; email: string | null; org_name: string;
+};
+
+export type StormFrame = {
+  at: string; landfall: string; window: [string, string];
+  cone: GeoJSON.FeatureCollection; track: GeoJSON.FeatureCollection; warnings: GeoJSON.FeatureCollection;
+  reports: GeoJSON.FeatureCollection; staging: GeoJSON.FeatureCollection; exposure: Record<string, number>;
 };
 
 export type JobCollection = GeoJSON.FeatureCollection<GeoJSON.Geometry, Job>;
@@ -57,6 +63,7 @@ export const api = {
     call<Savings>(`/opportunities/${id}/savings`, { method: "POST", body: JSON.stringify({ assumptions }) }),
   brief: (id: number) => call<{ markdown: string; summary_source: string }>(`/opportunities/${id}/brief`, { method: "POST" }),
   tracts: () => call<GeoJSON.FeatureCollection>("/layers/tracts"),
+  storm: (at: number) => call<StormFrame>(`/storm/frame?at=${new Date(at).toISOString()}`),
   review: () => call<{ id: number; org_id: string; reason: string; name: string }[]>("/review"),
   contacts: (id: number) => call<Contact[]>(`/opportunities/${id}/contacts`),
   outreach: (id: number) => call<OutreachItem[]>(`/opportunities/${id}/outreach`),

@@ -2,7 +2,7 @@ import * as maplibregl from "maplibre-gl";
 import type { GeoJSONSource, LngLatBoundsLike } from "maplibre-gl";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { useEffect, useRef, useState } from "react";
-import { api, type JobCollection, type Opportunity } from "../api";
+import { api, type JobCollection, type Opportunity, type StormFrame } from "../api";
 import { TIER_COLOR, TIER_LABEL } from "../format";
 
 type Props = {
@@ -11,6 +11,7 @@ type Props = {
   selected: Opportunity | null;
   onSelect: (id: number) => void;
   fly: { bbox: [number, number, number, number]; at: number } | null;
+  storm: StormFrame | null;
 };
 
 maplibregl.setWorkerUrl(workerUrl); // v6 needs an explicit worker once bundled
@@ -46,7 +47,7 @@ function coordsOf(g: GeoJSON.Geometry): number[][] {
   return [];
 }
 
-export default function MapView({ jobs, opportunities, selected, onSelect, fly }: Props) {
+export default function MapView({ jobs, opportunities, selected, onSelect, fly, storm }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -64,6 +65,12 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly }
         m.addLayer({ id: `tract-${key}`, type: "fill", source: "tracts", layout: { visibility: "none" },
           paint: { "fill-color": color, "fill-opacity": ["interpolate", ["linear"], ["coalesce", ["get", key], 0], 0, 0, 1, 0.45] } });
       }
+      for (const src of ["cone", "track", "warnings", "reports", "staging"]) m.addSource(src, { type: "geojson", data: EMPTY });
+      m.addLayer({ id: "cone-fill", type: "fill", source: "cone", paint: { "fill-color": "#f43f5e", "fill-opacity": 0.12 } });
+      m.addLayer({ id: "cone-line", type: "line", source: "cone", paint: { "line-color": "#e11d48", "line-width": 1.5, "line-dasharray": [2, 2] } });
+      m.addLayer({ id: "warnings", type: "fill", source: "warnings",
+        paint: { "fill-color": ["match", ["get", "phenomena", ["get", "payload"]], "TO", "#dc2626", "EW", "#9333ea", "SV", "#f59e0b", "#0ea5e9"], "fill-opacity": 0.25 } });
+      m.addLayer({ id: "track", type: "line", source: "track", paint: { "line-color": "#881337", "line-width": 3 } });
       m.addSource("jobs", { type: "geojson", data: EMPTY });
       m.addSource("opps", { type: "geojson", data: EMPTY });
       const faded = ["case", ["<", ["get", "confidence"], 0.7], 0.45, 0.95] as maplibregl.ExpressionSpecification;
@@ -86,6 +93,19 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly }
           "circle-radius": ["interpolate", ["linear"], ["get", "score"], 0, 7, 1, 13],
           "circle-color": tierColor, "circle-opacity": 0.2, "circle-stroke-color": tierColor, "circle-stroke-width": 2,
         } });
+      m.addLayer({ id: "reports", type: "circle", source: "reports",
+        paint: { "circle-radius": 3.5, "circle-color": ["case", ["boolean", ["get", "power", ["get", "payload"]], false], "#e11d48", "#64748b"],
+          "circle-opacity": 0.8, "circle-stroke-color": "#fff", "circle-stroke-width": 0.5 } });
+      m.addLayer({ id: "staging", type: "circle", source: "staging",
+        paint: { "circle-radius": 11, "circle-color": "#16a34a", "circle-stroke-color": "#fff", "circle-stroke-width": 3 } });
+      m.addLayer({ id: "staging-label", type: "symbol", source: "staging",
+        layout: { "text-field": "Shared staging", "text-size": 11, "text-offset": [0, 1.6], "text-font": ["Noto Sans Bold"] },
+        paint: { "text-color": "#166534", "text-halo-color": "#fff", "text-halo-width": 1.5 } });
+      m.on("click", "reports", (e) => {
+        const p = JSON.parse(String(e.features![0].properties.payload));
+        new maplibregl.Popup({ closeButton: false }).setLngLat(e.lngLat)
+          .setHTML(`<b>${p.type ?? p.kind} · ${p.place}, ${p.state}</b><br/>${p.remark ?? p.comments ?? ""}`).addTo(m);
+      });
       m.addLayer({ id: "opp-selected", type: "circle", source: "opps", filter: ["all", ["has", "marker"], ["==", ["get", "id"], -1]],
         paint: { "circle-radius": 18, "circle-color": "transparent", "circle-stroke-color": "#0f172a", "circle-stroke-width": 3 } });
 
@@ -141,6 +161,14 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly }
     m.setLayoutProperty("tract-risk", "visibility", layers.risk ? "visible" : "none");
     m.setLayoutProperty("tract-vulnerability", "visibility", layers.vulnerability ? "visible" : "none");
   }, [layers, loaded]);
+
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !loaded) return;
+    for (const key of ["cone", "track", "warnings", "reports", "staging"] as const) {
+      (m.getSource(key) as GeoJSONSource).setData(storm ? storm[key] : EMPTY);
+    }
+  }, [storm, loaded]);
 
   useEffect(() => {
     if (!fly || !map.current) return;
