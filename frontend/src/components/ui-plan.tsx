@@ -1,13 +1,13 @@
 import type { ReactNode } from "react";
 
-export function Bubble({ label, value, sub, tone = "plain" }: { label: string; value: ReactNode; sub?: ReactNode; tone?: "plain" | "save" | "desc" | "gpc" | "warn" }) {
+export function Bubble({ label, value, sub, tone = "plain", compact = false }: { label: string; value: ReactNode; sub?: ReactNode; tone?: "plain" | "save" | "desc" | "gpc" | "warn"; compact?: boolean }) {
   const bg = { plain: "bg-soft", save: "bg-save-soft", desc: "bg-desc-soft", gpc: "bg-gpc-soft", warn: "bg-warn-soft" }[tone];
   const ink = { plain: "text-ink", save: "text-save", desc: "text-desc", gpc: "text-[#d93b3b]", warn: "text-warn" }[tone];
   return (
-    <div className={`min-w-0 rounded-[18px] px-4 py-3 ${bg}`}>
-      <div className="text-[13px] text-muted">{label}</div>
-      <div className={`display mt-0.5 truncate text-[22px] font-semibold leading-tight ${ink}`}>{value}</div>
-      {sub && <div className="mt-0.5 text-[12px] text-muted">{sub}</div>}
+    <div className={`min-w-0 rounded-[18px] ${compact ? "px-3.5 py-2" : "px-4 py-3"} ${bg}`}>
+      <div className="truncate text-[13px] text-muted">{label}{compact && <span className={`display ml-2 text-[18px] font-semibold ${ink}`}>{value}</span>}</div>
+      {!compact && <div className={`display mt-0.5 truncate text-[22px] font-semibold leading-tight ${ink}`}>{value}</div>}
+      {sub && <div className="mt-0.5 truncate text-[12px] text-muted" title={typeof sub === "string" ? sub : undefined}>{sub}</div>}
     </div>
   );
 }

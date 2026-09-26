@@ -63,7 +63,7 @@ export default function Crewly({ onActions, onClose }: { onActions: (a: CrewlyAc
           <span className="grid h-9 w-9 place-items-center rounded-full bg-desc text-white shadow-[var(--shadow-desc)]"><Sparkles size={18} /></span>
           <div>
             <div className="display text-[19px] font-semibold leading-tight">Crewly</div>
-            <div className="text-[12px] text-muted">Every number comes from OpenCrew's own tools</div>
+            <div className="text-[12px] text-muted">Numbers come from OpenCrew's tools</div>
           </div>
         </div>
         <CloseButton onClick={onClose} />

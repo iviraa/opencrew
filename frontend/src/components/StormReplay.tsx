@@ -50,7 +50,7 @@ export default function StormReplay({ frame, at, onAt, start, end, landfall, loa
       <div className="flex flex-wrap items-center gap-4">
         {!live && (
           <button onClick={() => { if (at >= end) onAt(start); setPlaying((p) => !p); }} aria-label={playing ? "Pause" : "Play"}
-            className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-gpc text-white shadow-float transition hover:brightness-105">
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-gpc text-white shadow-float transition hover:brightness-105">
             {playing ? <Pause size={22} fill="currentColor" /> : <Play size={22} fill="currentColor" className="ml-0.5" />}
           </button>
         )}
@@ -72,7 +72,7 @@ export default function StormReplay({ frame, at, onAt, start, end, landfall, loa
       </div>
 
       {!live && (
-        <div className="mt-3">
+        <div className="mt-2">
           <input type="range" min={start} max={end} step={STEP_MS / 3} value={at} aria-label="Replay time"
             onChange={(e) => { setPlaying(false); onAt(Number(e.target.value)); }} className="w-full accent-[#ff5d5d]" />
           <div className="relative h-4 text-[12px] text-faint">
@@ -83,14 +83,14 @@ export default function StormReplay({ frame, at, onAt, start, end, landfall, loa
         </div>
       )}
 
-      <div className="mt-3 grid grid-cols-3 gap-2">
-        <Bubble label={live ? "Storm reports today" : "Damage reports so far"} value={reports.length.toLocaleString()} sub={live ? undefined : `${power} mention power lines`} />
-        <Bubble tone="gpc" label="Incidents" value={incidents.length.toLocaleString()} sub={`${verified} verified, ${incidents.length - verified} waiting for a second source`} />
-        <Bubble tone="save" label="Shared staging spots" value={staging.length}
+      <div className="mt-2 grid grid-cols-3 gap-2">
+        <Bubble compact label={live ? "Storm reports today" : "Damage reports so far"} value={reports.length.toLocaleString()} sub={live ? undefined : `${power} mention power lines`} />
+        <Bubble compact tone="gpc" label="Incidents" value={incidents.length.toLocaleString()} sub={`${verified} verified, ${incidents.length - verified} waiting for a second source`} />
+        <Bubble compact tone="save" label="Shared staging spots" value={staging.length}
           sub={staging.length ? `serving ${staging.map((f) => `${f.properties?.desc_n} DESC and ${f.properties?.gpc_n} GPC sites`).join("; ")}` : "none needed yet"} />
       </div>
 
-      <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+      <div className="mt-2 flex shrink-0 gap-2 overflow-x-auto pb-1">
         {incidents.length === 0 && <span className="text-[13px] text-muted">No incidents {live ? "in the last 24 hours" : "yet at this point in the storm"}.</span>}
         {incidents.slice(0, 30).map((f) => {
           const p = f.properties!;
