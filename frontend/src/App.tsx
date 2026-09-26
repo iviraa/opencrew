@@ -1,3 +1,4 @@
+import { CalendarDays, ChevronUp, CloudLightning, FilePlus2, MapPinned, MoreHorizontal, Sparkles, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api, type Assumption, type CrewlyAction, type JointPlan as Plan, type PlanConstraints, type ReviewItem, type StormFrame, type JobCollection, type Opportunity, type OpportunityDetail, type Tier } from "./api";
 import BriefModal from "./components/BriefModal";
@@ -19,9 +20,9 @@ const STORM_START = LANDFALL - 72 * 3600e3;
 const STORM_END = LANDFALL + 24 * 3600e3;
 
 const HORIZONS = [
-  { id: "long", label: "Long-range", ready: true },
-  { id: "near", label: "Near-term", ready: true },
-  { id: "emergency", label: "Storm replay", ready: true },
+  { id: "long", label: "Plans", hint: "Multi-year construction plans", icon: MapPinned },
+  { id: "near", label: "Phases", hint: "Which work phases run at the same time", icon: CalendarDays },
+  { id: "emergency", label: "Storm", hint: "Hurricane Helene replay and live weather", icon: CloudLightning },
 ];
 
 export default function App() {
@@ -59,6 +60,8 @@ export default function App() {
   const [liveMode, setLiveMode] = useState(false);
   const [incidentId, setIncidentId] = useState<number | null>(null);
   const [stormTick, setStormTick] = useState(0);
+  const [drawer, setDrawer] = useState(false);
+  const [menu, setMenu] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -134,12 +137,6 @@ export default function App() {
     });
   };
 
-  const counts = new Map<string, number>();
-  const orgNames = new Map<string, string>();
-  jobs?.features.forEach((f) => {
-    counts.set(f.properties.org_id, (counts.get(f.properties.org_id) ?? 0) + 1);
-    orgNames.set(f.properties.org_id, f.properties.org_name);
-  });
   const switchHorizon = (h: string) => {
     setHorizon(h); setSelectedId(null); setCrewlyIds(null);
     if (h !== "emergency") setIncidentId(null);  // incident cards belong to the storm view
@@ -172,85 +169,118 @@ export default function App() {
   const visibleJobs = useMemo(() => (jobs && horizon === "emergency" ? { ...jobs, features: jobs.features.filter((f) => live(f.properties.start_at)) } : jobs),
     [jobs, horizon, stormAt, liveMode]);
 
+  const lanes = planView && horizon === "long" && !reviewOpen;
+  const bottom = horizon === "emergency"
+    ? <StormReplay frame={storm} at={stormAt} onAt={setStormAt} start={STORM_START} end={STORM_END} landfall={LANDFALL} loading={stormLoading}
+        live={liveMode} onLive={setLiveMode} onIncident={setIncidentId} onPoll={() => api.livePoll().then(() => setStormTick((n) => n + 1))} />
+    : lanes
+    ? <CrewLanes rows={plan?.schedule ?? []} colors={Object.fromEntries((jobs?.features ?? []).map((f) => [f.properties.org_id, f.properties.color]))}
+        selected={selected ? [selected.job_a, selected.job_b] : []} />
+    : <Timeline jobs={jobs} opportunities={shown} selected={selected} onSelect={setSelectedId} filter={timelineFilter} onClearFilter={() => setTimelineFilter(null)}
+        hoverKey={hover?.key ?? null} scrollToHover={hover?.from === "map"} onHover={(key) => setHover(key ? { key, from: "timeline" } : null)} />;
+  const sheetOpen = selectedId != null;
+
   return (
-    <div className="flex h-full flex-col">
-      <header className="flex h-14 shrink-0 items-center gap-6 border-b border-slate-200 bg-white px-5">
-        <div className="text-lg font-bold tracking-tight">Open<span className="text-blue-600">Crew</span></div>
-        <nav className="flex rounded-lg bg-slate-100 p-0.5">
+    <div className="flex h-full flex-col bg-canvas">
+      <header className="flex h-16 shrink-0 items-center gap-5 px-5">
+        <div className="flex items-center gap-2">
+          <span className="relative h-7 w-10" aria-hidden><span className="absolute left-0 top-0.5 h-6 w-6 rounded-full bg-desc" /><span className="absolute right-0 top-0.5 h-6 w-6 rounded-full bg-gpc mix-blend-multiply" /></span>
+          <span className="display text-[22px] font-semibold">OpenCrew</span>
+        </div>
+        <nav className="flex rounded-full bg-surface p-1 shadow-float" aria-label="View">
           {HORIZONS.map((h) => (
-            <button key={h.id} disabled={!h.ready} onClick={() => switchHorizon(h.id)}
-              className={`whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ${horizon === h.id ? "bg-white shadow-sm" : "text-slate-500"} disabled:cursor-not-allowed disabled:opacity-50`}>
-              {h.label}
+            <button key={h.id} onClick={() => switchHorizon(h.id)} title={h.hint} aria-pressed={horizon === h.id}
+              className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-[14px] font-semibold transition ${horizon === h.id ? "bg-ink text-white" : "text-muted hover:text-ink"}`}>
+              <h.icon size={16} />{h.label}
             </button>
           ))}
         </nav>
-        <div className="ml-auto flex items-center gap-4 whitespace-nowrap text-xs text-slate-500">
-          <span>
-            {[...counts].map(([org, n], i) => (
-              <span key={org} title={orgNames.get(org)}>{i > 0 && " · "}{org.toUpperCase()} <b className="text-slate-800">{n}</b></span>
-            ))}{" "}
-            {horizon === "near" ? "phases" : horizon === "emergency" ? "restoration jobs" : "projects"}
-          </span>
-          <span><b className="text-slate-800">{opps.length}</b> opportunities</span>
-          {review.length > 0 && (
-            <button onClick={() => setReviewOpen((o) => !o)} className="rounded bg-amber-100 px-2 py-0.5 text-amber-800 hover:bg-amber-200"
-              title="Projects parsed from filings but not yet placed on the map">{review.length} need location review</button>
-          )}
-          <button onClick={() => setIngestOpen(true)} className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-200">
-            Add filing
-          </button>
-          <button onClick={() => setCrewlyOpen((o) => !o)}
-            className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${crewlyOpen ? "bg-slate-900 text-white" : "bg-blue-600 text-white hover:bg-blue-700"}`}>
-            Ask Crewly
+        <div className="ml-auto flex items-center gap-2">
+          <div className="relative">
+            <button onClick={() => setMenu((o) => !o)} aria-label="More" aria-expanded={menu}
+              className="relative grid h-10 w-10 place-items-center rounded-full bg-surface text-ink shadow-float hover:bg-soft">
+              <MoreHorizontal size={20} />
+              {review.length > 0 && <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full bg-crew ring-2 ring-canvas" />}
+            </button>
+            {menu && (
+              <div className="absolute right-0 z-40 mt-2 w-[280px] rounded-[var(--radius-bubble)] bg-surface p-2 shadow-float" onMouseLeave={() => setMenu(false)}>
+                <MenuItem icon={<FilePlus2 size={18} />} title="Add a utility filing" hint="Drop in a PDF of planned projects" onClick={() => { setIngestOpen(true); setMenu(false); }} />
+                <MenuItem icon={<MapPinned size={18} />} title={`Place ${review.length} projects by hand`} hint="Projects we could not find on the map" onClick={() => { setReviewOpen(true); setMenu(false); }} />
+              </div>
+            )}
+          </div>
+          <button onClick={() => setCrewlyOpen((o) => !o)} aria-pressed={crewlyOpen}
+            className="inline-flex items-center gap-2 rounded-full bg-desc px-5 py-2.5 text-[15px] font-semibold text-white shadow-desc transition hover:brightness-110">
+            <Sparkles size={18} /> Ask Crewly
           </button>
         </div>
       </header>
-      {error && <div className="bg-red-50 px-5 py-2 text-sm text-red-700">{error}</div>}
+      {error && (
+        <div role="alert" className="fixed left-1/2 top-20 z-50 flex -translate-x-1/2 items-center gap-3 rounded-full bg-ink px-5 py-2.5 text-[14px] text-white shadow-float">
+          Something went wrong loading data. Check that the API is running, then try again.
+          <button aria-label="Dismiss" onClick={() => setError(null)} className="rounded-full p-1 hover:bg-white/15"><X size={16} /></button>
+        </div>
+      )}
       {crewlyBrief && <BriefModal markdown={crewlyBrief.markdown} source={crewlyBrief.source} onClose={() => setCrewlyBrief(null)} />}
       {ingestOpen && <IngestModal onClose={() => setIngestOpen(false)} onDone={() => setReload((n) => n + 1)} />}
-      <main className="flex min-h-0 flex-1">
-        <aside className="w-[380px] shrink-0 border-r border-slate-200 bg-white">
+      <main className="flex min-h-0 flex-1 gap-3 px-3 pb-3">
+        <aside className="w-[410px] shrink-0 overflow-hidden rounded-[var(--radius-bubble)] bg-surface shadow-float">
           {reviewOpen
             ? <ReviewPanel items={review} placingId={placingId} onPlace={setPlacingId} onClose={() => { setReviewOpen(false); setPlacingId(null); }} />
             : <OpportunityList items={opps} shown={shown} selectedId={selectedId} tier={tier} onTier={setTier} onSelect={setSelectedId}
             crewlyFiltered={crewlyIds !== null} onClearCrewly={() => setCrewlyIds(null)} loading={loading} roadOnly={roadOnly} onRoadOnly={setRoadOnly} tabRequest={listTab} onTab={(t) => setPlanView(t === "plan")}
             planPanel={<JointPlan plan={plan} solving={solving} onSolve={solvePlan} pending={pending} onDiscardPending={() => setPending(null)} selectedId={selectedId} onSelect={setSelectedId} />}
-            emptyText={horizon === "emergency" ? "No cross-utility restoration overlaps yet at this time. Scrub the replay forward." : "No opportunities match these filters."} />}
+            emptyText={horizon === "emergency" ? "No restoration team-ups yet at this moment. Move the storm slider forward." : "Try another filter, or clear the one you picked."} />}
         </aside>
-        <section className="flex min-w-0 flex-1 flex-col">
-          <div className="relative min-h-0 flex-1">
-            <MapView jobs={visibleJobs} opportunities={shown} selected={selected} onSelect={setSelectedId} fly={fly} storm={storm} zone={zone} onMapClick={placingId != null ? placeAt : null}
-              hoverKey={hover?.key ?? null} onHover={(key) => setHover(key ? { key, from: "map" } : null)} onIncident={setIncidentId} />
-            {horizon === "near" && <div className="absolute left-1/2 top-3 z-10 -translate-x-1/2"><PhaseRisks /></div>}
-            {incidentId != null && (
-              <div className="absolute bottom-3 left-3 top-14 z-30 w-[340px]"><IncidentCard id={incidentId} onClose={() => setIncidentId(null)} /></div>
-            )}
-            {crewlyOpen && (
-              <div className="absolute bottom-3 right-3 top-3 z-20 w-[360px]">
-                <Crewly onActions={applyActions} onClose={() => setCrewlyOpen(false)} />
-              </div>
-            )}
-          </div>
-          <div className="h-[210px] shrink-0 border-t border-slate-200">
-            {planView && horizon === "long" && !reviewOpen
-              ? <CrewLanes rows={plan?.schedule ?? []} colors={Object.fromEntries((jobs?.features ?? []).map((f) => [f.properties.org_id, f.properties.color]))}
-                  selected={selected ? [selected.job_a, selected.job_b] : []} />
-              : horizon === "emergency"
-              ? <StormReplay frame={storm} at={stormAt} onAt={setStormAt} start={STORM_START} end={STORM_END} landfall={LANDFALL} loading={stormLoading}
-                  live={liveMode} onLive={setLiveMode} onIncident={setIncidentId}
-                  onPoll={() => api.livePoll().then(() => setStormTick((n) => n + 1))} />
-              : <Timeline jobs={jobs} opportunities={shown} selected={selected} onSelect={setSelectedId} filter={timelineFilter} onClearFilter={() => setTimelineFilter(null)}
-                  hoverKey={hover?.key ?? null} scrollToHover={hover?.from === "map"} onHover={(key) => setHover(key ? { key, from: "timeline" } : null)} />}
-          </div>
+        <section className="relative min-w-0 flex-1 overflow-hidden rounded-[var(--radius-bubble)] shadow-float">
+          <MapView jobs={visibleJobs} opportunities={shown} selected={selected} onSelect={setSelectedId} fly={fly} storm={storm} zone={zone} onMapClick={placingId != null ? placeAt : null}
+            hoverKey={hover?.key ?? null} onHover={(key) => setHover(key ? { key, from: "map" } : null)} onIncident={setIncidentId} />
+          {placingId != null && (
+            <div className="absolute left-1/2 top-4 z-20 -translate-x-1/2 rounded-full bg-crew px-5 py-2 text-[14px] font-semibold text-ink shadow-float">Click the map where this project is</div>
+          )}
+          {horizon === "near" && <div className="absolute left-1/2 top-4 z-10 -translate-x-1/2"><PhaseRisks /></div>}
+          {incidentId != null && (
+            <div className="absolute bottom-3 left-3 top-3 z-30 w-[360px]"><IncidentCard id={incidentId} onClose={() => setIncidentId(null)} /></div>
+          )}
+          {sheetOpen && (
+            <div className="absolute bottom-3 right-3 top-3 z-20 w-[440px] overflow-hidden rounded-[var(--radius-bubble)] bg-surface shadow-float">
+              {detail?.id === selectedId
+                ? <DetailPanel detail={detail} assumptions={assumptions} onClose={() => setSelectedId(null)} onStatus={setStatus} onRefresh={refreshSelected} overrides={sliders} />
+                : <div className="p-6 text-[15px] text-muted">Loading details…</div>}
+            </div>
+          )}
+          {crewlyOpen && (
+            <div className={`absolute bottom-3 top-3 z-30 w-[380px] ${sheetOpen ? "right-[456px]" : "right-3"}`}>
+              <Crewly onActions={applyActions} onClose={() => setCrewlyOpen(false)} />
+            </div>
+          )}
+          {horizon === "emergency" ? (
+            <div className={`absolute bottom-3 left-3 z-10 h-[220px] overflow-hidden rounded-[var(--radius-bubble)] bg-surface shadow-float ${sheetOpen ? "right-[456px]" : "right-3"}`}>{bottom}</div>
+          ) : drawer ? (
+            <div className={`absolute bottom-3 left-3 z-10 flex h-[260px] flex-col overflow-hidden rounded-[var(--radius-bubble)] bg-surface shadow-float ${sheetOpen ? "right-[456px]" : "right-3"}`}>
+              <button onClick={() => setDrawer(false)} className="flex items-center justify-between px-5 pb-1 pt-3 text-left">
+                <span className="display text-[16px] font-semibold">{lanes ? "Crew schedule" : "Timeline"}</span>
+                <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-muted">Hide <ChevronUp size={16} className="rotate-180" /></span>
+              </button>
+              <div className="min-h-0 flex-1">{bottom}</div>
+            </div>
+          ) : (
+            <button onClick={() => setDrawer(true)}
+              className="absolute bottom-4 left-4 z-10 inline-flex items-center gap-2 rounded-full bg-surface px-5 py-2.5 text-[14px] font-semibold shadow-float hover:bg-soft">
+              <ChevronUp size={16} /> {lanes ? "Show crew schedule" : "Show timeline"}
+            </button>
+          )}
         </section>
-        {selectedId != null && (
-          <aside className="w-[400px] shrink-0 border-l border-slate-200 bg-white">
-            {detail?.id === selectedId
-              ? <DetailPanel detail={detail} assumptions={assumptions} onClose={() => setSelectedId(null)} onStatus={setStatus} onRefresh={refreshSelected} overrides={sliders} />
-              : <div className="p-4 text-sm text-slate-400">Loading…</div>}
-          </aside>
-        )}
       </main>
     </div>
+  );
+}
+
+function MenuItem({ icon, title, hint, onClick }: { icon: React.ReactNode; title: string; hint: string; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="flex w-full items-start gap-3 rounded-2xl px-3 py-2.5 text-left hover:bg-soft">
+      <span className="mt-0.5 text-desc">{icon}</span>
+      <span><span className="block text-[14px] font-semibold">{title}</span><span className="block text-[13px] text-muted">{hint}</span></span>
+    </button>
   );
 }

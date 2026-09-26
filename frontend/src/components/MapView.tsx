@@ -3,7 +3,8 @@ import type { GeoJSONSource, LngLatBoundsLike } from "maplibre-gl";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { useEffect, useRef, useState } from "react";
 import { api, type JobCollection, type Opportunity, type StormFrame } from "../api";
-import { QUALITY_LABEL, TIER_COLOR, TIER_LABEL, monthYear, title } from "../format";
+import { Layers, X } from "lucide-react";
+import { DESC_COLOR, FAR_COLOR, GPC_COLOR, QUALITY_LABEL, TIER_COLOR, TIER_LABEL, monthYear, title } from "../format";
 import { kindColorExpression } from "./IncidentCard";
 
 type Props = {
@@ -22,10 +23,10 @@ type Props = {
 
 maplibregl.setWorkerUrl(workerUrl); // v6 needs an explicit worker once bundled
 
-const STYLE = "https://tiles.openfreemap.org/styles/positron";
+const STYLE = "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json";  // carto voyager: soft, colorful, free with attribution
 const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 const ROW_KEY = ["coalesce", ["get", "parent_job_id"], ["get", "id"]] as maplibregl.ExpressionSpecification;  // phases share their project's row
-const tierColor = ["match", ["get", "tier"], ...Object.entries(TIER_COLOR).flat(), "#64748b"] as unknown as maplibregl.ExpressionSpecification;
+const tierColor = ["case", ["get", "far"], FAR_COLOR, ["match", ["get", "tier"], ...Object.entries(TIER_COLOR).flat(), FAR_COLOR]] as unknown as maplibregl.ExpressionSpecification;
 const incidentColor = kindColorExpression as unknown as maplibregl.ExpressionSpecification;
 
 const esc = (v: unknown) => String(v ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);  // popup text comes from filings and storm reports
@@ -40,13 +41,13 @@ function jobPopup(p: Record<string, unknown>) {
     : `Work ${monthYear(String(p.start_at))} → ${monthYear(String(p.end_at))} · in service ${String(p.in_service).slice(0, 10)}`;
   const source = present(p.source_title) ? `${p.source_title}${present(p.source_page) ? `, p.${p.source_page}` : ""}` : "";
   const reports = p.job_type === "restoration" && present(p.description) ? String(p.description).slice(0, 320) : "";
-  return `<div style="max-width:280px;line-height:1.35">
-    <div style="font-weight:600">${esc(p.name)}</div>
-    <div style="color:${esc(p.color)};font-weight:500">${esc(p.org_name)}</div>
+  return `<div style="max-width:290px;line-height:1.4">
+    <div style="color:${esc(p.color)};font-weight:600;font-size:12px">${esc(p.org_name)}</div>
+    <div style="font-family:Fredoka,Figtree,sans-serif;font-weight:600;font-size:16px;margin:2px 0 6px">${esc(p.name)}</div>
     <div>${esc(kind)}</div><div>${esc(when)}</div>
-    <div style="color:#64748b">${esc(quality)}</div>
-    ${source ? `<div style="color:#94a3b8">${esc(source)}</div>` : ""}
-    ${reports ? `<div style="margin-top:4px;color:#475569">${esc(reports)}</div>` : ""}
+    <div style="color:#5e6a8a;margin-top:4px">${esc(quality)}</div>
+    ${source ? `<div style="color:#8a94b0;font-size:12px;margin-top:4px">${esc(source)}</div>` : ""}
+    ${reports ? `<div style="margin-top:6px;color:#1b2447">${esc(reports)}</div>` : ""}
   </div>`;
 }
 
@@ -56,7 +57,7 @@ function oppFeatures(opps: Opportunity[]): GeoJSON.FeatureCollection {
     features: opps.flatMap((o) => {
       const [p, q] = o.link.coordinates;
       const mid = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
-      const props = { id: o.id, tier: o.tier, score: o.score };
+      const props = { id: o.id, tier: o.tier, score: o.score, far: o.drive_min != null && o.drive_min > 45 };
       return [
         { type: "Feature", properties: props, geometry: o.link },
         { type: "Feature", properties: { ...props, marker: true }, geometry: { type: "Point", coordinates: mid } },
@@ -118,26 +119,31 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
       m.addSource("jobs", { type: "geojson", data: EMPTY });
       m.addSource("opps", { type: "geojson", data: EMPTY });
       const faded = ["case", ["<", ["get", "confidence"], 0.7], 0.45, 0.95] as maplibregl.ExpressionSpecification;
-      m.addLayer({ id: "opp-links", type: "line", source: "opps", filter: ["!", ["has", "marker"]],
-        paint: { "line-color": tierColor, "line-width": 2, "line-dasharray": [1, 1.5], "line-opacity": 0.8 } });
+      m.addLayer({ id: "opp-links", type: "line", source: "opps", filter: ["!", ["has", "marker"]], layout: { "line-cap": "round" },
+        paint: { "line-color": tierColor, "line-width": 3, "line-dasharray": [0.1, 1.8], "line-opacity": 0.9 } });  // round dots
+      m.addLayer({ id: "job-casing", type: "line", source: "jobs", filter: ["==", ["geometry-type"], "LineString"], layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": "#ffffff", "line-width": ["interpolate", ["linear"], ["zoom"], 6, 5, 11, 9], "line-opacity": 0.9 } });
       m.addLayer({ id: "job-lines", type: "line", source: "jobs", filter: ["all", ["==", ["geometry-type"], "LineString"], ["!=", ["get", "geom_quality"], "straight_line"]],
-        layout: { "line-cap": "round" }, paint: { "line-color": ["get", "color"], "line-width": 3.5, "line-opacity": faded } });
+        layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 6, 3, 11, 5], "line-opacity": faded } });
       m.addLayer({ id: "job-lines-approx", type: "line", source: "jobs", filter: ["all", ["==", ["geometry-type"], "LineString"], ["==", ["get", "geom_quality"], "straight_line"]],
-        paint: { "line-color": ["get", "color"], "line-width": 3, "line-dasharray": [2, 1.2], "line-opacity": faded } });
+        layout: { "line-cap": "round" }, paint: { "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 6, 3, 11, 5], "line-dasharray": [1.5, 1.5], "line-opacity": faded } });
       m.addLayer({ id: "job-points", type: "circle", source: "jobs", filter: ["==", ["geometry-type"], "Point"],
         paint: {
-          "circle-radius": 5.5,
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 6, 5, 11, 8],
           "circle-color": ["case", ["==", ["get", "geom_quality"], "partial_point"], "#ffffff", ["get", "color"]],
-          "circle-stroke-color": ["get", "color"], "circle-stroke-width": 2, "circle-opacity": faded, "circle-stroke-opacity": faded,
+          "circle-stroke-color": ["case", ["==", ["get", "geom_quality"], "partial_point"], ["get", "color"], "#ffffff"], "circle-stroke-width": 2.5,
+          "circle-opacity": faded, "circle-stroke-opacity": faded,
         } });
       m.addLayer({ id: "job-hit", type: "line", source: "jobs", filter: ["==", ["geometry-type"], "LineString"],
         paint: { "line-color": "#000", "line-width": 14, "line-opacity": 0.01 } });  // wide invisible target for hover and click
       m.addLayer({ id: "job-selected", type: "line", source: "jobs", filter: ["in", ["get", "id"], ["literal", []]],
-        paint: { "line-color": "#0f172a", "line-width": 7, "line-opacity": 0.25 } });
+        paint: { "line-color": "#1b2447", "line-width": 12, "line-opacity": 0.18, "line-blur": 2 } });
+      m.addLayer({ id: "opp-glow", type: "circle", source: "opps", filter: ["has", "marker"],
+        paint: { "circle-radius": ["interpolate", ["linear"], ["get", "score"], 0, 16, 1.3, 28], "circle-color": tierColor, "circle-opacity": 0.22, "circle-blur": 0.8 } });
       m.addLayer({ id: "opp-markers", type: "circle", source: "opps", filter: ["has", "marker"],
         paint: {
-          "circle-radius": ["interpolate", ["linear"], ["get", "score"], 0, 7, 1, 13],
-          "circle-color": tierColor, "circle-opacity": 0.2, "circle-stroke-color": tierColor, "circle-stroke-width": 2,
+          "circle-radius": ["interpolate", ["linear"], ["get", "score"], 0, 7, 1.3, 13],
+          "circle-color": tierColor, "circle-opacity": 1, "circle-stroke-color": "#ffffff", "circle-stroke-width": 3,
         } });
       m.addLayer({ id: "reports", type: "circle", source: "reports",
         paint: { "circle-radius": 2, "circle-color": ["case", ["boolean", ["get", "power", ["get", "payload"]], false], "#e11d48", "#64748b"],
@@ -150,17 +156,17 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
       m.on("mouseenter", "incidents", () => (m.getCanvas().style.cursor = "pointer"));
       m.on("mouseleave", "incidents", () => (m.getCanvas().style.cursor = ""));
       m.addLayer({ id: "staging", type: "circle", source: "staging",
-        paint: { "circle-radius": 11, "circle-color": "#16a34a", "circle-stroke-color": "#fff", "circle-stroke-width": 3 } });
+        paint: { "circle-radius": 13, "circle-color": "#12a36b", "circle-stroke-color": "#fff", "circle-stroke-width": 4 } });
       m.addLayer({ id: "staging-label", type: "symbol", source: "staging",
-        layout: { "text-field": "Shared staging", "text-size": 11, "text-offset": [0, 1.6], "text-font": ["Noto Sans Bold"] },
-        paint: { "text-color": "#166534", "text-halo-color": "#fff", "text-halo-width": 1.5 } });
+        layout: { "text-field": "Shared staging", "text-size": 13, "text-offset": [0, 1.8], "text-font": ["Montserrat Medium"] },
+        paint: { "text-color": "#0b7a4f", "text-halo-color": "#fff", "text-halo-width": 2 } });
       m.on("click", "reports", (e) => {
         const p = JSON.parse(String(e.features![0].properties.payload));
         new maplibregl.Popup({ closeButton: false, maxWidth: "300px" }).setLngLat(e.lngLat)
           .setHTML(`<b>${esc(p.type ?? p.kind)} · ${esc(p.place)}, ${esc(p.state)}</b><br/>${esc(p.remark ?? p.comments)}`).addTo(m);
       });
       m.addLayer({ id: "opp-selected", type: "circle", source: "opps", filter: ["all", ["has", "marker"], ["==", ["get", "id"], -1]],
-        paint: { "circle-radius": 18, "circle-color": "transparent", "circle-stroke-color": "#0f172a", "circle-stroke-width": 3 } });
+        paint: { "circle-radius": 21, "circle-color": "transparent", "circle-stroke-color": "#1b2447", "circle-stroke-width": 3 } });
       m.addLayer({ id: "job-hover-line", type: "line", source: "jobs", filter: ["==", ROW_KEY, ""],
         layout: { "line-cap": "round" }, paint: { "line-color": "#f59e0b", "line-width": 8, "line-opacity": 0.55 } });
       m.addLayer({ id: "job-hover-point", type: "circle", source: "jobs", filter: ["all", ["==", ["geometry-type"], "Point"], ["==", ROW_KEY, ""]],
@@ -208,13 +214,14 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
     m.setFilter("opp-selected", ["all", ["has", "marker"], ["==", ["get", "id"], selected?.id ?? -1]]);
     const focus = (on: number, off: number) =>
       (selected ? ["case", ["==", ["get", "id"], selected.id], on, off] : on) as maplibregl.ExpressionSpecification;
-    m.setPaintProperty("opp-links", "line-opacity", focus(0.9, 0.15));
-    m.setPaintProperty("opp-markers", "circle-stroke-opacity", focus(1, 0.25));
-    m.setPaintProperty("opp-markers", "circle-opacity", focus(0.2, 0.05));
+    m.setPaintProperty("opp-links", "line-opacity", focus(0.95, 0.2));
+    m.setPaintProperty("opp-markers", "circle-stroke-opacity", focus(1, 0.4));
+    m.setPaintProperty("opp-markers", "circle-opacity", focus(1, 0.35));
+    m.setPaintProperty("opp-glow", "circle-opacity", focus(0.3, 0.05));
     if (!selected) return;
     m.resize(); // detail panel may have just narrowed the map
     const coords = jobs.features.filter((f) => ids.includes(String(f.id))).flatMap((f) => coordsOf(f.geometry));
-    if (coords.length) m.fitBounds(bounds(coords), { padding: 120, maxZoom: 11, duration: 900 });
+    if (coords.length) m.fitBounds(bounds(coords), { padding: { top: 90, bottom: 90, left: 90, right: 500 }, maxZoom: 11, duration: 900 });  // room for the detail sheet
   }, [selected, jobs, loaded]);
 
   useEffect(() => {
@@ -267,73 +274,76 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
   return (
     <div className="relative h-full w-full">
       <div ref={box} className="h-full w-full" />
-      <Legend jobs={jobs} storm={!!storm} compact={!!selected} />
-      <div className="absolute right-12 top-3 flex gap-1.5 text-[11px]">
-        {([["grid", "Existing grid"], ["risk", "Hurricane risk"], ["vulnerability", "Social vulnerability"]] as const).map(([key, label]) => (
-          <button key={key} onClick={() => setLayers((l) => ({ ...l, [key]: !l[key] }))}
-            className={`rounded-md px-2 py-1 font-medium shadow-sm ring-1 ${layers[key] ? "bg-slate-900 text-white ring-slate-900" : "bg-white text-slate-700 ring-slate-200"}`}>
-            {label}
-          </button>
-        ))}
-      </div>
+      <OrgKey jobs={jobs} />
+      <LayersMenu layers={layers} onToggle={(key) => setLayers((l) => ({ ...l, [key]: !l[key] }))} storm={!!storm} />
     </div>
   );
 }
 
-function Swatch({ className, style, label }: { className: string; style?: React.CSSProperties; label: string }) {
-  return <div className="flex items-center gap-2 py-0.5 text-slate-500"><span className={className} style={style} /> {label}</div>;
-}
-
-function Legend({ jobs, storm, compact }: { jobs: JobCollection | null; storm: boolean; compact: boolean }) {
-  const [open, setOpen] = useState(true);
-  useEffect(() => setOpen(!compact), [compact]);  // fold away while the detail panel narrows the map
+function OrgKey({ jobs }: { jobs: JobCollection | null }) {
   const orgs = new Map<string, string>();
   jobs?.features.forEach((f) => orgs.set(f.properties.org_name, f.properties.color));
-  if (!open) {
-    return (
-      <button onClick={() => setOpen(true)} className="absolute bottom-3 left-3 rounded-md bg-white/95 px-2 py-1 text-[11px] font-medium text-slate-700 shadow-md ring-1 ring-slate-200">
-        Legend
-      </button>
-    );
-  }
   return (
-    <div className="absolute bottom-3 left-3 max-w-[300px] rounded-lg bg-white/95 px-3 py-2 text-[11px] leading-4 shadow-md ring-1 ring-slate-200">
-      <button onClick={() => setOpen(false)} className="absolute right-1.5 top-1 rounded px-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Hide legend">✕</button>
+    <div className="absolute left-4 top-4 flex flex-wrap gap-2">
       {[...orgs].map(([name, color]) => (
-        <div key={name} className="flex items-center gap-2 py-0.5">
-          <span className="h-1 w-5 rounded" style={{ background: color }} /> {name}
-        </div>
+        <span key={name} className="inline-flex items-center gap-2 rounded-full bg-surface/95 px-3 py-1.5 text-[13px] font-semibold shadow-float">
+          <span className="h-3 w-3 rounded-full ring-4" style={{ background: color, ["--tw-ring-color" as string]: color === DESC_COLOR ? "#e5edff" : color === GPC_COLOR ? "#ffe8e8" : "#eef1f7" }} />{name}
+        </span>
       ))}
-      {!storm && (
-        <>
-          <div className="mt-2 flex items-center gap-2 py-0.5 text-slate-500">
-            <span className="w-5 border-t-2 border-dashed border-slate-500" /> approx route (straight line)
+    </div>
+  );
+}
+
+type LayerKey = "grid" | "risk" | "vulnerability";
+
+function LayersMenu({ layers, onToggle, storm }: { layers: Record<LayerKey, boolean>; onToggle: (k: LayerKey) => void; storm: boolean }) {
+  const [open, setOpen] = useState(false);
+  const toggles: [LayerKey, string, string][] = [["grid", "Existing power lines", "Every mapped transmission line"],
+    ["risk", "Hurricane risk", "FEMA risk by census tract"], ["vulnerability", "Community vulnerability", "CDC social vulnerability"]];
+  return (
+    <div className="absolute right-16 top-4">
+      <button onClick={() => setOpen((o) => !o)} aria-expanded={open}
+        className="inline-flex items-center gap-2 rounded-full bg-surface px-4 py-2 text-[14px] font-semibold shadow-float hover:bg-soft">
+        <Layers size={16} /> Layers and key
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-2 w-[320px] rounded-[var(--radius-bubble)] bg-surface p-4 shadow-float">
+          <div className="flex items-center justify-between"><span className="display text-[16px] font-semibold">Map layers</span>
+            <button aria-label="Close" onClick={() => setOpen(false)} className="grid h-8 w-8 place-items-center rounded-full text-muted hover:bg-soft"><X size={16} /></button></div>
+          <div className="mt-2 space-y-1">
+            {toggles.map(([key, label, hint]) => (
+              <label key={key} className="flex cursor-pointer items-center justify-between rounded-2xl px-2 py-2 hover:bg-soft">
+                <span><span className="block text-[14px] font-semibold">{label}</span><span className="block text-[12px] text-muted">{hint}</span></span>
+                <input type="checkbox" checked={layers[key]} onChange={() => onToggle(key)} className="h-5 w-5 accent-[#2f6bff]" />
+              </label>
+            ))}
           </div>
-          <div className="flex items-center gap-2 py-0.5 text-slate-500">
-            <span className="h-2.5 w-2.5 rounded-full border-2 border-slate-500 bg-white" /> one endpoint located
-          </div>
-        </>
-      )}
-      <div className={`mt-2 flex flex-wrap gap-x-3 gap-y-1 ${storm ? "hidden" : ""}`}>
-        {Object.entries(TIER_LABEL).map(([tier, label]) => (
-          <span key={tier} className="flex items-center gap-1">
-            <span className="h-2.5 w-2.5 rounded-full" style={{ background: TIER_COLOR[tier as keyof typeof TIER_COLOR] }} /> {label}
-          </span>
-        ))}
-      </div>
-      {storm && (
-        <div className="mt-2 border-t border-slate-100 pt-1.5">
-          <Swatch className="h-2.5 w-5 rounded-sm border border-dashed border-rose-600 bg-rose-500/15" label="NHC forecast cone" />
-          <Swatch className="h-1 w-5 rounded bg-rose-900" label="observed track" />
-          <Swatch className="h-2.5 w-5 rounded-sm bg-sky-500/30" label="NWS flash flood warning" />
-          <Swatch className="h-2.5 w-5 rounded-sm bg-gradient-to-r from-amber-500/40 to-red-600/40" label="NWS severe storm or tornado warning" />
-          <Swatch className="h-2 w-2 rounded-full bg-rose-600" label="damage report mentioning power" />
-          <Swatch className="h-2 w-2 rounded-full bg-slate-500" label="other damage report" />
-          <Swatch className="h-3 w-3 rounded-full border-2 border-red-600 bg-red-600" label="verified incident (official or 2 sources)" />
-          <Swatch className="h-3 w-3 rounded-full border-2 border-red-600 bg-white" label="unverified incident (news only)" />
-          <Swatch className="h-3 w-3 rounded-full border-2 border-white bg-green-600 shadow" label="shared staging point" />
+          <div className="display mt-4 text-[16px] font-semibold">What the colors mean</div>
+          {storm ? (
+            <div className="mt-2 space-y-1.5 text-[13px] text-muted">
+              <KeyRow swatch={<span className="h-3 w-6 rounded-sm border-2 border-dashed border-rose-500 bg-rose-500/10" />}>Forecast cone</KeyRow>
+              <KeyRow swatch={<span className="h-1.5 w-6 rounded bg-rose-900" />}>Storm track</KeyRow>
+              <KeyRow swatch={<span className="h-3.5 w-3.5 rounded-full border-2 border-red-600 bg-red-600" />}>Verified incident</KeyRow>
+              <KeyRow swatch={<span className="h-3.5 w-3.5 rounded-full border-2 border-red-600 bg-white" />}>News only, not confirmed</KeyRow>
+              <KeyRow swatch={<span className="h-2 w-2 rounded-full bg-slate-400" />}>Damage report</KeyRow>
+              <KeyRow swatch={<span className="h-4 w-4 rounded-full border-2 border-white bg-save shadow" />}>Shared staging point</KeyRow>
+            </div>
+          ) : (
+            <div className="mt-2 space-y-1.5 text-[13px] text-muted">
+              {Object.entries(TIER_LABEL).map(([tier, label]) => (
+                <KeyRow key={tier} swatch={<span className="h-4 w-4 rounded-full border-[3px] border-white shadow" style={{ background: TIER_COLOR[tier as keyof typeof TIER_COLOR] }} />}>{label}</KeyRow>
+              ))}
+              <KeyRow swatch={<span className="h-4 w-4 rounded-full border-[3px] border-white shadow" style={{ background: FAR_COLOR }} />}>Too far by road (over 45 min)</KeyRow>
+              <KeyRow swatch={<span className="w-6 border-t-[3px] border-dashed border-slate-400" />}>Route not mapped yet, drawn straight</KeyRow>
+              <KeyRow swatch={<span className="h-3.5 w-3.5 rounded-full border-[3px] border-slate-400 bg-white" />}>Only one end located</KeyRow>
+            </div>
+          )}
         </div>
       )}
     </div>
   );
+}
+
+function KeyRow({ swatch, children }: { swatch: React.ReactNode; children: React.ReactNode }) {
+  return <div className="flex items-center gap-3"><span className="grid w-6 place-items-center">{swatch}</span>{children}</div>;
 }

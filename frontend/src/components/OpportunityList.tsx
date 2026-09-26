@@ -1,7 +1,9 @@
+import { CalendarRange, Car, CloudLightning, Ruler, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import type { Opportunity, Tier } from "../api";
+import { FLAG_LABEL, TIER_COLOR, TIER_HINT, TIER_LABEL, TIER_SOFT, TIER_INK, miles, pct, title, tooFar, usd } from "../format";
 import Procurement from "./Procurement";
-import { FLAG_LABEL, TIER_COLOR, TIER_LABEL, miles, pct, title, usd } from "../format";
+import { Empty, PairBubble, TierPill } from "./ui";
 
 type Props = {
   items: Opportunity[];
@@ -21,101 +23,105 @@ type Props = {
   onTab?: (tab: string) => void;
 };
 
+type Tab = "overlaps" | "plan" | "equipment";
+const TABS: { id: Tab; label: string }[] = [{ id: "overlaps", label: "Team-ups" }, { id: "plan", label: "Joint plan" }, { id: "equipment", label: "Equipment" }];
+
 export function TierChip({ tier }: { tier: Tier }) {
-  return (
-    <span className="rounded-full px-2 py-0.5 text-[11px] font-semibold text-white" style={{ background: TIER_COLOR[tier] }}>
-      {TIER_LABEL[tier]}
-    </span>
-  );
+  return <TierPill tier={tier} size="sm" />;  // kept for older imports
 }
 
 export default function OpportunityList({ items, shown, crewlyFiltered, onClearCrewly, selectedId, tier, onTier, onSelect, loading, emptyText, roadOnly, onRoadOnly, tabRequest, planPanel, onTab }: Props) {
-  const [tab, setTabState] = useState<"overlaps" | "equipment" | "plan">("overlaps");
-  const setTab = (t: "overlaps" | "equipment" | "plan") => { setTabState(t); onTab?.(t); };
+  const [tab, setTabState] = useState<Tab>("overlaps");
+  const setTab = (t: Tab) => { setTabState(t); onTab?.(t); };
   useEffect(() => { if (tabRequest?.tab === "overlaps" || tabRequest?.tab === "equipment" || tabRequest?.tab === "plan") setTab(tabRequest.tab); }, [tabRequest]);  // crewly can switch tabs
+
   const tabs = (
-    <div className="mb-2 flex gap-4 text-sm">
-      {(["overlaps", "equipment", "plan"] as const).map((t) => (
-        <button key={t} onClick={() => setTab(t)}
-          className={`border-b-2 pb-1 font-semibold capitalize ${tab === t ? "border-slate-900 text-slate-900" : "border-transparent text-slate-400"}`}>{t === "plan" ? "Joint plan" : t}</button>
+    <div role="tablist" className="flex rounded-full bg-soft p-1 ring-1 ring-line">
+      {TABS.map((t) => (
+        <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}
+          className={`flex-1 rounded-full px-3 py-1.5 text-[14px] font-semibold transition ${tab === t.id ? "bg-surface text-ink shadow-sm" : "text-muted hover:text-ink"}`}>{t.label}</button>
       ))}
     </div>
   );
-  if (tab === "plan") {
-    return <div className="flex h-full flex-col"><div className="border-b border-slate-200 px-4 pt-3">{tabs}</div>{planPanel}</div>;
+  if (tab !== "overlaps") {
+    return <div className="flex h-full flex-col"><div className="px-5 pb-3 pt-4">{tabs}</div><div className="min-h-0 flex-1 overflow-y-auto thin-scroll">{tab === "plan" ? planPanel : <Procurement />}</div></div>;
   }
-  if (tab === "equipment") {
-    return <div className="flex h-full flex-col"><div className="border-b border-slate-200 px-4 pt-3">{tabs}</div><Procurement /></div>;
-  }
+
+  const low = shown.reduce((s, o) => s + o.savings_low, 0);
+  const high = shown.reduce((s, o) => s + o.savings_high, 0);
+  const nearby = items.filter((o) => !tooFar(o.drive_min)).length;
+
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b border-slate-200 px-4 pb-3 pt-3">
+      <div className="px-5 pb-3 pt-4">
         {tabs}
-        <h2 className="text-sm font-semibold text-slate-900">Coordination opportunities</h2>
-        <p className="mt-0.5 text-xs text-slate-500">{shown.length} of {items.length} cross-utility pairs within 25 mi, ranked by score</p>
+        <h2 className="mt-4 text-[22px] font-semibold leading-tight">{loading ? "Finding team-ups…" : `${shown.length} places to team up`}</h2>
+        {!loading && shown.length > 0 && (
+          <p className="mt-1 text-[14px] text-muted">Together they could save <span className="font-semibold text-save">{usd(low)} to {usd(high)}</span></p>
+        )}
         {crewlyFiltered && (
-          <button onClick={onClearCrewly} className="mt-2 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 ring-1 ring-blue-200 hover:bg-blue-100">
-            Filtered by Crewly · clear
+          <button onClick={onClearCrewly} className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-desc-soft px-3 py-1 text-[13px] font-semibold text-desc">
+            Showing what Crewly found <X size={14} />
           </button>
         )}
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          <button onClick={() => onTier(null)}
-            className={`rounded-full px-2.5 py-1 text-xs font-medium ${tier === null ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
-            All
-          </button>
-          {(Object.keys(TIER_LABEL) as Tier[]).map((t) => (
-            <button key={t} onClick={() => onTier(t)}
-              className={`rounded-full px-2.5 py-1 text-xs font-medium ${tier === t ? "text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
-              style={tier === t ? { background: TIER_COLOR[t] } : undefined}>
-              {TIER_LABEL[t]} · {items.filter((o) => o.tier === t).length}
-            </button>
-          ))}
-          <button onClick={() => onRoadOnly(!roadOnly)} title="Crews and yards can only be shared when the sites are within a 45 minute drive"
-            className={`rounded-full px-2.5 py-1 text-xs font-medium ${roadOnly ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
-            Within 45 min drive · {items.filter((o) => o.drive_min == null || o.drive_min <= 45).length}
-          </button>
+        <div className="-mx-1 mt-4 flex flex-wrap gap-2 px-1">
+          <FilterChip active={tier === null} onClick={() => onTier(null)} color="#1b2447">All {items.length}</FilterChip>
+          {(Object.keys(TIER_LABEL) as Tier[]).map((t) => {
+            const n = items.filter((o) => o.tier === t).length;
+            return n ? <FilterChip key={t} active={tier === t} onClick={() => onTier(tier === t ? null : t)} color={TIER_COLOR[t]} soft={TIER_SOFT[t]} ink={TIER_INK[t]} title={TIER_HINT[t]}>{TIER_LABEL[t]} {n}</FilterChip> : null;
+          })}
+          <FilterChip active={roadOnly} onClick={() => onRoadOnly(!roadOnly)} color="#12a36b" soft="#dff6ec" ink="#0b7a4f"
+            title="Crews and yards can only be shared when the sites are within a 45 minute drive"><Car size={14} /> Easy drive {nearby}</FilterChip>
         </div>
       </div>
-      <ol className="flex-1 overflow-y-auto">
-        {loading && <li className="px-4 py-6 text-sm text-slate-400">Loading opportunities…</li>}
-        {!loading && shown.length === 0 && <li className="px-4 py-6 text-sm text-slate-500">{emptyText}</li>}
-        {!loading && shown.map((o, i) => (
-          <li key={o.id}>
-            <button onClick={() => onSelect(o.id)}
-              className={`w-full border-b border-slate-100 px-4 py-3 text-left hover:bg-slate-50 ${o.id === selectedId ? "bg-blue-50/70" : ""}`}>
-              <div className="flex items-start gap-3">
-                <span className="mt-0.5 w-5 shrink-0 text-right text-xs font-semibold text-slate-400">{i + 1}</span>
-                <div className="min-w-0 flex-1">
-                  <JobLine name={o.a_name} phase={o.a_phase} color={o.a_color} conf={o.a_conf} />
-                  <JobLine name={o.b_name} phase={o.b_phase} color={o.b_color} conf={o.b_conf} />
-                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600">
-                    <TierChip tier={o.tier} />
-                    <span>{miles(o.distance_m)}</span>
-                    {o.drive_min != null && <span className={o.drive_min > 45 ? "font-medium text-rose-600" : ""}>{Math.round(o.drive_min)} min drive</span>}
-                    <span>{pct(o.time_overlap)} time overlap</span>
-                    <span className="font-medium text-emerald-700">{usd(o.savings_low)}–{usd(o.savings_high)}</span>
-                  </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-slate-400">
-                    <span>score {o.score.toFixed(2)} · {title(o.status)}</span>
-                    {o.flags.map((f) => <span key={f} className="rounded bg-orange-50 px-1 text-orange-700 ring-1 ring-orange-200">{FLAG_LABEL[f] ?? f}</span>)}
-                  </div>
-                </div>
-              </div>
-            </button>
-          </li>
-        ))}
+      <ol className="thin-scroll min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pb-4">
+        {!loading && shown.length === 0 && <li><Empty title="Nothing here yet">{emptyText}</Empty></li>}
+        {!loading && shown.map((o, i) => <Row key={o.id} o={o} rank={i + 1} selected={o.id === selectedId} onSelect={onSelect} />)}
       </ol>
     </div>
   );
 }
 
-function JobLine({ name, phase, color, conf }: { name: string; phase: string | null; color: string; conf: number }) {
+function FilterChip({ active, onClick, color, soft, ink, title, children }: { active: boolean; onClick: () => void; color: string; soft?: string; ink?: string; title?: string; children: ReactNode }) {
   return (
-    <div className="flex items-center gap-2 text-[13px] leading-5">
-      <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />
-      <span className="truncate">{name}</span>
-      {phase && <span className="shrink-0 rounded bg-slate-100 px-1 text-[10px] text-slate-600">{phase}</span>}
-      {conf < 0.7 && <span className="shrink-0 rounded bg-amber-100 px-1 text-[10px] font-semibold text-amber-800">approx</span>}
-    </div>
+    <button onClick={onClick} title={title} aria-pressed={active}
+      className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-semibold transition"
+      style={active ? { background: color, color: "#fff" } : { background: soft ?? "#f5f8fd", color: ink ?? "#5e6a8a" }}>
+      {!active && soft && <span className="h-2 w-2 rounded-full" style={{ background: color }} />}
+      {children}
+    </button>
+  );
+}
+
+function Row({ o, rank, selected, onSelect }: { o: Opportunity; rank: number; selected: boolean; onSelect: (id: number) => void }) {
+  const far = tooFar(o.drive_min);
+  const storm = o.flags.includes("hurricane_season_high_risk");
+  const a = o.a_phase ? `${o.a_name} (${o.a_phase})` : o.a_name;
+  const b = o.b_phase ? `${o.b_name} (${o.b_phase})` : o.b_name;
+  return (
+    <li>
+      <button onClick={() => onSelect(o.id)} aria-current={selected}
+        className={`group relative w-full rounded-2xl px-4 py-3.5 text-left transition ${selected ? "bg-desc-soft/70 ring-2 ring-desc/30" : "hover:bg-soft"}`}>
+        <div className="flex items-start gap-3">
+          <span className="display mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full text-[13px] font-semibold"
+            style={far ? { background: "#eef1f7", color: "#5e6a8a" } : { background: TIER_SOFT[o.tier], color: TIER_INK[o.tier] }}>{rank}</span>
+          <div className="min-w-0 flex-1">
+            <PairBubble a={a} b={b} />
+            <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13px] text-muted">
+              <TierPill tier={o.tier} far={far} size="sm" />
+              <span className="inline-flex items-center gap-1"><Ruler size={14} />{miles(o.distance_m)}</span>
+              {o.drive_min != null && <span className={`inline-flex items-center gap-1 ${far ? "font-semibold text-warn" : ""}`}><Car size={14} />{Math.round(o.drive_min)} min</span>}
+              <span className="inline-flex items-center gap-1" title="How much the two work windows overlap"><CalendarRange size={14} />{pct(o.time_overlap)} same time</span>
+              {storm && <span className="inline-flex items-center text-warn" title={FLAG_LABEL.hurricane_season_high_risk}><CloudLightning size={15} /></span>}
+            </div>
+          </div>
+          <div className="shrink-0 text-right">
+            <div className={`display text-[16px] font-semibold ${o.savings_high > 0 ? "text-save" : "text-faint"}`}>{o.savings_high > 0 ? usd(o.savings_high) : "$0"}</div>
+            <div className="text-[12px] text-faint">{o.savings_high > 0 ? `from ${usd(o.savings_low)}` : "too far"}</div>
+            {o.status !== "not_contacted" && <div className="mt-1 text-[12px] font-semibold text-desc">{title(o.status)}</div>}
+          </div>
+        </div>
+      </button>
+    </li>
   );
 }
