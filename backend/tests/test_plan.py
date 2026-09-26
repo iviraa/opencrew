@@ -3,8 +3,8 @@ from datetime import date
 from app.engine import plan
 
 
-def job(id, org, start, end, name=None):
-    return {"id": id, "org_id": org, "name": name or id, "start_at": start, "in_service": end}
+def job(id, org, start, end, name=None, job_type="line_upgrade"):
+    return {"id": id, "org_id": org, "name": name or id, "job_type": job_type, "start_at": start, "in_service": end}
 
 
 def data(jobs, pairs, opps=()):
@@ -19,28 +19,63 @@ def solve(d, **cons):
     return res
 
 
+def twins(drive_min, job_type="substation"):
+    """A DESC and a GPC job running at the same time a short distance apart."""
+    jobs = [job("desc-a", "desc", date(2024, 1, 1), date(2025, 7, 1), job_type=job_type),
+            job("gpc-b", "gpc", date(2024, 1, 1), date(2025, 7, 1), job_type=job_type)]
+    return data(jobs, [("desc-a", "gpc-b", 5.0)], [{"id": 1, "job_a": "desc-a", "job_b": "gpc-b", "drive_min": drive_min}])
+
+
 def test_durations_fill_the_window():
     for total in (4, 7, 18, 36, 61):
         d = plan.durations(total)
         assert sum(d.values()) == total and min(d.values()) >= 1
 
 
-def test_cross_utility_chain_saves_a_mobilization():
-    # DESC crew work ends right before GPC's nearby job starts; no utility can chain alone
+def test_general_crews_stay_with_their_utility():
+    # DESC crew work ends right before GPC's nearby job starts; strict mode never lends a general crew across utilities
     d = data([job("desc-a", "desc", date(2024, 1, 1), date(2025, 1, 1)), job("gpc-b", "gpc", date(2024, 9, 1), date(2025, 9, 1))],
              [("desc-a", "gpc-b", 5.0)], [{"id": 1, "job_a": "desc-a", "job_b": "gpc-b", "drive_min": 20}])
     res = solve(d, max_advance_months=0)
-    assert res["baseline"]["mobilizations"] == 2
-    assert res["coordinated"]["mobilizations"] == 1 and res["coordinated"]["shared_crews"] == 1
-    assert res["coordinated"]["cost_k"] <= res["baseline"]["cost_k"]
-    assert res["headline"]["mobilizations_cut_pct"] == 50 and res["headline"]["late_projects"] == 0
+    assert res["baseline"]["mobilizations"] == res["coordinated"]["mobilizations"] == 2
+
+
+def test_shared_specialty_crews_save_mobilizations():
+    res = solve(twins(20))
+    base, coord, head = res["baseline"], res["coordinated"], res["headline"]
+    assert base["specialty_mobilizations"] == 6 and base["shared_bursts"] == 0  # heavy haul, crane, commissioning each
+    assert coord["specialty_mobilizations"] < base["specialty_mobilizations"] and coord["shared_bursts"] > 0
+    assert coord["cost_k"] <= base["cost_k"] and head["late_projects"] == 0 and head["mobilizations_cut"] > 0
+    assert head["savings_low"] > 0 and head["savings_low"] <= head["savings_high"]
 
 
 def test_drive_time_blocks_sharing():
-    d = data([job("desc-a", "desc", date(2024, 1, 1), date(2025, 1, 1)), job("gpc-b", "gpc", date(2024, 9, 1), date(2025, 9, 1))],
-             [("desc-a", "gpc-b", 5.0)], [{"id": 1, "job_a": "desc-a", "job_b": "gpc-b", "drive_min": 70}])
-    res = solve(d, max_advance_months=0)
-    assert res["coordinated"]["mobilizations"] == 2  # 70 minutes by road is over the 45 minute crew limit
+    res = solve(twins(70))
+    assert res["coordinated"]["specialty_mobilizations"] == res["baseline"]["specialty_mobilizations"]  # 70 min is over 45
+    assert res["coordinated"]["shared_bursts"] == 0 and res["headline"]["mobilizations_cut"] == 0
+
+
+def test_bursts_respect_windows_and_deadlines():
+    d = twins(20, "new_line")
+    c = plan.merge({"time_limit_s": 5})
+    res, origin, tasks, near, crews = plan.solve_all(d, c)
+    for j, r in res["sched"].items():
+        t = tasks[j]
+        assert r["slip"] <= t["slip_limit"]
+        for b, x in r["bursts"].items():
+            lo, hi, n, _ = t["bursts"][b]
+            start = plan.WPM * r["starts"][c["bursts"][b]["phase"]]
+            assert start + lo <= x["week"] and x["week"] + n <= start + hi
+    assert set(tasks["desc-a"]["bursts"]) == {"heavy_haul", "crane_lift", "wire_stringing", "commissioning"}
+
+
+def test_joint_contracting_is_off_by_default_and_only_adds():
+    assert "jc" not in solve(twins(20))
+    res = solve(twins(20), joint_contracting=True)
+    jc = res["jc"]
+    assert jc["metrics"]["cost_k"] <= res["coordinated"]["cost_k"]
+    assert jc["metrics"]["mobilizations"] < res["coordinated"]["mobilizations"] and jc["headline"]["contractor_pairs"] == 1
+    assert "one contractor" in jc["headline"]["assumption"]
 
 
 def test_coordinated_never_worse_and_shared_yard():
@@ -51,6 +86,14 @@ def test_coordinated_never_worse_and_shared_yard():
     res = solve(d)
     assert res["baseline"]["yards"] == 2 and res["coordinated"]["yards"] == 1
     assert res["coordinated"]["cost_k"] <= res["baseline"]["cost_k"]
+
+
+def test_no_shared_yard_across_a_long_drive():
+    jobs = [job("desc-a", "desc", date(2024, 1, 1), date(2026, 1, 1)), job("gpc-b", "gpc", date(2024, 1, 1), date(2026, 1, 1))]
+    d = data(jobs, [("desc-a", "gpc-b", 3.0)], [{"id": 1, "job_a": "desc-a", "job_b": "gpc-b", "drive_min": 60}])
+    d["sites"]["opp:1"] = {"id": "opp:1", "label": "between", "lon": 0, "lat": 0}
+    d["near"] = {"desc-a": ["job:desc-a", "opp:1"], "gpc-b": ["job:gpc-b", "opp:1"]}
+    assert solve(d)["coordinated"]["yards"] == 2  # 3 km apart but an hour by road
 
 
 def test_blackout_moves_energization():
@@ -70,7 +113,13 @@ def test_slip_limit_and_crew_counts_make_it_infeasible():
 
 
 def test_sentences():
-    assert plan.sentence({"rule": "max_slip", "project": "Jasper – Okatie", "needed_months": 4, "limit_months": 2}) == \
-        "Sharing would push Jasper – Okatie 4 months past in-service; limit is 2."
+    assert plan.sentence({"rule": "max_slip", "resource": "stringing crew", "project": "Jasper–Okatie", "needed_months": 4,
+                          "limit_months": 2}) == "Sharing the stringing crew would push Jasper–Okatie 4 months past in-service; limit is 2."
+    assert plan.sentence({"rule": "shared_burst", "label": "crane lift", "resource": "crane", "first": "Okatie–Bluffton",
+                          "then": "Goshen–Kraft", "gap_weeks": 0, "moved": "Goshen–Kraft", "other": "Okatie–Bluffton", "moved_weeks": -3,
+                          "on_time": True}) == ("Crane lift at Goshen–Kraft moved 3 weeks earlier so the same crane serves Okatie–Bluffton; "
+                                                "saves one mobilization, both stay on time.")
     assert plan.sentence({"rule": "drive_time", "minutes": 72, "limit": 45}) == "The two sites are 72 minutes apart by road; the crew limit is 45."
-    assert "saving one mobilization" in plan.sentence({"rule": "shared_crew", "crew": "DESC crew 1", "first": "A", "then": "B", "gap_months": 1})
+    assert "right after" in plan.sentence({"rule": "shared_burst", "label": "heavy haul", "resource": "heavy-haul rig", "first": "A",
+                                           "then": "B", "gap_weeks": 0, "moved": None, "moved_weeks": 0})
+    assert plan.short("SAV: GOSHEN (SAV) - KRAFT 115KV LINE REBUILD") == "Goshen–Kraft"

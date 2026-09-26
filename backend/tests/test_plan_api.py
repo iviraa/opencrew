@@ -33,14 +33,32 @@ def solved(client):
 def test_coordinated_never_worse_and_nobody_late(solved):
     assert solved["status"] in ("optimal", "feasible")
     assert solved["coordinated"]["cost_k"] <= solved["baseline"]["cost_k"]
-    assert solved["coordinated"]["mobilizations"] <= solved["baseline"]["mobilizations"]
-    assert solved["headline"]["late_projects"] == 0
+    assert solved["coordinated"]["mobilizations"] == solved["baseline"]["mobilizations"]  # general crews stay with their utility
+    assert solved["coordinated"]["all_mobilizations"] <= solved["baseline"]["all_mobilizations"]
+    h = solved["headline"]
+    assert h["late_projects"] == 0 and h["joint_contracting"] is None and h["solver"]["separate"] == "optimal"
+    assert h["savings_low"] <= h["savings_high"]
     assert all(r["slip"] <= r["slip_limit"] for r in solved["schedule"])
     assert {p["phase"] for r in solved["schedule"] for p in r["phases"]} == {"survey & permitting", "clearing", "construction", "energization"}
 
 
+def test_shared_bursts_are_explained(solved):
+    shared = [d for d in solved["decisions"] if any(r["rule"] == "shared_burst" for r in d["reasons"])]
+    assert shared and all("saves one mobilization" in d["sentence"] for d in shared)
+    rows = [b for r in solved["schedule"] for b in r["bursts"]]
+    assert rows and all(b["resource"] and b["start"] < b["end"] for b in rows)
+
+
+def test_joint_contracting_adds_a_labeled_headline(client, solved):
+    jc = client.post("/api/plan/solve", json={"constraints": {"max_slip_months": 6, "joint_contracting": True}}).json()
+    h = jc["headline"]["joint_contracting"]
+    assert h and "one contractor" in h["assumption"] and h["mobilizations_after"] <= jc["headline"]["mobilizations_after"]
+    client.post("/api/plan/solve", json={"constraints": {"max_slip_months": 6}})  # leave the default plan as latest
+
+
 def test_latest_and_explain(client, solved):
-    assert client.get("/api/plan").json()["plan_id"] == solved["plan_id"]
+    latest = client.get("/api/plan").json()
+    assert latest["plan_id"] >= solved["plan_id"] and latest["headline"]["joint_contracting"] is None
     d = next(d for d in solved["decisions"] if d["eligible"])
     e = client.get(f"/api/plan/explain?opportunity_id={d['opportunity_id']}").json()
     assert e["decisions"][0]["sentence"] and "Ask why" not in e["decisions"][0]["sentence"]  # counterfactual filled in
