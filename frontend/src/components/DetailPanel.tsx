@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type Assumption, type Job, type OpportunityDetail, type Savings } from "../api";
-import { BASIS_LABEL, QUALITY_LABEL, STATUSES, miles, monthYear, pct, title, usd } from "../format";
+import { BASIS_LABEL, FLAG_LABEL, QUALITY_LABEL, STATUSES, miles, monthYear, pct, title, usd } from "../format";
 import BriefModal from "./BriefModal";
 import { TierChip } from "./OpportunityList";
 
@@ -59,6 +59,12 @@ export default function DetailPanel({ detail, assumptions, onClose, onStatus }: 
           <Metric label="Social vulnerability (CDC SVI)" value={`${Math.round(detail.vulnerability * 100)}th pct`} />
           {detail.overlap_m > 0 && <Metric label="Parallel corridor" value={miles(detail.overlap_m)} />}
         </section>
+
+        {detail.flags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {detail.flags.map((f) => <span key={f} className="rounded bg-orange-50 px-2 py-1 text-xs font-medium text-orange-700 ring-1 ring-orange-200">{FLAG_LABEL[f] ?? f}</span>)}
+          </div>
+        )}
 
         <section>
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">What they could share</h3>

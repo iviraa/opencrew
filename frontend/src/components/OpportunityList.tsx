@@ -1,5 +1,5 @@
 import type { Opportunity, Tier } from "../api";
-import { TIER_COLOR, TIER_LABEL, miles, pct, title, usd } from "../format";
+import { FLAG_LABEL, TIER_COLOR, TIER_LABEL, miles, pct, title, usd } from "../format";
 
 type Props = {
   items: Opportunity[];
@@ -61,7 +61,10 @@ export default function OpportunityList({ items, shown, crewlyFiltered, onClearC
                     <span>{pct(o.time_overlap)} time overlap</span>
                     <span className="font-medium text-emerald-700">{usd(o.savings_low)}–{usd(o.savings_high)}</span>
                   </div>
-                  <div className="mt-1 text-[11px] text-slate-400">score {o.score.toFixed(2)} · {title(o.status)}</div>
+                  <div className="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-slate-400">
+                    <span>score {o.score.toFixed(2)} · {title(o.status)}</span>
+                    {o.flags.map((f) => <span key={f} className="rounded bg-orange-50 px-1 text-orange-700 ring-1 ring-orange-200">{FLAG_LABEL[f] ?? f}</span>)}
+                  </div>
                 </div>
               </div>
             </button>

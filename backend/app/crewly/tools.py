@@ -20,7 +20,7 @@ def _opp_row(o):
         "b": f"{o['b_name']}{' (' + o['b_phase'] + ')' if o['b_phase'] else ''} [{o['b_org']}]",
         "tier": o["tier"], "closest_mi": _mi(o["distance_m"]), "center_to_center_mi": _mi(o["center_distance_m"]),
         "build_window_overlap_pct": round(o["time_overlap"] * 100), "in_service_gap_days": o["time_gap_days"],
-        "hurricane_risk_pct": round(o["risk"] * 100), "social_vulnerability_pct": round(o["vulnerability"] * 100),
+        "flags": o["flags"], "hurricane_risk_pct": round(o["risk"] * 100), "social_vulnerability_pct": round(o["vulnerability"] * 100),
         "savings_usd": f"${int(o['savings_low']):,} to ${int(o['savings_high']):,}", "score": round(o["score"], 2), "status": o["status"],
     }
 

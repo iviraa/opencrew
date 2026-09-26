@@ -15,6 +15,12 @@ export const QUALITY_LABEL: Record<string, string> = {
   manual: "placed by hand",
 };
 
+export const FLAG_LABEL: Record<string, string> = {
+  hurricane_season_high_risk: "Hurricane season, high risk",
+  tie_line: "Interstate tie line",
+  shared_endpoint: "Shared substation",
+};
+
 export const BASIS_LABEL: Record<string, string> = {
   filed: "start date from filing",
   spend_years: "start from budget years",

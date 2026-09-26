@@ -12,6 +12,9 @@ QUALITY = {"straight_line": "approximate route (straight line between endpoints)
            "matched_point": "substation located", "existing_path": "follows existing line"}
 BASIS = {"filed": "start date from filing", "spend_years": "start from budget years", "default_duration": "start derived from typical duration",
          "derived": "derived phase"}
+FLAGS = {"hurricane_season_high_risk": "Shared work falls in hurricane season in a high-risk area: plan joint storm staging",
+         "tie_line": "Involves an interstate tie line, which both utilities operate",
+         "shared_endpoint": "Both projects touch the same substation"}
 AGENDA = ["Confirm scope and current schedule of both projects", "Walk the shared area on the map: access roads, crossings, laydown sites",
           "Check whether outage windows or construction phases can line up", "Agree what to share first (crews, yard, right-of-way, permits)",
           "Name one contact per utility and set a follow-up date"]
@@ -76,6 +79,7 @@ def build(conn, opp_id):
     ]
     lines.append(f"- Area context: hurricane risk {round(o['risk'] * 100)}/100 (FEMA NRI), social vulnerability "
                  f"{round(o['vulnerability'] * 100)}th percentile (CDC SVI), at the midpoint between the projects")
+    lines += [f"- {FLAGS.get(f, f)}" for f in o["flags"]]
     if o["overlap_m"] > 0:
         lines.append(f"- Parallel corridor within 1 mile: {o['overlap_m'] / MILE_M:.1f} mi")
     lines += ["", "## What could be shared", *[f"- {r}" for r in shareable(o["tier"])], "",

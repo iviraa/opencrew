@@ -52,3 +52,12 @@ def test_name_parsing():
     assert job_type("EVANS PRIMARY - THURMOND DAM (USA) #5 115KV REBUILD") == "line_upgrade"
     assert job_type("SAV: MCINTOSH - PURRYSBURG 230KV REACTORS") == "substation"
     assert parse_date("12/31/2025 (phase 1) and 10/01/2026") == date(2026, 10, 1)
+
+
+def test_flags():
+    from app.engine.flags import flags, in_hurricane_season
+    assert in_hurricane_season(dt(2025, 7), dt(2025, 8))
+    assert not in_hurricane_season(dt(2025, 1), dt(2025, 3))
+    a = {"name": "Hooks - Thurmond 115kV Tie: Rebuild", "endpoints": ["Hooks", "Thurmond"]}
+    b = {"name": "EVANS PRIMARY - THURMOND DAM (USA) #5 115KV REBUILD", "endpoints": ["EVANS PRIMARY", "THURMOND DAM (USA) #5"]}
+    assert set(flags(a, b, 0.9, dt(2024), dt(2026), dt(2025), dt(2027))) == {"hurricane_season_high_risk", "tie_line", "shared_endpoint"}

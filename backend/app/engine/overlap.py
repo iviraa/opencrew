@@ -2,15 +2,16 @@ import time
 
 from app.config import OVERLAP_RADIUS_M
 from app.engine.cost import savings
+from app.engine.flags import flags
 from app.engine.scoring import score, tier_for, time_overlap
 
 PAIRS_SQL = """
 WITH j AS (
-  SELECT id, org_id, horizon, geom, work_window, in_service,
+  SELECT id, org_id, name, endpoints, horizon, geom, work_window, in_service,
          ST_GeometryType(geom::geometry) = 'ST_LineString' AS is_line
   FROM job WHERE horizon = %(horizon)s
 )
-SELECT a.id AS job_a, b.id AS job_b,
+SELECT a.id AS job_a, b.id AS job_b, a.name AS a_name, b.name AS b_name, a.endpoints AS a_endpoints, b.endpoints AS b_endpoints,
        ST_Distance(a.geom, b.geom) AS distance_m,
        ST_Distance(ST_Centroid(a.geom::geometry)::geography, ST_Centroid(b.geom::geometry)::geography, false) AS center_distance_m,
        ST_Intersects(a.geom, b.geom) AS touches,
@@ -33,13 +34,13 @@ LEFT JOIN LATERAL (
 
 UPSERT_SQL = """
 INSERT INTO opportunity (job_a, job_b, horizon, distance_m, center_distance_m, overlap_m, tier,
-                         time_overlap, time_gap_days, risk, vulnerability, score, savings_low, savings_high, link)
+                         time_overlap, time_gap_days, risk, vulnerability, score, flags, savings_low, savings_high, link)
 VALUES (%(job_a)s, %(job_b)s, %(horizon)s, %(distance_m)s, %(center_distance_m)s, %(overlap_m)s, %(tier)s,
-        %(time_overlap)s, %(time_gap_days)s, %(risk)s, %(vulnerability)s, %(score)s, %(savings_low)s, %(savings_high)s, ST_GeogFromText(%(link)s))
+        %(time_overlap)s, %(time_gap_days)s, %(risk)s, %(vulnerability)s, %(score)s, %(flags)s, %(savings_low)s, %(savings_high)s, ST_GeogFromText(%(link)s))
 ON CONFLICT (job_a, job_b) DO UPDATE SET
   distance_m = EXCLUDED.distance_m, center_distance_m = EXCLUDED.center_distance_m,
   overlap_m = EXCLUDED.overlap_m, tier = EXCLUDED.tier, time_overlap = EXCLUDED.time_overlap,
-  time_gap_days = EXCLUDED.time_gap_days, risk = EXCLUDED.risk, vulnerability = EXCLUDED.vulnerability, score = EXCLUDED.score,
+  time_gap_days = EXCLUDED.time_gap_days, risk = EXCLUDED.risk, vulnerability = EXCLUDED.vulnerability, score = EXCLUDED.score, flags = EXCLUDED.flags,
   savings_low = EXCLUDED.savings_low, savings_high = EXCLUDED.savings_high, link = EXCLUDED.link
 """
 
@@ -56,7 +57,9 @@ def recompute(conn, horizon="long"):
         if horizon == "near" and ov == 0:
             continue  # near-term only cares about concurrent field work
         sav = savings(tier, r["overlap_m"])
-        out.append({**r, "horizon": horizon, "tier": tier, "time_overlap": ov, "score": score(tier, ov, r["risk"], r["vulnerability"]),
+        fl = flags({"name": r["a_name"], "endpoints": r["a_endpoints"]}, {"name": r["b_name"], "endpoints": r["b_endpoints"]},
+                   r["risk"], r["a_start"], r["a_end"], r["b_start"], r["b_end"])
+        out.append({**r, "horizon": horizon, "tier": tier, "time_overlap": ov, "flags": fl, "score": score(tier, ov, r["risk"], r["vulnerability"]),
                     "savings_low": sav["low"], "savings_high": sav["high"]})
     with conn.cursor() as cur:
         cur.executemany(UPSERT_SQL, out)
