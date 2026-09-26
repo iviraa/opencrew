@@ -1,8 +1,21 @@
 import type { Tier } from "./api";
 
-export const TIER_COLOR: Record<Tier, string> = { crossing: "#7c3aed", land: "#c026d3", site: "#0891b2", crew: "#64748b" };
+export const TIER_COLOR: Record<Tier, string> = { crossing: "#7c4dff", land: "#ff4fa3", site: "#00b8a9", crew: "#ffb020" };
+export const TIER_SOFT: Record<Tier, string> = { crossing: "#efe9ff", land: "#ffe6f2", site: "#dcf7f4", crew: "#fff3d9" };
+export const TIER_INK: Record<Tier, string> = { crossing: "#5a2fe0", land: "#c81d73", site: "#00766c", crew: "#9a5b00" };  // readable text on the soft fill
+export const FAR_COLOR = "#a3adc7";
+export const DESC_COLOR = "#2f6bff";
+export const GPC_COLOR = "#ff5d5d";
 
-export const TIER_LABEL: Record<Tier, string> = { crossing: "Crossing", land: "Shared land", site: "Shared site", crew: "Shared crew" };
+export const TIER_LABEL: Record<Tier, string> = { crossing: "Lines cross", land: "Share land", site: "Share a yard", crew: "Share crews" };
+export const TIER_HINT: Record<Tier, string> = {
+  crossing: "The two projects touch, so outages and crossing work must be planned together.",
+  land: "Under a mile apart: they can share right-of-way, access roads and permits.",
+  site: "Under 5 miles apart: one staging yard can serve both.",
+  crew: "Under 25 miles apart: crews and equipment can move between them.",
+};
+
+export const tooFar = (driveMin: number | null | undefined) => driveMin != null && driveMin > 45;
 
 export const STATUSES = ["not_contacted", "drafted", "sent", "replied", "call_scheduled", "agreed", "declined"];
 

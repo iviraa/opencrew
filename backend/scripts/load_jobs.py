@@ -9,7 +9,7 @@ from app.ingest import desc, gpc, pdf, pipeline
 from app.outreach import seed_contacts
 from app.storm.restoration import build_restoration
 
-ORGS = [("desc", "Dominion Energy South Carolina", "#2563eb"), ("gpc", "Georgia Power", "#dc2626")]
+ORGS = [("desc", "Dominion Energy South Carolina", "#2f6bff"), ("gpc", "Georgia Power", "#ff5d5d")]
 FILINGS = [
     ("desc", "DESC Planned Transmission Projects $2M+ (2024-2028)", "data/raw/desc_2024_2028_projects.pdf", desc, date(2024, 1, 1)),
     ("gpc", "Georgia Power 2025 IRP Vol. 3 Transmission Plan (public disclosure)", "data/raw/gpc_2025_irp_vol3.pdf", gpc, date(2024, 12, 31)),
