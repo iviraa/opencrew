@@ -40,7 +40,8 @@ esc = html.escape
 
 def usd(n):
     n = float(n or 0)
-    return f"${n / 1e6:.1f}M" if n >= 1e6 else f"${round(n / 1e3)}k" if n >= 1e3 else f"${round(n)}"
+    sign, a = ("-" if n < 0 else ""), abs(n)
+    return sign + (f"${a / 1e6:.1f}M" if a >= 1e6 else f"${round(a / 1e3)}k" if a >= 1e3 else f"${round(a)}")
 
 
 def rng(r):

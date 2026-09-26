@@ -16,7 +16,7 @@ export const SECTION_LABEL: Record<string, string> = {
 
 export const fmt = (v: unknown, unit?: string) => {
   if (typeof v !== "number") return String(v ?? "");
-  if (unit === "USD") return v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : v >= 1e3 ? `$${Math.round(v / 1e3)}k` : `$${Math.round(v)}`;
+  if (unit === "USD") { const a = Math.abs(v), s = v < 0 ? "-" : ""; return s + (a >= 1e6 ? `$${(a / 1e6).toFixed(1)}M` : a >= 1e3 ? `$${Math.round(a / 1e3)}k` : `$${Math.round(a)}`); }
   return Number.isInteger(v) ? String(v) : v.toFixed(1);
 };
 
