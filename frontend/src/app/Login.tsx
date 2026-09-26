@@ -1,11 +1,12 @@
-import { Eye, EyeOff, LogIn, Search } from "lucide-react";
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { Eye, EyeOff, LogIn } from "lucide-react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { EMAIL_DOMAIN, colorFor, publicApi, supabase, type Company } from "./data";
 import { beaver } from "./mascot";
 
 const Beaver = lazy(() => import("./Beaver"));
 
 const DEMO_PASSWORD = "crewly123";
+const DEMO = ["dominion", "georgia"];  // the two demo logins; other utilities are neighbors in the data
 
 export default function Login() {
   const [username, setUsername] = useState("");
@@ -14,13 +15,11 @@ export default function Login() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [people, setPeople] = useState<Company[]>([]);
-  const [q, setQ] = useState("");
 
-  useEffect(() => { publicApi.get<Company[]>("/api/app/directory").then(setPeople).catch(() => setPeople([])); }, []);
-  const shown = useMemo(() => {
-    const t = q.trim().toLowerCase();
-    return people.filter((c) => !t || [c.name, c.short, c.state ?? "", c.login ?? ""].some((x) => x.toLowerCase().includes(t)));
-  }, [people, q]);
+  useEffect(() => {
+    publicApi.get<Company[]>("/api/app/directory").then((cs) => setPeople(DEMO.map((l) => cs.find((c) => c.login === l)).filter((c): c is Company => !!c)))
+      .catch(() => setPeople([]));
+  }, []);
 
   const submit = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -70,28 +69,16 @@ export default function Login() {
           </button>
 
           <div className="mt-1 border-t-2 border-dashed border-line pt-4">
-            <div className="mb-2 flex items-center gap-2">
-              <span className="text-xs font-semibold uppercase tracking-wider text-faint">Demo logins</span>
-              <span className="text-xs text-faint">{people.length ? `${people.length} utilities` : ""}</span>
-            </div>
-            {people.length > 4 && (
-              <div className="mb-2 flex items-center gap-2 rounded-full border-2 border-line bg-white px-3 py-1.5 focus-within:border-pen">
-                <Search size={15} className="text-faint" />
-                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a utility, state or username" aria-label="Find a utility"
-                  className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-faint" />
-              </div>
-            )}
-            <div className="thin-scroll -mr-1 flex max-h-44 flex-col gap-1 overflow-y-auto pr-1">
-              {shown.map((c) => (
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-faint">Demo logins</div>
+            <div className="flex flex-wrap gap-2">
+              {people.map((c) => (
                 <button key={c.id} type="button" onClick={() => { setUsername(c.login!); setPassword(DEMO_PASSWORD); setError(null); beaver("wave"); }}
-                  className={`flex items-center gap-2.5 rounded-2xl border-2 px-3 py-1.5 text-left text-sm hover:border-ink ${username === c.login ? "border-pen bg-grape-soft" : "border-line bg-white"}`}>
-                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: c.color || colorFor(c.id) }} />
-                  <span className="min-w-0 flex-1 truncate font-semibold">{c.name}</span>
-                  {c.state && <span className="shrink-0 rounded-full bg-soft px-1.5 text-xs font-semibold text-muted">{c.state}</span>}
-                  <span className="shrink-0 text-muted">{c.login} / {DEMO_PASSWORD}</span>
+                  className="flex items-center gap-2 rounded-full border-2 border-line bg-white px-3 py-1.5 text-sm hover:border-ink">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: c.color || colorFor(c.id) }} />
+                  <span className="font-semibold">{c.short || c.name}</span>
+                  <span className="text-muted">{c.login} / {DEMO_PASSWORD}</span>
                 </button>
               ))}
-              {people.length > 0 && !shown.length && <p className="px-2 py-2 text-sm text-muted">No utility matches.</p>}
             </div>
           </div>
         </form>
