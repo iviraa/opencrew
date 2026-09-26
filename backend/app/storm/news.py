@@ -215,13 +215,21 @@ def place_point(where_text, row):
     return None
 
 
+_LLM_DOWN: list = []  # set after the first model failure in a run
+
+
 def items_for(row, text, use_llm=None):
     use_llm = bool(provider()) if use_llm is None else use_llm
     ts, body = row_time(row), text or row["title"]
     source = {"type": "news", "name": row["domain"], "url": row["url"], "title": row["title"], "ts": ts.isoformat()}
     items = []
-    if use_llm:
-        extracted, _ = llm_extract(row, body)
+    extracted = None
+    if use_llm and not _LLM_DOWN:
+        try:
+            extracted, _ = llm_extract(row, body)
+        except Exception:  # quota or outage: use the keyword rules below and stop asking this run
+            _LLM_DOWN.append(True)
+    if extracted is not None:
         for e in extracted:
             pt = place_point(e.where_text, row)
             if not pt:

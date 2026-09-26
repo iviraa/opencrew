@@ -22,6 +22,7 @@ export const STATUSES = ["not_contacted", "drafted", "sent", "replied", "call_sc
 export const QUALITY_LABEL: Record<string, string> = {
   straight_line: "straight line (approx route)",
   partial_point: "one endpoint located",
+  approx_area: "approximate area, town only",
   matched_point: "substation located",
   existing_path: "follows existing line",
   exact: "exact route",
