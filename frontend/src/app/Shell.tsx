@@ -12,13 +12,14 @@ import { beaver, say } from "./mascot";
 import Speech from "./Speech";
 import { GoalPanel, GoalsList } from "./GoalPanel";
 import { HistoryPanel, OverlapDetailPanel, OverlapList, ProjectList, RequestPanel, sides } from "./panels";
-import { NewsTab, Split, WeatherTab } from "./tabs";
+import { NewsTab, Split } from "./tabs";
+import HazardsTab from "./hazards/HazardsTab";
 
 const Beaver = lazy(() => import("./Beaver"));
 
 type Tab = "overlaps" | "weather" | "news";
 type Panel = { kind: "overlap"; id: number } | { kind: "request"; id: number } | { kind: "history" } | { kind: "chat" } | { kind: "goal"; id: number } | { kind: "goals" };
-const TABS: { id: Tab; label: string }[] = [{ id: "overlaps", label: "Overlaps" }, { id: "weather", label: "Weather" }, { id: "news", label: "News & damage" }];
+const TABS: { id: Tab; label: string }[] = [{ id: "overlaps", label: "Overlaps" }, { id: "weather", label: "Hazards" }, { id: "news", label: "News & damage" }];
 const SCAN_MS = 3200;
 const SCAN_STEPS = ["Reading your project plans", "Looking for neighbors within 25 miles", "Measuring drive times", "Comparing build windows", "Estimating savings"];
 
@@ -379,7 +380,7 @@ export default function Shell() {
             </MapPane>
           } />
         )}
-        {me && tab === "weather" && <WeatherTab projects={projects} side={roomy(panel)} />}
+        {me && tab === "weather" && <HazardsTab me={me} projects={projects} side={roomy(panel)} />}
         {me && tab === "news" && <NewsTab projects={projects} side={roomy(panel)} />}
         {!me && !err && <div className="grid flex-1 place-items-center text-muted"><span className="dots">Getting your projects</span></div>}
 

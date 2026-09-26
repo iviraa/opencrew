@@ -73,6 +73,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  get: <T,>(path: string) => call<T>(path),  // any logged-in endpoint
   me: () => call<Me>("/api/app/me"),
   companies: () => call<Company[]>("/api/app/companies"),
   projects: () => call<Jobs>("/api/app/projects"),
