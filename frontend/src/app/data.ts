@@ -25,7 +25,12 @@ export type CollabRequest = {
   created_at: string; responded_at: string | null;
 };
 
-export type Notice = { id: number; company_id: CompanyId; request_id: number; kind: "request" | "approved" | "declined"; created_at: string; read_at: string | null };
+export type SuggestionAction = { type: "open_request" | "open_overlap" | "weather" | "chat"; id?: number; prompt?: string };
+
+export type Notice = {
+  id: number; company_id: CompanyId; request_id: number | null; kind: "request" | "approved" | "declined" | "suggestion"; created_at: string; read_at: string | null;
+  title: string | null; body: string | null; action: SuggestionAction | null; dismissed_at: string | null;  // title, body and action are crewly's suggestions
+};
 
 export type ChatAction = {  // what the chat asks the screen to do
   type: string; ids?: number[]; id?: number; opportunity_id?: number; opportunity_ids?: number[]; bbox?: [number, number, number, number];
@@ -52,6 +57,7 @@ export const api = {
   overlap: (id: number) => call<OverlapDetail>(`/api/opportunities/${id}`),
   chat: (messages: { role: "user" | "model"; text: string }[]) =>
     call<ChatReply>("/api/app/chat", { method: "POST", body: JSON.stringify({ messages }) }),
+  suggest: () => call<{ created: number }>("/api/app/proactive/run", { method: "POST" }),  // crewly looks for new suggestions
 };
 
 // weather and news reuse the planner's public endpoints
@@ -91,13 +97,16 @@ export const requests = {
 
 export const notices = {
   list: async () => {
-    const { data, error } = await supabase.from("notification").select("*").order("created_at", { ascending: false }).limit(50);
+    const { data, error } = await supabase.from("notification").select("*").is("dismissed_at", null).order("created_at", { ascending: false }).limit(50);
     if (error) throw error;
     return data as Notice[];
   },
   markRead: async (ids: number[]) => {
     if (!ids.length) return;
     await supabase.from("notification").update({ read_at: new Date().toISOString() }).in("id", ids);
+  },
+  dismiss: async (id: number) => {
+    await supabase.from("notification").update({ dismissed_at: new Date().toISOString(), read_at: new Date().toISOString() }).eq("id", id);
   },
 };
 

@@ -1,9 +1,11 @@
 import { Bell, Clock3, LogOut, Radar, UserRound } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Chat, { type ChatMsg } from "./Chat";
+import { chatHistory } from "./history";
+import Suggestion from "./Suggestion";
 import {
   COMPANY, TIER_LABEL, ago, api, notices as noticesApi, requests as requestsApi, supabase,
-  type CollabRequest, type Jobs, type Me, type Notice, type Overlap,
+  type CollabRequest, type Jobs, type Me, type Notice, type Overlap, type SuggestionAction,
 } from "./data";
 import MapPane, { bboxOf, esc, type Fit, type Scene } from "./MapPane";
 import { beaver } from "./mascot";
@@ -49,6 +51,8 @@ export default function Shell() {
   const [chat, setChat] = useState<ChatMsg[]>([]);
   const [chatBusy, setChatBusy] = useState(false);
   const [ring, setRing] = useState(0);
+  const [memoryTick, setMemoryTick] = useState(0);
+  const saved = useRef<number | null>(null);  // how many chat turns are already stored; null until history loads
   const meRef = useRef<Me | null>(null);
   meRef.current = me;
 
@@ -66,11 +70,24 @@ export default function Shell() {
     }).catch((e) => setErr(String(e.message ?? e)));
   }, []);
 
+  // saved chat, once per mount; dev strict mode mounts twice, so a stale load is ignored
+  useEffect(() => {
+    let live = true;
+    chatHistory.load().then((h) => {
+      if (!live) return;
+      saved.current = h.length; setChat((c) => [...h, ...c]);
+      if (h.some((m) => m.ids?.length)) api.overlaps().then((d) => setOv((o) => o ?? d)).catch(() => {});  // saved cards need their overlaps
+    })
+      .catch(() => { if (live) saved.current = 0; });
+    return () => { live = false; };
+  }, []);
+
   const reload = useCallback(() => {
     requestsApi.list().then(setReqs).catch(() => {});
     noticesApi.list().then(setNotes).catch(() => {});
   }, []);
   useEffect(reload, [reload]);
+  useEffect(() => { api.suggest().then((r) => r.created && reload()).catch(() => {}); }, [reload]);  // crewly looks around once per login
 
   // live: the other company's requests and answers show up without a refresh
   useEffect(() => {
@@ -78,11 +95,17 @@ export default function Shell() {
     const ch = supabase.channel(`crewly-${me.company}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "notification", filter: `company_id=eq.${me.company}` }, async (p) => {
         const n = p.new as Notice;
+        if (n.kind === "suggestion") {  // quieter than a request: bell and beaver only
+          noticesApi.list().then(setNotes).catch(() => {});
+          setRing((x) => x + 1); beaver("nod");
+          return;
+        }
+        api.suggest().catch(() => {});  // a request or an answer can change what crewly suggests
         const list = await requestsApi.list().catch(() => null);
         if (list) setReqs(list);
         noticesApi.list().then(setNotes).catch(() => {});
         const who = COMPANY[meRef.current!.other].name;
-        setToast({ request: n.request_id, text: n.kind === "request" ? `${who} sent you a collaboration request` : `${who} ${n.kind} your request` });
+        setToast({ request: n.request_id!, text: n.kind === "request" ? `${who} sent you a collaboration request` : `${who} ${n.kind} your request` });
         setRing((x) => x + 1);
         beaver(n.kind === "declined" ? "sad" : n.kind === "approved" ? "happy" : "surprised");
       })
@@ -98,6 +121,19 @@ export default function Shell() {
   }, []);
 
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 7000); return () => clearTimeout(t); }, [toast]);
+
+  // store finished chat turns so the conversation survives reloads and shows on the company's other devices
+  useEffect(() => {
+    if (chatBusy || saved.current == null || chat.length <= saved.current) return;
+    const fresh = chat.slice(saved.current);
+    saved.current = chat.length;
+    chatHistory.save(fresh).catch(() => {});
+  }, [chat, chatBusy]);
+
+  const clearChat = () => {
+    setChat([]); saved.current = 0;
+    if (me) chatHistory.clear(me.company).catch(() => {});
+  };
 
   const loadOverlaps = useCallback(async (animate: boolean) => {
     if (animate) { setMode("scanning"); setScanStep(0); beaver("thinking"); }
@@ -154,6 +190,7 @@ export default function Shell() {
       const openId = open ? (open.id ?? open.opportunity_id) : undefined;
       const ids = lists.pop() ?? (openId != null ? [openId] : undefined);
       setChat([...next, { role: "model", text: r.reply || "Done.", ids, offline: r.offline }]);
+      if (r.ui_actions.some((a) => a.type === "memory")) setMemoryTick((t) => t + 1);  // crewly saved or dropped a note
       if (r.offline) beaver("sad");
       else { beaver("talking"); setTimeout(() => beaver("idle"), Math.min(4000, 800 + r.reply.length * 25)); }
       if (ids?.length) await showIds(ids);
@@ -170,6 +207,16 @@ export default function Shell() {
     push({ kind: "request", id });
     const unread = notes.filter((n) => n.request_id === id && !n.read_at).map((n) => n.id);
     if (unread.length) { noticesApi.markRead(unread).then(() => noticesApi.list().then(setNotes)); }
+  };
+
+  // do what a suggestion offers
+  const actOn = (n: Notice) => {
+    if (!n.read_at) noticesApi.markRead([n.id]).then(() => noticesApi.list().then(setNotes));
+    const a = n.action as SuggestionAction;
+    if (a.type === "open_request" && a.id != null) { setTab("overlaps"); openRequest(a.id); }
+    else if (a.type === "open_overlap" && a.id != null) openOverlap(a.id);
+    else if (a.type === "weather") setTab("weather");
+    else if (a.type === "chat" && a.prompt) { push({ kind: "chat" }); sendChat(a.prompt); }
   };
 
   const gotRequest = (r: CollabRequest) => setReqs((xs) => [r, ...xs.filter((x) => x.id !== r.id)]);
@@ -218,7 +265,7 @@ export default function Shell() {
   // ---------- right quarter ----------
   const panel = !me || !top ? null : top.kind === "chat" ? (
     <Chat me={me} msgs={chat} busy={chatBusy} overlaps={ov?.overlaps ?? null} requests={reqs} onSend={sendChat} onOpen={openOverlap}
-      onClose={() => setStack((s) => s.filter((p) => p.kind !== "chat"))} />
+      onClose={() => setStack((s) => s.filter((p) => p.kind !== "chat"))} onClear={clearChat} memoryTick={memoryTick} />
   ) : top.kind === "overlap" ? (
     <OverlapDetailPanel me={me} id={top.id} requests={reqs} onBack={() => { back(); setSelected(null); }} onSent={gotRequest} onOpenRequest={openRequest} />
   ) : top.kind === "request" ? (
@@ -338,10 +385,14 @@ export default function Shell() {
               </div>
               <div className="thin-scroll flex max-h-[46vh] flex-col gap-0.5 overflow-y-auto">
                 {notes.map((n) => {
+                  if (n.kind === "suggestion") {
+                    return <Suggestion key={n.id} n={n} onAct={() => { setPop(null); actOn(n); }}
+                      onDismiss={() => { setNotes((xs) => xs.filter((x) => x.id !== n.id)); noticesApi.dismiss(n.id); }} />;
+                  }
                   const r = reqs.find((x) => x.id === n.request_id);
                   const who = COMPANY[me.other].name;
                   return (
-                    <button key={n.id} onClick={() => { openRequest(n.request_id); setPop(null); }} className="flex gap-2.5 rounded-2xl px-2 py-2 text-left hover:bg-soft">
+                    <button key={n.id} onClick={() => { openRequest(n.request_id!); setPop(null); }} className="flex gap-2.5 rounded-2xl px-2 py-2 text-left hover:bg-soft">
                       <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.read_at ? "bg-transparent" : "bg-[#ff1f3d]"}`} />
                       <span className="min-w-0">
                         <span className="block text-sm leading-snug">
@@ -353,7 +404,7 @@ export default function Shell() {
                     </button>
                   );
                 })}
-                {!notes.length && <p className="px-2 py-6 text-center text-sm text-muted">Nothing yet. Requests and answers show up here.</p>}
+                {!notes.length && <p className="px-2 py-6 text-center text-sm text-muted">Nothing yet. Requests, answers and Crewly's suggestions show up here.</p>}
               </div>
             </div>
           )}
