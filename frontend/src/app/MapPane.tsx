@@ -29,14 +29,14 @@ export function bboxOf(fcs: (GeoJSON.FeatureCollection | undefined)[]): [number,
   return b;
 }
 
-export default function MapPane({ scene, fit, onPick, children }: {
-  scene: Scene; fit?: Fit | null; onPick?: (pick: string) => void; children?: React.ReactNode;
+export default function MapPane({ scene, fit, onPick, onMapClick, children }: {
+  scene: Scene; fit?: Fit | null; onPick?: (pick: string) => void; onMapClick?: (lon: number, lat: number) => void; children?: React.ReactNode;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const ready = useRef(false);
-  const latest = useRef({ scene, fit, onPick });
-  latest.current = { scene, fit, onPick };
+  const latest = useRef({ scene, fit, onPick, onMapClick });
+  latest.current = { scene, fit, onPick, onMapClick };
 
   const push = () => {
     const m = map.current;
@@ -86,6 +86,7 @@ export default function MapPane({ scene, fit, onPick, children }: {
     m.on("click", (e) => {
       const hit = m.queryRenderedFeatures(e.point, { layers: hoverable }).find((f) => f.properties?.pick);
       if (hit) latest.current.onPick?.(String(hit.properties.pick));
+      else latest.current.onMapClick?.(e.lngLat.lng, e.lngLat.lat);  // a bare spot: a finding may be waiting for a place
     });
     const ro = new ResizeObserver(() => m.resize());
     ro.observe(box.current!);

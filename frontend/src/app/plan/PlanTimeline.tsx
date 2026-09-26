@@ -4,8 +4,9 @@ import { colorFor } from "../data";
 import { MONTHS, VERDICT, axis, key, mon, type Plan, type Verdict } from "./types";
 
 // the month grid: one lane per pair, a bar for the proposed months colored by verdict, hazard shading underneath
-export default function PlanTimeline({ plan, open, busy, onOpen, onBack, onRebuild }: {
+export default function PlanTimeline({ plan, open, busy, onOpen, onBack, onRebuild, ghosts = {} }: {
   plan: Plan | null; open: string | null; busy: boolean; onOpen: (itemId: string) => void; onBack: () => void; onRebuild: () => void;
+  ghosts?: Record<string, number>;  // an experiment's shifted windows, months per pair id, drawn as ghost bars
 }) {
   const items = plan?.items ?? [];
   const months = useMemo(() => (plan ? axis(plan) : []), [plan]);
@@ -35,6 +36,7 @@ export default function PlanTimeline({ plan, open, busy, onOpen, onBack, onRebui
               const s = months.findIndex((m) => key(m) === it.target_start.slice(0, 7)), e = months.findIndex((m) => key(m) === it.target_end.slice(0, 7));
               const from = s >= 0 ? s : 0, to = e >= 0 ? e : months.length - 1;
               const dim = it.state === "skipped";
+              const shift = ghosts[String(it.id)] ?? 0, gFrom = from + shift, gTo = to + shift;
               return (
                 <div key={it.id} className={`grid items-stretch border-b border-line hover:bg-soft ${open === it.id ? "bg-grape-soft/60" : ""}`} style={{ gridTemplateColumns: cols }}>
                   <button onClick={() => onOpen(it.id)} className="min-w-0 px-3 py-2 text-left">
@@ -48,6 +50,9 @@ export default function PlanTimeline({ plan, open, busy, onOpen, onBack, onRebui
                       <div key={key(m)} className="relative border-l border-line" style={{ background: `rgba(17,16,20,${Math.min(days / 6, 0.22)})` }}
                         title={`${MONTHS[m.getMonth()]}: about ${days} weather-affected days`}>
                         {k === todayIdx && <span className="absolute inset-y-0 left-0 w-0.5 bg-grape" />}
+                        {shift !== 0 && k >= gFrom && k <= gTo && (
+                          <span aria-hidden className={`absolute inset-y-3 border-2 border-dashed border-grape ${k === gFrom ? "left-1 rounded-l-full" : "left-0 border-l-0"} ${k === gTo ? "right-1 rounded-r-full" : "right-0 border-r-0"}`} style={{ background: "rgba(91,43,181,0.12)" }} />
+                        )}
                         {inBar && (
                           <button onClick={() => onOpen(it.id)} aria-label={`Open #${it.id}`}
                             className={`absolute inset-y-2 ${k === from ? "left-1 rounded-l-full" : "left-0"} ${k === to ? "right-1 rounded-r-full" : "right-0"}`}
@@ -66,6 +71,7 @@ export default function PlanTimeline({ plan, open, busy, onOpen, onBack, onRebui
         {(Object.keys(VERDICT) as Verdict[]).map((v) => <span key={v} className="flex items-center gap-1"><span className="h-2.5 w-4 rounded-full" style={{ background: VERDICT[v].color }} />{VERDICT[v].label}</span>)}
         <span className="flex items-center gap-1"><span className="h-2.5 w-4 rounded-sm bg-[rgba(17,16,20,0.2)]" />weather-affected days</span>
         <span className="flex items-center gap-1"><AlertTriangle size={11} className="text-warn" />same project, same months</span>
+        {Object.keys(ghosts).length > 0 && <span className="flex items-center gap-1"><span className="h-2.5 w-4 rounded-full border-2 border-dashed border-grape" />shifted in the experiment</span>}
       </div>
     </div>
   );

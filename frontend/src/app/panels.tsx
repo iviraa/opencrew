@@ -86,12 +86,12 @@ export function ProjectList({ me, projects, onPick }: { me: Me; projects: Jobs |
   );
 }
 
-export function OverlapCard({ me, o, req, active, onClick }: { me: Me; o: Overlap; req?: CollabRequest; active?: boolean; onClick: () => void }) {
+export function OverlapCard({ me, o, req, active, struck, onClick }: { me: Me; o: Overlap; req?: CollabRequest; active?: boolean; struck?: boolean; onClick: () => void }) {
   const s = sides(me, o);
   const none = noSavings(o);
   return (
     <button onClick={onClick}
-      className={`w-full rounded-2xl border-2 px-3 py-2.5 text-left transition ${active ? "border-pen bg-grape-soft" : "border-transparent hover:border-line hover:bg-soft"}`}>
+      className={`${struck ? "line-through opacity-50" : ""} w-full rounded-2xl border-2 px-3 py-2.5 text-left transition ${active ? "border-pen bg-grape-soft" : "border-transparent hover:border-line hover:bg-soft"}`}>
       <div className="mb-1 flex items-center gap-2">
         <TierChip tier={o.tier} /><span className="text-xs text-faint">#{o.id}</span>
         <span className="flex min-w-0 items-center gap-1 truncate text-xs font-semibold text-muted">
@@ -110,10 +110,10 @@ export function OverlapCard({ me, o, req, active, onClick }: { me: Me; o: Overla
   );
 }
 
-export function OverlapList({ me, overlaps, requests, selected, focused, partners, partner, onPartner, onOpen, onClearFocus }: {
+export function OverlapList({ me, overlaps, requests, selected, focused, partners, partner, onPartner, onOpen, onClearFocus, struck }: {
   me: Me; overlaps: Overlap[]; requests: CollabRequest[]; selected: number | null; focused: boolean;
   partners: { id: string; n: number }[]; partner: string | null; onPartner: (id: string | null) => void;
-  onOpen: (id: number) => void; onClearFocus: () => void;
+  onOpen: (id: number) => void; onClearFocus: () => void; struck?: Set<string>;  // neighbors an experiment excludes
 }) {
   const total = partners.reduce((a, p) => a + p.n, 0);
   return (
@@ -139,7 +139,7 @@ export function OverlapList({ me, overlaps, requests, selected, focused, partner
         </div>
       )}
       <div className="thin-scroll -mr-2 flex flex-1 flex-col gap-1 overflow-y-auto pr-2">
-        {overlaps.map((o) => <OverlapCard key={o.id} me={me} o={o} req={latestFor(requests, o.id)} active={o.id === selected} onClick={() => onOpen(o.id)} />)}
+        {overlaps.map((o) => <OverlapCard key={o.id} me={me} o={o} req={latestFor(requests, o.id)} active={o.id === selected} onClick={() => onOpen(o.id)} struck={struck?.has(partnerOf(me, o))} />)}
         {!overlaps.length && <p className="px-2 py-6 text-center text-sm text-muted">No overlaps match.</p>}
       </div>
     </>
@@ -549,13 +549,16 @@ export function RequestPanel({ me, id, requests, onBack, onOpenOverlap, onRespon
   );
 }
 
-export function HistoryPanel({ me, requests, onBack, onOpen, onGoals }: { me: Me; requests: CollabRequest[]; onBack: () => void; onOpen: (id: number) => void; onGoals?: () => void }) {
+export function HistoryPanel({ me, requests, onBack, onOpen, onGoals, onFindings }: { me: Me; requests: CollabRequest[]; onBack: () => void; onOpen: (id: number) => void; onGoals?: () => void; onFindings?: () => void }) {
   const [tab, setTab] = useState<"all" | "sent" | "received">("all");
   const rows = requests.filter((r) => tab === "all" || (tab === "sent") === (r.from_company === me.company));
   return (
     <>
       <PanelHeader title="Request history" sub={`${requests.length} request${requests.length === 1 ? "" : "s"}`} onBack={onBack}
-        right={onGoals && <button onClick={onGoals} className="mt-1 rounded-full bg-grape-soft px-2.5 py-1 text-xs font-semibold text-grape hover:bg-grape hover:text-white">Goals</button>} />
+        right={(onGoals || onFindings) && <span className="mt-1 flex gap-1">
+          {onGoals && <button onClick={onGoals} className="rounded-full bg-grape-soft px-2.5 py-1 text-xs font-semibold text-grape hover:bg-grape hover:text-white">Goals</button>}
+          {onFindings && <button onClick={onFindings} className="rounded-full bg-grape-soft px-2.5 py-1 text-xs font-semibold text-grape hover:bg-grape hover:text-white">Findings</button>}
+        </span>} />
       <div className="mb-2 flex gap-1 rounded-full bg-soft p-1 text-xs font-semibold">
         {(["all", "sent", "received"] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)} className={`flex-1 rounded-full py-1 capitalize ${tab === t ? "bg-white shadow-sm" : "text-muted"}`}>{t}</button>
