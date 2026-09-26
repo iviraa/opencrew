@@ -703,7 +703,7 @@ def solve_all(data, c):
     for org in sorted({t["org"] for t in tasks.values()}):  # each utility alone
         sub = {j: t for j, t in tasks.items() if t["org"] == org}
         model, v, _ = build(sub, near, data, c, origin, crews, coordinated=False)
-        s, status = solve(model, c)
+        s, status = solve(model, c, c["time_limit_s"] * 3)  # the baseline must be proven optimal for the savings to be fair
         if status not in ("OPTIMAL", "FEASIBLE"):
             problems.append(org)
             continue
