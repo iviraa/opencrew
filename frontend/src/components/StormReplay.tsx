@@ -46,7 +46,7 @@ export default function StormReplay({ frame, at, onAt, start, end, landfall, loa
   const landfallPct = ((landfall - start) / (end - start)) * 100;
 
   return (
-    <div className="thin-scroll flex h-full flex-col overflow-y-auto bg-surface px-5 py-3">
+    <div className="thin-scroll flex h-full flex-col overflow-y-auto px-5 py-3">
       <div className="flex flex-wrap items-center gap-4">
         {!live && (
           <button onClick={() => { if (at >= end) onAt(start); setPlaying((p) => !p); }} aria-label={playing ? "Pause" : "Play"}

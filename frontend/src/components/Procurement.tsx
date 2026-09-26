@@ -8,7 +8,7 @@ export default function Procurement() {
   useEffect(() => { api.procurement().then(setGroups).catch(() => setGroups([])); }, []);
 
   return (
-    <div className="thin-scroll flex-1 overflow-y-auto px-5 pb-6 pt-4">
+    <div className="px-5 pb-6 pt-4">
       <p className="text-[14px] text-muted">
         Equipment both utilities need, of the same kind and voltage. Due within a year of each other: buy together. A planned spare can be shared any year.
       </p>

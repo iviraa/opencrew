@@ -39,7 +39,7 @@ export default function JointPlan({ plan, solving, onSolve, pending, onDiscardPe
 
   if (!plan || !draft) {
     return (
-      <div className="flex-1 px-5 py-8 text-center">
+      <div className="px-5 py-8 text-center">
         <div className="display text-[18px] font-semibold">{solving ? "Working out the best joint schedule…" : "Loading the joint plan…"}</div>
         <p className="mt-1 text-[14px] text-muted">The first solve takes about half a minute. After that it is instant.</p>
       </div>
@@ -62,7 +62,7 @@ export default function JointPlan({ plan, solving, onSolve, pending, onDiscardPe
   const decisions = [...plan.decisions].sort((a, b) => Number(b.decision === "share") - Number(a.decision === "share"));
 
   return (
-    <div className="thin-scroll flex-1 overflow-y-auto px-5 pb-6 pt-4">
+    <div className="px-5 pb-6 pt-4">
       {plan.status === "infeasible" && <div className="mb-4 rounded-2xl bg-gpc-soft px-4 py-3 text-[14px] text-[#b42323]">{plan.problem}</div>}
 
       {h && plan.baseline && plan.coordinated && (

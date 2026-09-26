@@ -1,7 +1,7 @@
 import { CircleCheck, CircleDashed, ExternalLink } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, type IncidentDetail } from "../api";
-import { CloseButton } from "./ui";
+import { CloseButton, Sheet } from "./ui";
 
 export const INCIDENT_KIND: Record<string, { label: string; color: string }> = {
   downed_line: { label: "Downed line", color: "#ff5d5d" },
@@ -34,7 +34,7 @@ export default function IncidentCard({ id, onClose }: { id: number; onClose: () 
   const kind = inc ? INCIDENT_KIND[inc.kind] ?? { label: inc.kind, color: "#8a94b0" } : null;
   const sources = inc?.sources.filter((s) => s.type !== "context").length ?? 0;
   return (
-    <div className="flex max-h-full flex-col overflow-hidden rounded-[24px] bg-surface shadow-float">
+    <Sheet className="max-h-full !h-auto">
       <div className="flex items-start justify-between gap-3 px-5 pb-2 pt-4">
         <div className="min-w-0">
           <div className="display flex items-center gap-2 text-[19px] font-semibold">
@@ -99,6 +99,6 @@ export default function IncidentCard({ id, onClose }: { id: number; onClose: () 
           <p className="text-[12px] text-faint">AI only reads the articles. Places come from a geocoder, and distances and scores from code. News never outranks official reports.</p>
         </div>
       )}
-    </div>
+    </Sheet>
   );
 }
