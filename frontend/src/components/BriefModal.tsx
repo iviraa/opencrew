@@ -1,14 +1,10 @@
+import { Download, Printer } from "lucide-react";
 import { marked } from "marked";
-import { useEffect } from "react";
+import { Button } from "./ui";
+import { Modal } from "./ui-extra";
 
 export default function BriefModal({ markdown, source, onClose }: { markdown: string; source: string; onClose: () => void }) {
   const html = marked.parse(markdown) as string;
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
-    window.addEventListener("keydown", onKey, true);  // capture so the app-level handler doesn't also close the panel
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [onClose]);
 
   const download = () => {
     const a = document.createElement("a");
@@ -20,25 +16,20 @@ export default function BriefModal({ markdown, source, onClose }: { markdown: st
   const print = () => {
     const w = window.open("", "_blank");
     if (!w) return;
-    w.document.write(`<html><head><title>Coordination brief</title><style>body{font:14px system-ui;max-width:800px;margin:40px auto;color:#0f172a}
-      table{border-collapse:collapse;width:100%;font-size:12px}td,th{border:1px solid #cbd5e1;padding:4px 6px;text-align:left}</style></head><body>${html}</body></html>`);
+    w.document.write(`<html><head><title>Coordination brief</title><style>body{font:14px system-ui;max-width:800px;margin:40px auto;color:#1b2447}
+      table{border-collapse:collapse;width:100%;font-size:12px}td,th{border:1px solid #dfe6f2;padding:4px 6px;text-align:left}</style></head><body>${html}</body></html>`);
     w.document.close();
     w.print();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-6" onClick={onClose}>
-      <div className="flex max-h-full w-[860px] flex-col rounded-xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
-          <div className="text-sm font-semibold">Coordination brief <span className="ml-2 text-xs font-normal text-slate-500">summary by {source}</span></div>
-          <div className="flex gap-2">
-            <button onClick={download} className="rounded-md bg-slate-100 px-3 py-1.5 text-xs font-medium hover:bg-slate-200">Download .md</button>
-            <button onClick={print} className="rounded-md bg-slate-100 px-3 py-1.5 text-xs font-medium hover:bg-slate-200">Print / PDF</button>
-            <button onClick={onClose} className="rounded px-2 py-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
-          </div>
-        </div>
-        <article className="brief overflow-y-auto px-6 py-5 text-sm" dangerouslySetInnerHTML={{ __html: html }} />
-      </div>
-    </div>
+    <Modal title="Coordination brief" width={860} onClose={onClose}
+      subtitle={source === "gemini" ? "Summary written by Gemini. Every number comes from OpenCrew's data." : "Every number comes from OpenCrew's data."}
+      actions={<>
+        <Button className="!px-3 !py-1.5 !text-[13px]" onClick={download}><Download size={15} />Markdown</Button>
+        <Button className="!px-3 !py-1.5 !text-[13px]" onClick={print}><Printer size={15} />Print or PDF</Button>
+      </>}>
+      <article className="brief text-[14px]" dangerouslySetInnerHTML={{ __html: html }} />
+    </Modal>
   );
 }
