@@ -41,11 +41,11 @@ def rows(df, state):
         }
 
 
-def load(conn, manifest="data/raw/national/manifest_central.json"):
+def load(conn, only=None, manifest="data/raw/national/manifest_central.json"):
     df = pd.read_excel(ROOT / FILE, 0, header=2)
     out = {}
     for m in json.loads((ROOT / manifest).read_text()):
-        if m["state"] not in OWNERS:
+        if m["state"] not in OWNERS or (only and m["state"] not in only):
             continue
         org = m["slug"]
         register_org(conn, org, m["utility"], m["utility"].split(" (")[0].split(" / ")[0], m["state"], "MISO", m["slug"])

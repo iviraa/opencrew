@@ -1,11 +1,16 @@
 """Shared loader for regional planner lists: register the utility and source file, place each project, keep the whole row."""
 import hashlib
+import io
 import json
+import re
+import zipfile
 from datetime import date, datetime
 from functools import lru_cache
 
 from dateutil.relativedelta import relativedelta
+import shapefile
 from rapidfuzz import fuzz, process
+from shapely.geometry import shape
 
 from app.config import DEFAULT_DURATION_MONTHS
 from app.db import ROOT
@@ -13,6 +18,7 @@ from app.geo.geolocate import km, norm
 
 MATCH_MIN = 90  # name similarity needed to trust an osm substation
 MAX_SPAN_KM = 250  # longest plausible line in a regional plan
+COUNTY_CONF = 0.3  # a county centroid is only an area, never a site
 PALETTE = ["#00a6a6", "#e07a1f", "#8e44ad", "#2e9e4f", "#d6336c", "#1c7ed6", "#b8860b", "#5c7cfa", "#c2255c", "#0ca678",
            "#f76707", "#7048e8", "#37b24d", "#e64980", "#1098ad", "#a61e4d", "#74b816", "#3b5bdb", "#d9480f", "#9c36b5"]
 
@@ -47,7 +53,7 @@ def stations(state):
 
 def find_station(name, states):
     """Best osm substation for a planner's station name in the given states, or None when unsure."""
-    key = norm(name)
+    key = norm(re.sub(r"\b\d+(\.\d+)?\s*kv\b|\bckt\b.*|\bline\b.*", " ", str(name), flags=re.I))  # "crooked lake 161kv" -> "crooked lake"
     if len(key) < 3:
         return None
     best = None
@@ -59,7 +65,30 @@ def find_station(name, states):
                 best = {**rows[i], "score": score}
             elif score == best["score"] and km((rows[i]["lat"], rows[i]["lon"]), (best["lat"], best["lon"])) > 15:
                 best = {**best, "ambiguous": True}  # two far apart stations share the name
+    if not best:  # "el dorado donan" vs "donan": accept a subset match only when it is the one station that fits
+        hits = [(rows[i], st) for st in states for rows, keys in [stations(st)] for i, k in enumerate(keys)
+                if len(k) >= 5 and len(key) >= 5 and key.split()[-1] in k.split() and fuzz.token_set_ratio(key, k) >= 97]  # the distinctive word must match
+        spots = {(round(r["lat"], 2), round(r["lon"], 2)) for r, _ in hits}
+        if len(spots) == 1:
+            best = {**hits[0][0], "score": 85.0}
     return None if not best or best.get("ambiguous") else best
+
+
+@lru_cache
+def county_centroids():
+    z = zipfile.ZipFile(ROOT / "data/layers/counties_20m.zip")
+    base = next(n for n in z.namelist() if n.endswith(".shp"))[:-4]
+    r = shapefile.Reader(shp=io.BytesIO(z.read(base + ".shp")), dbf=io.BytesIO(z.read(base + ".dbf")))
+    out = {}
+    for rec, shp in zip(r.records(), r.shapes()):
+        c = shape(shp.__geo_interface__).centroid
+        out[(rec["STUSPS"], rec["NAME"].lower())] = (c.y, c.x)
+    return out
+
+
+def find_county(name, states):
+    key = str(name or "").lower().replace(" county", "").replace(" parish", "").strip()
+    return next(({"lat": c[0], "lon": c[1], "county": key, "state": st} for st in states if (c := county_centroids().get((st, key)))), None)
 
 
 def job_type(text, has_two_ends):
@@ -128,21 +157,27 @@ def save(conn, p, doc):
         return "review"
     picks = [find_station(e, p["states"]) for e in ends]
     found = [x for x in picks if x]
+    if len(found) == 2 and found[0]["osm"] == found[1]["osm"]:
+        found = found[:1]  # both names landed on one station: it is only a point
     if len(found) == 2 and km((found[0]["lat"], found[0]["lon"]), (found[1]["lat"], found[1]["lon"])) > MAX_SPAN_KM:
         found = found[:1]  # the second match is implausibly far: keep the first end only
-    if not found:
+    county = None if found else next((c for c in (find_county(n, p["states"]) for n in p.get("counties") or []) if c), None)
+    if not found and not county:
         conn.execute("INSERT INTO job_review (org_id, raw, reason, source_doc_id) VALUES (%s, %s, %s, %s)",
                      (p["org_id"], json.dumps(p["raw"]), f"no osm substation matched {ends or 'no station names'}", doc))
         return "review"
     kind = job_type(f"{p['name']} {p.get('description') or ''}", len(ends) == 2)
-    conf = round(min(x["score"] for x in found) / 100, 3)
-    if len(found) == 2:
+    conf = round(min(x["score"] for x in found) / 100, 3) if found else COUNTY_CONF
+    if county:  # no station matched, but the source names the county
+        conf, found = COUNTY_CONF, []
+        wkt, quality = f"POINT({county['lon']} {county['lat']})", "county_area"
+    elif len(found) == 2:
         wkt, quality = f"LINESTRING({found[0]['lon']} {found[0]['lat']}, {found[1]['lon']} {found[1]['lat']})", "straight_line"
     else:
         wkt, quality = f"POINT({found[0]['lon']} {found[0]['lat']})", "partial_point" if len(ends) == 2 else "matched_point"
         conf = round(conf * (0.8 if len(ends) == 2 else 1), 3)
     start, end, basis = window(kind, p.get("start"), p["in_service"])
-    via = [{"query": e, "osm": x["osm"], "name": x["name"], "score": x["score"]} if x else {"query": e, "found": False} for e, x in zip(ends, picks)]
+    via = [{"county": county["county"], "state": county["state"], "centroid": True}] if county else [{"query": e, "osm": x["osm"], "name": x["name"], "score": x["score"]} if x else {"query": e, "found": False} for e, x in zip(ends, picks)]
     conn.execute(UPSERT, {**{k: p.get(k) for k in ("id", "org_id", "name", "description", "voltage_kv", "cost_usd", "state", "planner",
                                                    "source_project_id", "status", "need", "length_mi", "counties")},
                           "ref": p.get("source_project_id"), "job_type": kind, "endpoints": ends, "wkt": wkt, "quality": quality,
