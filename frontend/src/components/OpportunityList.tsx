@@ -46,8 +46,8 @@ export default function OpportunityList({ items, selectedId, tier, onTier, onSel
               <div className="flex items-start gap-3">
                 <span className="mt-0.5 w-5 shrink-0 text-right text-xs font-semibold text-slate-400">{i + 1}</span>
                 <div className="min-w-0 flex-1">
-                  <JobLine name={o.a_name} color={o.a_color} conf={o.a_conf} />
-                  <JobLine name={o.b_name} color={o.b_color} conf={o.b_conf} />
+                  <JobLine name={o.a_name} phase={o.a_phase} color={o.a_color} conf={o.a_conf} />
+                  <JobLine name={o.b_name} phase={o.b_phase} color={o.b_color} conf={o.b_conf} />
                   <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600">
                     <TierChip tier={o.tier} />
                     <span>{miles(o.distance_m)}</span>
@@ -65,11 +65,12 @@ export default function OpportunityList({ items, selectedId, tier, onTier, onSel
   );
 }
 
-function JobLine({ name, color, conf }: { name: string; color: string; conf: number }) {
+function JobLine({ name, phase, color, conf }: { name: string; phase: string | null; color: string; conf: number }) {
   return (
     <div className="flex items-center gap-2 text-[13px] leading-5">
       <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />
       <span className="truncate">{name}</span>
+      {phase && <span className="shrink-0 rounded bg-slate-100 px-1 text-[10px] text-slate-600">{phase}</span>}
       {conf < 0.7 && <span className="shrink-0 rounded bg-amber-100 px-1 text-[10px] font-semibold text-amber-800">approx</span>}
     </div>
   );

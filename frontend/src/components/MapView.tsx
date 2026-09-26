@@ -135,7 +135,7 @@ function Legend({ jobs }: { jobs: JobCollection | null }) {
   const orgs = new Map<string, string>();
   jobs?.features.forEach((f) => orgs.set(f.properties.org_name, f.properties.color));
   return (
-    <div className="absolute bottom-6 left-3 rounded-lg bg-white/95 p-3 text-xs shadow-md ring-1 ring-slate-200">
+    <div className="absolute left-3 top-3 rounded-lg bg-white/95 px-3 py-2 text-[11px] leading-4 shadow-md ring-1 ring-slate-200">
       {[...orgs].map(([name, color]) => (
         <div key={name} className="flex items-center gap-2 py-0.5">
           <span className="h-1 w-5 rounded" style={{ background: color }} /> {name}

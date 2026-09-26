@@ -3,10 +3,11 @@ import { api, type Assumption, type JobCollection, type Opportunity, type Opport
 import DetailPanel from "./components/DetailPanel";
 import MapView from "./components/MapView";
 import OpportunityList from "./components/OpportunityList";
+import Timeline from "./components/Timeline";
 
 const HORIZONS = [
   { id: "long", label: "Long-range", ready: true },
-  { id: "near", label: "Near-term", ready: false },
+  { id: "near", label: "Near-term", ready: true },
   { id: "emergency", label: "Storm replay", ready: false },
 ];
 
@@ -21,6 +22,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    setSelectedId(null);
     Promise.all([api.jobs(horizon), api.opportunities(horizon), api.assumptions()])
       .then(([j, o, a]) => { setJobs(j); setOpps(o); setAssumptions(a); })
       .catch((e) => setError(String(e)));
@@ -41,6 +43,7 @@ export default function App() {
   const counts = new Map<string, number>();
   jobs?.features.forEach((f) => counts.set(f.properties.org_name, (counts.get(f.properties.org_name) ?? 0) + 1));
   const selected = opps.find((o) => o.id === selectedId) ?? null;
+  const shown = tier ? opps.filter((o) => o.tier === tier) : opps;
 
   return (
     <div className="flex h-full flex-col">
@@ -55,7 +58,7 @@ export default function App() {
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-4 text-xs text-slate-500">
-          {[...counts].map(([org, n]) => <span key={org}>{org}: <b className="text-slate-800">{n}</b> projects</span>)}
+          {[...counts].map(([org, n]) => <span key={org}>{org}: <b className="text-slate-800">{n}</b> {horizon === "near" ? "phases" : "projects"}</span>)}
           <span>Opportunities: <b className="text-slate-800">{opps.length}</b></span>
         </div>
       </header>
@@ -64,8 +67,13 @@ export default function App() {
         <aside className="w-[380px] shrink-0 border-r border-slate-200 bg-white">
           <OpportunityList items={opps} selectedId={selectedId} tier={tier} onTier={setTier} onSelect={setSelectedId} />
         </aside>
-        <section className="min-w-0 flex-1">
-          <MapView jobs={jobs} opportunities={tier ? opps.filter((o) => o.tier === tier) : opps} selected={selected} onSelect={setSelectedId} />
+        <section className="flex min-w-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1">
+            <MapView jobs={jobs} opportunities={shown} selected={selected} onSelect={setSelectedId} />
+          </div>
+          <div className="h-[210px] shrink-0 border-t border-slate-200">
+            <Timeline jobs={jobs} opportunities={shown} selected={selected} onSelect={setSelectedId} />
+          </div>
         </section>
         {selectedId != null && (
           <aside className="w-[400px] shrink-0 border-l border-slate-200 bg-white">

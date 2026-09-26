@@ -120,6 +120,7 @@ function JobCard({ job }: { job: Job }) {
     <div className="rounded-lg border border-slate-200 p-3" style={{ borderLeft: `4px solid ${job.color}` }}>
       <div className="text-[11px] font-medium" style={{ color: job.color }}>{job.org_name}</div>
       <div className="text-sm font-semibold leading-5">{job.name}</div>
+      {job.phase && <div className="mt-0.5 text-xs font-medium text-slate-700">Phase: {job.phase} <span className="rounded bg-slate-100 px-1 text-[10px] text-slate-500">derived</span></div>}
       <div className="mt-1 text-xs text-slate-600">
         {title(job.job_type)}{job.voltage_kv ? ` · ${job.voltage_kv} kV` : ""} · {monthYear(job.start_at)} → {monthYear(job.end_at)}
       </div>
