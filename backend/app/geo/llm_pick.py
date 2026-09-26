@@ -26,11 +26,11 @@ def _cache():
 
 def choose(job, options):
     """Gemini picks one of the given OSM candidates or none; it never supplies coordinates."""
-    if not provider() or _down[0]:
-        return None
     key = f"{job['name']}|{','.join(o['osm'] for o in options)}"
     cache = _cache()
-    if key not in cache:
+    if key not in cache:  # cached answers replay even without a key
+        if not provider() or _down[0]:
+            return None
         text = "\n".join(f"{i}. {o['name']} (operator: {o.get('operator') or 'unknown'})" for i, o in enumerate(options))
         try:
             out = json.loads(generate_json(PROMPT.format(name=job["name"], desc=(job.get("description") or "")[:600], options=text), SCHEMA))

@@ -35,6 +35,8 @@ def assess(job, picks, coords, zone=None, in_home=None, county_at=None):
             flag("suspect", f"{p.get('name')} is outside the utility's home state")
         if p.get("approx"):
             flag("suspect", f"only the town of {p.get('name')} is known, not the station")
+        elif p.get("area"):
+            flag("suspect", f"{p.get('query')} placed by a place-name search ({str(p.get('name')).split(',')[0]}), not a mapped station")
 
     if len(coords) >= 2:
         length = line_km(coords)

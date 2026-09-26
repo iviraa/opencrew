@@ -19,6 +19,7 @@ MIN_CONF = 0.6
 TOWN_CONF = 0.35  # a town centroid is only an area, never a site
 LLM_CONF = 0.6
 DIRECTIONS = {"east", "west", "north", "south", "upper", "lower"}  # "east villa rica" can sit at villa rica
+ROAD = re.compile(r"\b(road|rd|drive|dr|street|parkway|pkwy|highway|hwy|avenue|ave|boulevard|blvd)\b", re.I)  # stations named after their road
 OUT_OF_STATE = 0.6  # tie lines cross the border, so penalise instead of reject
 
 OPERATORS = {"desc": re.compile(r"dominion|sce&g|south carolina electric", re.I), "gpc": re.compile(r"georgia power|southern", re.I)}
@@ -31,7 +32,7 @@ def squash(name):
 
 
 def norm(name):
-    s = re.sub(r"\(.*?\)|#\s*\d+|[^a-z0-9 ]", " ", (name or "").lower())
+    s = re.sub(r"\(.*?\)|#\s*\d+|[^a-z0-9 ]", " ", (name or "").lower().replace("'", ""))  # "o'hara" is "ohara"
     s = " ".join(SWAPS.get(w, w) for w in s.split())
     return " ".join(NOISE.sub(" ", s).split())
 
@@ -77,6 +78,7 @@ class Locator:
         self.osm = json.loads(path.read_text()) if path.exists() else []
         for s in self.osm:
             s["norm"] = norm(s["name"])
+            s["parts"] = [norm(p) for p in s["name"].split("-")] if "-" in s["name"] else []
 
     def candidates(self, org, name, project=""):
         key = norm(name)
@@ -91,6 +93,8 @@ class Locator:
         words = [w for w in key.split() if len(w) >= 4 and w not in DIRECTIONS]
         for s in self.osm:
             sc = fuzz.token_sort_ratio(key, s["norm"])
+            if len(key) >= 6 and key in s["parts"]:
+                sc = 100  # "Plant McDonough-Atkinson" is also Atkinson
             if sc < 80 or (short and key != s["norm"]):
                 continue
             theirs = s["norm"].split()
@@ -112,8 +116,12 @@ class Locator:
         key = norm(name)
         if len(key) < 4 or not self.osm:
             return None
-        hit = geocode(self.states[HOME[org]][0], key.title())  # town-level guess, shown as approx
-        return hit if hit and km((hit["lat"], hit["lon"]), near) <= 60 else None  # must sit near the located endpoint
+        raw = lookup(f"{key.title()}, {self.states[HOME[org]][0]}")  # same query and cache as geocode()
+        kind = raw and raw.get("addresstype")
+        if kind not in TOWN and not (kind == "road" and ROAD.search(name)):
+            return None  # a university, river, island or county is not where a substation sits
+        hit = {**geocode(self.states[HOME[org]][0], key.title()), "area": True, "query": name}
+        return hit if km((hit["lat"], hit["lon"]), near) <= 60 else None  # must sit near the located endpoint
 
     def loose(self, org, names, limit=8):
         """Weaker OSM matches inside the home state, for gemini to choose from."""

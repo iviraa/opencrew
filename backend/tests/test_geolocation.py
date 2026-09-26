@@ -75,7 +75,7 @@ def loc(monkeypatch):
     loc.osm = [{"osm": "node/1", "name": "Pine Mountain Substation", "operator": "Georgia Power", "lat": 32.86, "lon": -84.85},
                {"osm": "node/2", "name": "Scottdale Substation", "operator": "Georgia Power", "lat": 33.79, "lon": -84.26}]
     for s in loc.osm:
-        s["norm"] = geolocate.norm(s["name"])
+        s["norm"], s["parts"] = geolocate.norm(s["name"]), []
     monkeypatch.setattr(loc, "home", lambda org: type("H", (), {"contains": lambda self, p: True})())
     monkeypatch.setattr(loc, "town", lambda org, name: None)
     return loc
@@ -112,3 +112,19 @@ def test_llm_pick_never_returns_outside_options(monkeypatch, tmp_path):
     monkeypatch.setattr(llm_pick, "_down", [False])
     monkeypatch.setattr(llm_pick, "generate_json", lambda prompt, schema: '{"choice": 7, "reason": "made up"}')
     assert llm_pick.choose({"name": "X"}, [{"osm": "node/1", "name": "A"}]) is None
+
+
+def test_fallback_takes_towns_and_named_roads_only(loc, monkeypatch):
+    loc.states = {"GA": ("Georgia", None)}
+    hits = {"Northwest, Georgia": {"addresstype": "amenity", "type": "university", "lat": "33.77", "lon": "-84.39", "display_name": "Georgia Tech"},
+            "Northside Drive, Georgia": {"addresstype": "road", "type": "trunk", "lat": "33.8", "lon": "-84.41", "display_name": "Northside Drive"}}
+    monkeypatch.setattr(geolocate, "lookup", hits.get)
+    monkeypatch.setattr(geolocate, "geocode", lambda state, place: {"lat": 33.8, "lon": -84.41, "conf": 0.5, "via": "nominatim:trunk", "name": place})
+    assert loc.fallback("gpc", "NORTHWEST", (33.8, -84.4)) is None
+    assert loc.fallback("gpc", "NORTHSIDE DRIVE", (33.8, -84.4))["area"]
+
+
+def test_hyphenated_plant_matches_either_name(loc):
+    loc.osm.append({"osm": "way/3", "name": "Plant McDonough-Atkinson", "operator": "Georgia Power", "lat": 33.82, "lon": -84.47})
+    loc.osm[-1]["norm"], loc.osm[-1]["parts"] = geolocate.norm("Plant McDonough-Atkinson"), ["mcdonough", "atkinson"]
+    assert loc.candidates("gpc", "ATKINSON")[0]["via"] == "way/3"
