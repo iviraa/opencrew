@@ -10,9 +10,9 @@ AFFECTS_WORK = {"delay", "damage", "outage", "opposition", "regulatory", "supply
 RULES = [  # first match wins, most specific first
     ("security", r"\b(shoot|shot|gunfire|vandal|sabotag|attack|intruder|break-?in|copper theft|stolen|drone|threat)\w*"),
     ("supply_chain", r"\b(transformer shortage|lead times?|supply chain|backlog|tariffs?|procurement|shortage of)\b"),
-    ("opposition", r"\b(oppos\w+|residents? (?:fight|push back|object)|lawsuit|sued?|protest\w*|petition|eminent domain|condemn\w+|landowners?|not in my|route (?:change|fight)|public comment)\b"),
+    ("opposition", r"\b(oppos\w+|residents? (?:fight|push back|object)|lawsuit|sued?|suing|superior court|court fight|protest\w*|petition|eminent domain|condemn\w+|landowners?|not in my|route (?:change|fight)|public comment)\b"),
     ("delay", r"\b(delay\w*|postpon\w*|pushed back|behind schedule|on hold|paused|setback|slip\w*|later than planned|halt\w*|suspend\w*)\b"),
-    ("damage", r"\b(damag\w+|destroy\w+|downed|toppl\w+|knocked out|explosion|explode\w*|fire at|caught fire|burn\w+|collaps\w+|struck)\b"),
+    ("damage", r"\b(damag\w+|destroy\w+|downed|toppl\w+|knocked out|explosion|explode\w*|fire at|substation fire|caught fire|burn\w+|collaps\w+|struck)\b"),
     ("outage", r"\b(outages?|without power|lost power|blackout|power (?:is )?out|restor\w+ power|restoration)\b"),
     ("regulatory", r"\b(public service commission|public utilities? commission|psc\b|puc\b|ferc|docket|rate case|rate hike|approv\w+|certificate|cpcn|"
                    r"siting|permit\w*|environmental review|hearing|regulator\w*|commission(?:ers)? vot\w+|order\w*)\b"),

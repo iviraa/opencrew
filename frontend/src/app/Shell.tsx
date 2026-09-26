@@ -389,7 +389,7 @@ export default function Shell() {
         )}
         {me && tab === "plan" && <PlanTab me={me} side={roomy(panel)} focus={planFocus} onOpenOverlap={openOverlap} onOpenGoal={(id) => push({ kind: "goal", id })} />}
         {me && tab === "weather" && <HazardsTab me={me} projects={projects} side={roomy(panel)} focus={hazardFocus} />}
-        {me && tab === "news" && <NewsTab projects={projects} side={roomy(panel)} />}
+        {me && tab === "news" && <NewsTab projects={projects} side={roomy(panel)} onOpenOverlap={openOverlap} />}
         {!me && !err && <div className="grid flex-1 place-items-center text-muted"><span className="dots">Getting your projects</span></div>}
 
         {!chatOpen && me && (

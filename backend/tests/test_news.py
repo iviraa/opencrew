@@ -87,3 +87,4 @@ def test_feed_item_shape_matches_the_contract():
     assert set(it) == {"id", "title", "source", "url", "published", "impact", "affects_work", "summary", "confidence", "org_ids", "job_ids",
                        "opportunity_ids", "verified", "evidence"}
     assert it["published"] == "2026-09-01T00:00:00+00:00" and it["impact"] in classify.IMPACTS
+

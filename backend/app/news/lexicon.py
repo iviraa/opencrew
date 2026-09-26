@@ -87,6 +87,7 @@ def build(conn, org_id):
     org = conn.execute("SELECT id, name, short, state FROM org WHERE id = %s", (org_id,)).fetchone()
     if not org:
         return 0
+    counties_here = {norm(n) for st, n in county_names().values() if st == org["state"]}  # a station named like a county links only as a county
     terms = {}  # (kind, term) -> set(job_ids)
     for n in {org["name"], org["short"], *PARENTS.get(org_id, [])}:
         if n and len(n) >= 3:
@@ -97,7 +98,7 @@ def build(conn, org_id):
     for j in jobs:
         for e in (j["endpoints"] or []):
             t = station_term(e)
-            if t:
+            if t and norm(t) not in counties_here:
                 terms.setdefault(("station", t), set()).add(j["id"])
     for jid, counties in job_counties(conn, org_id).items():
         for c in counties:
