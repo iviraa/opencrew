@@ -9,6 +9,8 @@ import IncidentCard from "./components/IncidentCard";
 import IngestModal from "./components/IngestModal";
 import JointPlan from "./components/JointPlan";
 import PhaseRisks from "./components/PhaseRisks";
+import RestorationPlan from "./components/RestorationPlan";
+import StormBriefing from "./components/StormBriefing";
 import MapView from "./components/MapView";
 import OpportunityList from "./components/OpportunityList";
 import ReviewPanel from "./components/ReviewPanel";
@@ -256,12 +258,15 @@ export default function App() {
           )}
           {horizon === "near" && <div className="absolute left-1/2 top-4 z-10 -translate-x-1/2"><PhaseRisks /></div>}
           {horizon === "emergency" && scenario === "helene" && (
-            <div className="absolute left-1/2 top-16 z-20 flex -translate-x-1/2 items-center gap-3 whitespace-nowrap rounded-full bg-ink py-1.5 pl-4 pr-1.5 text-[14px] text-white shadow-float">
+            <div className="absolute bottom-[244px] left-4 z-20 flex items-center gap-3 whitespace-nowrap rounded-full bg-ink py-1.5 pl-4 pr-1.5 text-[14px] text-white shadow-float">
               <CloudLightning size={16} /> Scenario: Hurricane Helene, replayed from real NOAA and news data
               <button onClick={() => playScenario("none")} className="rounded-full bg-white/15 px-3 py-1 font-semibold hover:bg-white/25">Back to live</button>
             </div>
           )}
-          {horizon === "emergency" && storm?.storm_active && <StormSlot />}
+          {horizon === "emergency" && storm?.storm_active && !sheetOpen && (
+            <StormSlot at={new Date(liveAt ?? Date.now()).toISOString()} scenario={scenario} landfall={scenario === "helene" ? LANDFALL : null}
+              onFly={(bbox) => setFly({ bbox, at: Date.now() })} />
+          )}
           {newsPin != null && incidentId == null && (
             <div className="absolute bottom-[236px] left-3 top-16 z-30 w-[360px]"><NewsCard pin={newsPin} onClose={() => setNewsPin(null)} /></div>
           )}
@@ -302,8 +307,34 @@ export default function App() {
   );
 }
 
-function StormSlot() {
-  return null;  // slot: the pre-storm briefing panel renders here while a storm is active
+function StormSlot({ at, scenario, landfall, onFly }: { at: string; scenario: "none" | "helene"; landfall: number | null; onFly: (bbox: [number, number, number, number]) => void }) {
+  const after = landfall != null && Date.parse(at) >= landfall;
+  const [tab, setTab] = useState<"brief" | "plan" | null>(null);
+  const [min, setMin] = useState(false);
+  const show = tab ?? (after ? "plan" : "brief");  // follows the clock until the planner picks a tab
+  if (min) {
+    return (
+      <button onClick={() => setMin(false)} className="absolute right-3 top-3 z-20 inline-flex items-center gap-2 rounded-full bg-ink px-4 py-2 text-[14px] font-semibold text-white shadow-float">
+        <CloudLightning size={16} /> Storm plan
+      </button>
+    );
+  }
+  return (
+    <div className="absolute bottom-[236px] right-3 top-3 z-20 flex w-[400px] flex-col overflow-hidden rounded-[var(--radius-bubble)] bg-surface shadow-float">
+      <div className="flex items-center gap-2 px-4 pt-3">
+        <div className="flex flex-1 rounded-full bg-soft p-1 ring-1 ring-line">
+          {([["brief", "Before it hits"], ["plan", "Repair plan"]] as const).map(([id, label]) => (
+            <button key={id} onClick={() => setTab(id)} aria-pressed={show === id}
+              className={`flex-1 rounded-full px-3 py-1.5 text-[13px] font-semibold ${show === id ? "bg-surface text-ink shadow-sm" : "text-muted"}`}>{label}</button>
+          ))}
+        </div>
+        <button aria-label="Minimize storm plan" onClick={() => setMin(true)} className="grid h-8 w-8 place-items-center rounded-full text-muted hover:bg-soft"><X size={16} /></button>
+      </div>
+      <div className="thin-scroll min-h-0 flex-1 overflow-y-auto">
+        {show === "brief" ? <StormBriefing at={at} scenario={scenario} onFly={onFly} /> : <RestorationPlan at={at} scenario={scenario} onFly={onFly} />}
+      </div>
+    </div>
+  );
 }
 
 function MenuItem({ icon, title, hint, onClick }: { icon: React.ReactNode; title: string; hint: string; onClick: () => void }) {
