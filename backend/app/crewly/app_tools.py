@@ -159,6 +159,24 @@ def hazard_cost_tool(ctx):
         "period": {"type": "string", "enum": list(PERIODS)}, "month": {"type": "integer", "description": "1-12, with period month"}}, ["site_or_zone"])
 
 
+def feasibility_tool(ctx):
+    from app.feasibility.assess import assess
+
+    def run(conn, opportunity_id, refresh=False):
+        out = assess(conn, int(opportunity_id), ctx["company"], refresh=bool(refresh))
+        if not out:
+            return {"error": f"#{opportunity_id} is not one of our overlaps"}, []
+        brief = {"overlap_id": out["opportunity_id"], "partner": name(out["partner"]) if out.get("partner") else None, "verdict": out["verdict"],
+                 "score": out["score"], "narrative": out["narrative"],
+                 "factors": [{"factor": f["label"], "verdict": f["verdict"], "evidence": f["evidence"][:2], "conditions": f["conditions"][:2]} for f in out["factors"]]}
+        return brief, [{"type": "open_overlap", "id": out["opportunity_id"]}]
+
+    return (run, "Feasibility assessment of one of our overlaps: can coordinating with the partner actually happen? Judges location, timing, "
+                 "cost, forecast and season, news, the counterparty's history and future considerations, each with a verdict (strong, "
+                 "possible, unlikely) and the evidence. Opens the overlap in the side panel.", {
+        "opportunity_id": {"type": "integer"}, "refresh": {"type": "boolean", "description": "recompute instead of reusing today's assessment"}}, ["opportunity_id"])
+
+
 def app_tools(ctx):
     tools = {
         "my_overlaps": (_bind(ctx, my_overlaps), "Overlaps between our projects and neighboring utilities' projects, best first. Optional date "
@@ -186,6 +204,7 @@ def app_tools(ctx):
     tools.update(memory_tools(ctx))
     tools["hazard_exposure"] = hazard_exposure_tool(ctx)
     tools["hazard_cost"] = hazard_cost_tool(ctx)
+    tools["assess_feasibility"] = feasibility_tool(ctx)
     return tools
 
 
@@ -217,4 +236,7 @@ Rules:
   (exposure, risk, likely affected days); never tell crews whether to work or send anyone anywhere.
 - For "what does weather cost us in <period>" or "what do we save by coordinating with X in <period>" call hazard_cost and quote its
   low to high ranges as estimates; numbers only from the tool, never computed by you.
+- For "is #X feasible / realistic / worth pursuing" or "why would coordinating on #X not work" call assess_feasibility and give the
+  verdict, the one or two factors that decide it and what would make it work, all from the tool. It is an assessment of the pair,
+  never an instruction to crews.
 - Keep replies short and warm: one to three sentences or a compact list. Refer to overlaps as "#id" with both project names.""" + memory_prompt(ctx.get("memories"))

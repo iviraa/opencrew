@@ -120,7 +120,18 @@ export const requests = {
   },
 };
 
-export type GoalStep = { opportunity_id: number; title: string; note: string; request_id: number | null; skipped: boolean };
+export type Verdict = "strong" | "possible" | "unlikely" | "unknown";
+export type FeasibilityFactor = {
+  factor: string; label: string; verdict: Verdict; score: number | null; evidence: string[]; conditions: string[]; sources: string[];
+  options?: { months: number; overlap: number; overlap_delta: number; weather_cost_delta: { low: number; high: number } | null }[];
+};
+export type Feasibility = {
+  opportunity_id: number; company_id: string; partner?: string; verdict: Verdict; score: number; factors: FeasibilityFactor[]; narrative: string;
+  quick?: boolean; created_at: string;
+};
+export type GoalStep = {
+  opportunity_id: number; title: string; note: string; request_id: number | null; skipped: boolean; feasibility?: { verdict: Verdict; score: number } | null;
+};
 export type AgentTask = { id: number; goal: string; status: "active" | "done" | "cancelled"; steps: GoalStep[]; created_at: string; updated_at: string };
 
 export const goals = {

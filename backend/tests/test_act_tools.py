@@ -103,7 +103,10 @@ def test_start_goal_skips_handled_overlaps_and_saves_drafts(conn, monkeypatch):
     out, ui = call(GPC, conn, "start_goal", goal="Line up our top 3 [e2e-act]", count=3)
     assert out["drafted"] == 3 and out["task_id"] == 99 and out["sent"] is False
     ids = [o["id"] for o in out["overlaps"]]
-    assert ids == ranked[1:4]  # best first, the approved one left out
+    assert len(ids) == 3 and ranked[0] not in ids and set(ids) <= set(ranked)  # the approved one left out
+    assert out["ranked_by"] == "feasibility score x savings" and ranked[0] not in out["skipped_unlikely"]
+    steps = fake.calls[-1][3]["json"]["steps"]
+    assert all(st["feasibility"] is None or st["feasibility"]["verdict"] != "unlikely" for st in steps)  # unlikely pairs never become drafts
     posted = [c for c in fake.calls if c[1] == "POST"][0]
     assert posted[0] == "tok-gpc" and posted[2] == "agent_task"
     steps = posted[3]["json"]["steps"]

@@ -1,9 +1,9 @@
-import { ArrowDownLeft, ArrowUpRight, Check, ChevronLeft, ChevronRight, Clock3, Handshake, MapPin, Send, X } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, CalendarClock, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, CloudSun, Coins, Handshake, MapPin, Newspaper, RefreshCw, Send, Telescope, Users, X } from "lucide-react";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import type { Savings } from "../api";
 import {
   TIER_LABEL, company, partnerOf, ago, api, miles, month, requests as requestsApi, usd,
-  type CollabRequest, type Jobs, type Me, type Overlap, type OverlapDetail,
+  type CollabRequest, type Feasibility, type FeasibilityFactor, type Jobs, type Me, type Overlap, type OverlapDetail, type Verdict,
 } from "./data";
 import { say } from "./mascot";
 
@@ -249,6 +249,100 @@ function savingsNote(s: Savings) {
   );
 }
 
+const VERDICT = {
+  strong: { label: "Strong", cls: "bg-save-soft text-save" },
+  possible: { label: "Possible", cls: "bg-crew-soft text-[#8a5a00]" },
+  unlikely: { label: "Unlikely", cls: "bg-gpc-soft text-[#c23b3b]" },
+  unknown: { label: "Unknown", cls: "bg-soft text-muted" },
+};
+const FACTOR_ICON: Record<string, typeof MapPin> = {
+  location: MapPin, timing: CalendarClock, cost: Coins, forecast: CloudSun, news: Newspaper, counterparty: Users, future: Telescope,
+};
+const said = new Set<number>();  // the beaver comments on each assessment once
+
+export function VerdictChip({ verdict, score }: { verdict: Verdict; score?: number | null }) {
+  const v = VERDICT[verdict] ?? VERDICT.unknown;
+  return <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${v.cls}`}>{v.label}{score != null && ` ${Math.round(score * 100)}`}</span>;
+}
+
+function FactorCard({ f }: { f: FeasibilityFactor }) {
+  const [open, setOpen] = useState(false);
+  const Icon = FACTOR_ICON[f.factor] ?? Telescope;
+  const more = f.conditions.length > 0 || f.evidence.length > 2;
+  return (
+    <div className="rounded-xl border-2 border-line px-2.5 py-2">
+      <button onClick={() => more && setOpen(!open)} className="flex w-full items-center gap-2 text-left">
+        <Icon size={15} className="shrink-0 text-muted" />
+        <span className="flex-1 text-sm font-semibold">{f.label}</span>
+        <VerdictChip verdict={f.verdict} />
+        {more && <ChevronDown size={14} className={`text-faint transition ${open ? "rotate-180" : ""}`} />}
+      </button>
+      <ul className="mt-1 text-xs text-muted">{(open ? f.evidence : f.evidence.slice(0, 2)).map((e, i) => <li key={i}>{e}</li>)}</ul>
+      {open && f.conditions.length > 0 && (
+        <div className="mt-1.5 rounded-lg bg-soft px-2 py-1.5 text-xs">
+          <div className="font-semibold text-muted">What would make it work</div>
+          <ul className="mt-0.5 list-disc pl-4">{f.conditions.map((c, i) => <li key={i}>{c}</li>)}</ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ShiftStrip({ f }: { f: FeasibilityFactor }) {
+  const opts = (f.options ?? []).filter((o) => o.overlap_delta > 0.05 || (o.weather_cost_delta && o.weather_cost_delta.high < -500)).slice(0, 4);
+  if (!opts.length) return null;
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {opts.map((o) => (
+        <span key={o.months} className="rounded-full bg-soft px-2 py-0.5 text-xs" title="If our build window moved">
+          shift ours {o.months > 0 ? "+" : ""}{o.months} mo: {Math.round(o.overlap * 100)}% overlap
+          {o.weather_cost_delta && o.weather_cost_delta.high !== 0 && `, weather ${o.weather_cost_delta.high < 0 ? "-" : "+"}${usd(Math.abs(o.weather_cost_delta.high))}`}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+export function FeasibilitySection({ id, partner }: { id: number; partner: string }) {
+  const [fz, setFz] = useState<Feasibility | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const load = (refresh: boolean) => {
+    setBusy(true); setErr(null);
+    api.get<Feasibility>(`/api/app/feasibility/${id}${refresh ? "?refresh=1" : ""}`).then((r) => {
+      setFz(r);
+      if (!said.has(id)) {
+        said.add(id);
+        const lead = r.factors.find((f) => f.verdict === (r.verdict === "unlikely" ? "unlikely" : "strong"))?.evidence[0];
+        say(`Overlap #${id} looks ${VERDICT[r.verdict].label.toLowerCase()}${lead ? `: ${lead}` : ""}.`, r.verdict === "unlikely" ? "sad" : r.verdict === "strong" ? "happy" : "nod");
+      }
+    }).catch((e) => setErr(String(e.message ?? e))).finally(() => setBusy(false));
+  };
+  useEffect(() => { setFz(null); load(false); }, [id]);  // eslint-disable-line react-hooks/exhaustive-deps
+  const timing = fz?.factors.find((f) => f.factor === "timing");
+  return (
+    <section className="rounded-2xl bg-soft/60 px-3 py-3">
+      <div className="flex items-center gap-2">
+        <h3 className="flex-1 text-sm font-semibold text-muted">Feasibility</h3>
+        {fz && <VerdictChip verdict={fz.verdict} score={fz.score} />}
+        <button onClick={() => load(true)} disabled={busy} aria-label="Re-assess" title="Re-assess" className="grid h-7 w-7 place-items-center rounded-full border-2 border-line bg-white text-muted hover:border-pen disabled:opacity-50">
+          <RefreshCw size={13} className={busy ? "animate-spin" : ""} />
+        </button>
+      </div>
+      {!fz && !err && <p className="mt-1 text-xs text-muted"><span className="dots">Assessing location, timing, cost, forecast and news</span></p>}
+      {err && <p className="mt-1 text-xs text-warn">{err}</p>}
+      {fz && (
+        <>
+          <p className="mt-1 text-xs leading-snug">{fz.narrative}</p>
+          <div className="mt-2 flex flex-col gap-1.5">{fz.factors.map((f) => <FactorCard key={f.factor} f={f} />)}</div>
+          {timing && <div className="mt-2"><ShiftStrip f={timing} /></div>}
+          <p className="mt-2 text-[11px] text-faint">An assessment of the pair with {partner}, from the app's own numbers. Not a work order.</p>
+        </>
+      )}
+    </section>
+  );
+}
+
 export function OverlapDetailPanel({ me, id, requests, onBack, onSent, onOpenRequest, onHazards }: {
   me: Me; id: number; requests: CollabRequest[]; onBack: () => void; onSent: (r: CollabRequest) => void; onOpenRequest: (id: number) => void;
   onHazards?: (id: number, month: number) => void;
@@ -338,6 +432,8 @@ export function OverlapDetailPanel({ me, id, requests, onBack, onSent, onOpenReq
             <div className="flex flex-wrap gap-1.5">{d.shareable.map((x) => <span key={x} className="rounded-full border-2 border-line px-2.5 py-0.5 text-xs font-semibold capitalize">{x}</span>)}</div>
           </section>
         )}
+
+        <FeasibilitySection id={d.id} partner={them.name} />
 
         <section className="rounded-2xl border-2 border-pen px-3 py-3">
           <h3 className="mb-1 flex items-center gap-1.5 font-logo text-base font-semibold"><Handshake size={17} /> Collaborate</h3>
