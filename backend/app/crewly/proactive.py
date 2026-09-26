@@ -146,4 +146,7 @@ def scan(conn, company):
         except httpx.HTTPStatusError as e:
             if e.response.status_code != 409:
                 raise
+    keep = ",".join(f'"{s["dedup_key"]}"' for s in found)
+    stale = {"company_id": f"eq.{company}", "kind": "eq.suggestion", "dismissed_at": "is.null", **({"dedup_key": f"not.in.({keep})"} if keep else {})}
+    _rest("notification", "PATCH", params=stale, json={"dismissed_at": datetime.now(timezone.utc).isoformat()})  # answered, passed or recounted: retire it
     return {"company": company, "found": len(found), "created": len(created), "suggestions": created}

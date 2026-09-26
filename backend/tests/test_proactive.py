@@ -97,6 +97,9 @@ class FakeStore:
         self.rows = [{"dedup_key": k} for k in keys]
 
     def __call__(self, path, method="GET", **kw):
+        if method == "PATCH":  # retiring stale suggestions
+            self.retired = kw["params"]
+            return None
         if method == "POST":
             if any(r["dedup_key"] == kw["json"]["dedup_key"] for r in self.rows):
                 raise httpx.HTTPStatusError("dup", request=httpx.Request("POST", "x"), response=httpx.Response(409))
@@ -125,3 +128,11 @@ def test_scan_survives_a_race_with_another_scan(conn, monkeypatch):
     store.rows = [{"dedup_key": k} for k in found]
     monkeypatch.setattr(p, "_rest", racing)
     assert p.scan(conn, "gpc")["created"] == 0
+
+
+def test_scan_retires_suggestions_that_no_longer_apply(conn, monkeypatch):
+    store = FakeStore()
+    monkeypatch.setattr(p, "_rest", store)
+    found = p.scan(conn, "gpc")["found"]
+    assert store.retired["company_id"] == "eq.gpc" and store.retired["dismissed_at"] == "is.null"
+    assert store.retired["dedup_key"].startswith("not.in.(") and store.retired["dedup_key"].count('"') == 2 * found  # current ones stay open
