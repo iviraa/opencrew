@@ -1,4 +1,4 @@
-import { Eye, EyeOff, LogIn } from "lucide-react";
+import { LogIn } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { EMAIL_DOMAIN, colorFor, publicApi, supabase, type Company } from "./data";
 import { beaver } from "./mascot";
@@ -11,7 +11,6 @@ const DEMO = ["dominion", "georgia"];  // the two demo logins; other utilities a
 export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [people, setPeople] = useState<Company[]>([]);
@@ -53,13 +52,8 @@ export default function Login() {
           </label>
           <label className="flex flex-col gap-1.5">
             <span className="text-sm font-semibold">Password</span>
-            <div className="pen-box flex items-center bg-white pr-2 focus-within:bg-grape-soft/40">
-              <input value={password} onChange={(e) => setPassword(e.target.value)} type={show ? "text" : "password"} autoComplete="current-password"
-                className="min-w-0 flex-1 bg-transparent px-4 py-3 outline-none" />
-              <button type="button" onClick={() => setShow(!show)} className="rounded-full p-2 text-muted hover:text-ink" aria-label={show ? "Hide password" : "Show password"}>
-                {show ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
+            <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" autoComplete="current-password"
+              className="pen-box bg-white px-4 py-3 outline-none focus:bg-grape-soft/40" />
           </label>
 
           {error && <p className="pop-in -mt-1 text-sm font-medium text-warn" role="alert">{error}</p>}
@@ -73,10 +67,11 @@ export default function Login() {
             <div className="flex flex-wrap gap-2">
               {people.map((c) => (
                 <button key={c.id} type="button" onClick={() => { setUsername(c.login!); setPassword(DEMO_PASSWORD); setError(null); beaver("wave"); }}
+                  aria-label={`Fill in the ${c.short || c.name} demo login`} title={`Fill in the ${c.short || c.name} demo login`}
                   className="flex items-center gap-2 rounded-full border-2 border-line bg-white px-3 py-1.5 text-sm hover:border-ink">
                   <span className="h-2.5 w-2.5 rounded-full" style={{ background: c.color || colorFor(c.id) }} />
                   <span className="font-semibold">{c.short || c.name}</span>
-                  <span className="text-muted">{c.login} / {DEMO_PASSWORD}</span>
+                  <span className="text-muted">{c.login} / <span aria-hidden="true">***</span></span>{/* the real password is filled on click, never shown */}
                 </button>
               ))}
             </div>
