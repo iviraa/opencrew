@@ -46,6 +46,22 @@ async def lifespan(_app):
             await asyncio.sleep(minutes * 60)
 
     task = asyncio.create_task(loop()) if minutes > 0 else None
+    hazard_minutes = float(os.environ.get("HAZARDS_REFRESH_MINUTES") or 0)  # live hazard layers, off unless set
+
+    def hazards_once():
+        from app.hazards import layers as hazard_layers
+        with connect() as conn:
+            return hazard_layers.refresh(conn)
+
+    async def hazards_loop():
+        while True:
+            try:
+                await asyncio.to_thread(hazards_once)
+            except Exception as e:  # a bad feed must not kill the loop
+                print("hazard refresh failed:", e)
+            await asyncio.sleep(hazard_minutes * 60)
+
+    hazard_task = asyncio.create_task(hazards_loop()) if hazard_minutes > 0 else None
     nudge = float(os.environ.get("CREWLY_PROACTIVE_MINUTES") or 0)  # crewly's suggestions, off unless set
 
     async def suggest():
@@ -59,7 +75,7 @@ async def lifespan(_app):
 
     nudger = asyncio.create_task(suggest()) if nudge > 0 else None
     yield
-    for t in (task, nudger):
+    for t in (task, hazard_task, nudger):
         if t:
             t.cancel()
 

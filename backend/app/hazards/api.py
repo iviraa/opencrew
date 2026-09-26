@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.auth import current_user
 from app.db import get_conn
-from app.hazards import exposure, layers
+from app.hazards import cost as hazard_cost, exposure, layers
 from app.hazards.config import CACHE, HAZARDS, SOURCES
 from app.hazards.exposure import PERIODS, PRODUCTS, period_range
 
@@ -94,13 +94,19 @@ def hazard_layers(period: str = "now7", month: int | None = None, hazards: str |
 
 
 @router.get("/exposure")
-def hazard_exposure(kind: str, id: str, period: str = "now7", month: int | None = None, hazards: str | None = None,
+def hazard_exposure(kind: str, id: str, period: str = "now7", month: int | None = None, hazards: str | None = None, cost: bool = False,
                     user=Depends(current_user), conn=Depends(get_conn)):
     if kind not in ("site", "zone") or period not in PERIODS:
         raise HTTPException(400, "kind must be site or zone; period one of " + ", ".join(PERIODS))
-    out = exposure.assess(conn, kind, id, period, month, parse_hazards(hazards))
+    picked = parse_hazards(hazards)
+    out = exposure.assess(conn, kind, id, period, month, picked)
     if not out:
         raise HTTPException(404, f"{kind} {id} not found")
+    if cost:  # expected extra cost of the affected days, and for a pair what coordinating saves
+        if kind == "site":
+            out["cost"] = hazard_cost.for_site(conn, id, period, month, picked)
+        else:
+            out["cost"], out["coordination"] = hazard_cost.for_zone(conn, id, period, month, picked)
     return out
 
 

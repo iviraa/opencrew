@@ -126,6 +126,39 @@ def hazard_exposure_tool(ctx):
         "period": {"type": "string", "enum": list(PERIODS)}, "month": {"type": "integer", "description": "1-12, with period month"}}, ["site_or_zone"])
 
 
+def hazard_cost_tool(ctx):
+    from app.hazards import cost
+    from app.hazards.exposure import PERIODS
+
+    def run(conn, site_or_zone, period="month", month=None):
+        kind = "zone" if str(site_or_zone).lstrip("#").isdigit() else "site"
+        ident = str(site_or_zone).lstrip("#")
+        period = period if period in PERIODS else "month"
+        if kind == "site":
+            c = cost.for_site(conn, ident, period, month)
+            if not c:
+                return {"error": f"no site {site_or_zone}"}, []
+            brief = {k: v for k, v in c.items() if k not in ("phase_mix", "per_day")}
+        else:
+            got = cost.for_zone(conn, ident, period, month)
+            if not got:
+                return {"error": f"no overlap {site_or_zone}"}, []
+            c, coord = got
+            brief = {"period": period, "start": c["start"], "end": c["end"], "expected_extra_cost_usd": c["total"],
+                     "sites": [{"name": s["name"], "expected_extra_cost_usd": s["total"], "hazards": [{"hazard": i["label"], "days": i["days"], "cost": i["total"]} for i in s["items"]]} for s in c["sites"]],
+                     "coordinating": {"separate_usd": coord["separate"], "coordinated_usd": coord["coordinated"], "savings_usd": coord["savings"],
+                                      "shared_standby_days": coord["items"][0]["shared_days"], "one_off_project_savings": coord["one_off"]},
+                     "cheapest_months": [{"month": m["label"], "cost_per_30d_usd": m["cost_per_30d"], "saves_vs_period_usd": m["saves_vs_period"]} for m in coord["best_months"]],
+                     "method": c["method"]}
+        return brief, [{"type": "hazards", "kind": kind, "id": ident, "period": period, "month": month}]
+
+    return (run, "Expected extra cost of weather in a period for one site (project id) or overlap (#id): affected days x standby or "
+                 "demobilization cost plus storm-rate labor, with low/high ranges; for an overlap also what coordinating with the neighbor "
+                 "saves (shared standby, one-off mobilization) and the three cheapest months to work the pair. Assessment only. Opens the hazards view.", {
+        "site_or_zone": {"type": "string", "description": "project id like gpc-123 or overlap #18"},
+        "period": {"type": "string", "enum": list(PERIODS)}, "month": {"type": "integer", "description": "1-12, with period month"}}, ["site_or_zone"])
+
+
 def app_tools(ctx):
     tools = {
         "my_overlaps": (_bind(ctx, my_overlaps), "Overlaps between our projects and neighboring utilities' projects, best first. Optional date "
@@ -152,6 +185,7 @@ def app_tools(ctx):
     tools.update(act_tools(ctx))
     tools.update(memory_tools(ctx))
     tools["hazard_exposure"] = hazard_exposure_tool(ctx)
+    tools["hazard_cost"] = hazard_cost_tool(ctx)
     return tools
 
 
@@ -181,4 +215,6 @@ Rules:
 - Weather and storm questions use outlook, weather_alerts or site_hazards; damage news uses incidents_near.
 - For "how exposed is site/overlap X in <period>" call hazard_exposure. Report affected days as an assessment of the period
   (exposure, risk, likely affected days); never tell crews whether to work or send anyone anywhere.
+- For "what does weather cost us in <period>" or "what do we save by coordinating with X in <period>" call hazard_cost and quote its
+  low to high ranges as estimates; numbers only from the tool, never computed by you.
 - Keep replies short and warm: one to three sentences or a compact list. Refer to overlaps as "#id" with both project names.""" + memory_prompt(ctx.get("memories"))
