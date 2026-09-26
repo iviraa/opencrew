@@ -10,7 +10,7 @@ from rapidfuzz import fuzz, process
 from app.db import ROOT
 from app.geo.geolocate import norm
 from app.ingest.national.common import clear, find_station, register_org, register_source, save
-from app.ingest.national.south_names import ends_from_title, stable_id
+from app.ingest.national.south_names import ends_from_title, resolve, stable_id
 
 PLAN_2026 = "data/raw/national/sertp-2026/sertp_2026_prelim_expansion_plan.pdf"
 PLAN_2025 = "data/raw/national/sertp-2025/sertp_2025_rtp.pdf"
@@ -119,10 +119,10 @@ def rows(org):
         yield p
 
 
-def load(conn, manifest="data/raw/national/manifest_south.json"):
+def load(conn, only=("tva", "alabamapower"), manifest="data/raw/national/manifest_south.json"):
     out = {}
     for m in json.loads((ROOT / manifest).read_text()):
-        if m["slug"] not in ("tva", "alabamapower"):
+        if m["slug"] not in ("tva", "alabamapower") or m["slug"] not in only:
             continue
         org = m["slug"]
         short = "TVA" if org == "tva" else "Alabama Power"
@@ -131,6 +131,7 @@ def load(conn, manifest="data/raw/national/manifest_south.json"):
         doc = register_source(conn, org, "SERTP 2026 Preliminary Expansion Plan (Non-CEII)", m["url"], PLAN_2026, "SERTP", "2026 preliminary")
         counts = {"placed": 0, "review": 0}
         for p in rows(org):
+            p["ends"] = resolve(p["ends"], p["states"], ["TVA"] if org == "tva" else ["Alabama Power", "APC"])
             counts[save(conn, {**p, "org_id": org}, doc)] += 1
         out[m["state"]] = {"org": org, **counts}
         print(m["state"], org, counts, flush=True)

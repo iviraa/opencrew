@@ -6,7 +6,7 @@ from datetime import datetime
 
 from app.db import ROOT
 from app.ingest.national.common import clear, find_station, register_org, register_source, save
-from app.ingest.national.south_names import ends_from_title
+from app.ingest.national.south_names import ends_from_title, resolve
 
 FILE = "data/raw/national/ctpc-2025/ctpc_2025_2035_plan.pdf"
 ROW = re.compile(r"^\s*(?P<id>[A-Z][A-Z0-9]{4,})\s{2,}(?P<name>.*?)\s{2,}(?P<owner>DEC/DEP|DEC|DEP)\s+(?P<status>Underway|Planned|Conceptual|In[- ]Service)"
@@ -86,6 +86,7 @@ def load(conn, manifest="data/raw/national/manifest_south.json"):
     doc = register_source(conn, "duke", "CTPC 2025-2035 Collaborative Transmission Plan (final 2026-04-16)", m["url"], FILE, "CTPC", "2025-2035")
     counts = {"placed": 0, "review": 0}
     for p in rows():
+        p["ends"] = resolve(p["ends"], p["states"], ["Duke", "Duke Energy"])
         hit = next((h for h in (find_station(e, p["states"]) for e in p["ends"]) if h), None)
         if hit:
             p["state"] = hit.get("state", p["state"])  # the station's state, NC or SC

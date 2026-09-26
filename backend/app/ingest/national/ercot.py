@@ -5,7 +5,7 @@ import pandas as pd
 
 from app.db import ROOT
 from app.ingest.national.common import clean, clear, register_org, register_source, save, to_date
-from app.ingest.national.south_names import ends_from_title, station
+from app.ingest.national.south_names import ends_from_title, resolve, station
 
 FILE = "data/raw/national/ercot-tpit/ercot_tpit_2026_07.xlsx"
 SHEETS = ["FutureTPIT071326NoCost", "PlannedTPIT071326NoCost"]
@@ -75,6 +75,7 @@ def load(conn, manifest="data/raw/national/manifest_south.json"):
     doc = register_source(conn, "oncor", "ERCOT Transmission Project and Information Tracking (TPIT), no-cost edition", m["url"], FILE, "ERCOT", "July 2026")
     counts = {"placed": 0, "review": 0}
     for p in rows():
+        p["ends"] = resolve(p["ends"], p["states"], ["Oncor"])
         counts[save(conn, {**p, "org_id": "oncor"}, doc)] += 1
     print("TX oncor", counts, flush=True)
     return {"TX": {"org": "oncor", **counts}}

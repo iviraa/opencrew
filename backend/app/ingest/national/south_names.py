@@ -38,3 +38,14 @@ def ends_from_title(title):
 
 def stable_id(prefix, *parts):
     return f"{prefix}-{hashlib.sha1('|'.join(norm(str(p)) for p in parts).encode()).hexdigest()[:10]}"
+
+
+def resolve(ends, states, tokens):
+    """Swap each end for the spelling osm uses, e.g. "Quarry" -> "Quarry FPL", when the operator's name is part of the osm name."""
+    from app.ingest.national.common import find_station  # late: common imports nothing from here
+    out = []
+    for e in ends:
+        tries = [e] + [v for t in tokens for v in (f"{e} {t}", f"{t} {e}")]
+        hits = [(h["score"], v) for v in tries for h in [find_station(v, states)] if h]
+        out.append(max(hits)[1] if hits else e)
+    return out

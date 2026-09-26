@@ -6,7 +6,7 @@ from datetime import date, datetime
 
 from app.db import ROOT
 from app.ingest.national.common import clear, register_org, register_source, save
-from app.ingest.national.south_names import stable_id, station
+from app.ingest.national.south_names import resolve, stable_id, station
 
 FILE = "data/raw/national/fl-psc-tysp-2026/fpl_tysp_2026.pdf"
 LINE = re.compile(r"^\s*FPL\s+(?P<to>[A-Za-z .'-]+?)\s*(?:\d/)?\s{2,}(?P<frm>[A-Za-z .'-]+?)\s{2,}(?P<mi>[\d.]+)\s+(?P<mon>[A-Za-z]+)/(?P<yr>\d{4})"
@@ -18,6 +18,7 @@ NEW_SUB = re.compile(r"new [^.]*?substation \((?P<n>[A-Z][\w .'-]+?)\)", re.I)
 STATION = re.compile(r"(?:\bat |\bfrom |\bto |\badjacent |\bLoop the adjacent |\binto )(?P<n>[A-Z][A-Za-z.'-]+(?: [A-Z][A-Za-z.'-]+){0,3})"
                      r"(?= \d{2,3}\s?kV| [Ss]ubstation| -| –)")
 QUARTER_END = {1: (3, 31), 2: (6, 30), 3: (9, 30), 4: (12, 31)}
+TOKENS = ["FPL", "Florida Power & Light"]  # how osm operators tag fpl station names
 FOOTER = re.compile(r"Florida Power & Light Company\s+\d+\s*$")
 
 
@@ -103,6 +104,7 @@ def load(conn, manifest="data/raw/national/manifest_south.json"):
     doc = register_source(conn, "fpl", "Florida Power & Light 2026 Ten-Year Site Plan", m["url"], FILE, "FL PSC", "2026")
     counts = {"placed": 0, "review": 0}
     for p in rows():
+        p["ends"] = resolve(p["ends"], p["states"], TOKENS)
         counts[save(conn, {**p, "org_id": "fpl"}, doc)] += 1
     print("FL fpl", counts, flush=True)
     return {"FL": {"org": "fpl", **counts}}
