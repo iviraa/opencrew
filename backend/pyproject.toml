@@ -12,6 +12,8 @@ dependencies = [
     "rapidfuzz>=3.14.6",
     "httpx>=0.28.1",
     "google-genai>=2.25.0",
+    "pyshp>=3.1.6",
+    "shapely>=2.1.2",
 ]
 
 [dependency-groups]
