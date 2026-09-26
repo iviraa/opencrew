@@ -6,6 +6,7 @@ import openpyxl
 from rapidfuzz import fuzz
 
 from app.db import ROOT
+from app.geo.nominatim import geocode
 
 OPERATORS = {"desc": re.compile(r"dominion|sce&g|south carolina electric", re.I), "gpc": re.compile(r"georgia power|southern", re.I)}
 SWAPS = {"ft": "fort", "st": "saint", "mt": "mount", "jct": "junction", "sav": "savannah"}
@@ -73,6 +74,13 @@ class Locator:
             top.sort(key=lambda c: km((c["lat"], c["lon"]), near))  # tie-break: closest to the other endpoint
         return top + [c for c in out if c not in top]
 
+    def fallback(self, org, name, near):
+        key = norm(name)
+        if not near or len(key) < 4 or not self.osm:
+            return None
+        hit = geocode(org, key.title())  # town-level guess, shown as approx
+        return hit if hit and km((hit["lat"], hit["lon"]), near) <= 60 else None  # must sit near the located endpoint
+
     def place(self, org, endpoints, project=""):
         first = [self.candidates(org, e, project=project) for e in endpoints]
         picks = []
@@ -80,5 +88,5 @@ class Locator:
             other = next((f[0] for j, f in enumerate(first) if j != i and f), None)
             near = (other["lat"], other["lon"]) if other else None
             ranked = self.candidates(org, endpoints[i], near, project) if len(cands) > 1 else cands
-            picks.append(ranked[0] if ranked else None)
+            picks.append(ranked[0] if ranked else self.fallback(org, endpoints[i], near))
         return picks
