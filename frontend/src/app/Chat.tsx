@@ -7,10 +7,17 @@ import { company, type ChatAction, type CollabRequest, type Me, type Overlap } f
 import { GoalChip } from "./GoalPanel";
 import MemoryList from "./Memory";
 import { OverlapCard, latestFor } from "./panels";
+import ChartCard from "./generate/ChartCard";
+import ReportCard from "./generate/ReportCard";
+import TableCard from "./generate/TableCard";
+import type { Chart, Report, Table } from "./generate/types";
 import PlanCard from "./plan/PlanCard";
 import type { PlanStore } from "./plan/usePlans";
 
-export type ChatMsg = { role: "user" | "model"; text: string; ids?: number[]; offline?: boolean; confirm?: ChatAction[]; goal?: number; plan?: { id: number; horizon?: string; item?: string } };
+export type ChatMsg = {
+  role: "user" | "model"; text: string; ids?: number[]; title?: string; offline?: boolean; confirm?: ChatAction[]; goal?: number;
+  plan?: { id: number; horizon?: string; item?: string }; chart?: Chart; table?: Table; report?: Report;
+};
 
 const html = (s: string) => DOMPurify.sanitize(marked.parse(s, { async: false }) as string);
 
@@ -28,6 +35,7 @@ export default function Chat({ me, msgs, busy, overlaps, requests, plans, onSend
   const ideas = [
     lastSent ? `Did ${company(lastSent.to_company).name} approve my last request?` : "Any requests waiting for me?",
     "Plan my next quarter",
+    "Chart our weather-affected days by month for our best overlap",
     "What overlaps happen in 2025?",
     "Show crossings and same-land overlaps",
     "Any severe weather coming this week?",
@@ -80,9 +88,12 @@ export default function Chat({ me, msgs, busy, overlaps, requests, plans, onSend
             ))}
             {m.goal != null && <GoalChip id={m.goal} onOpen={() => onOpenGoal(m.goal!)} />}
             {m.plan && <PlanCard store={plans} id={m.plan.id} horizon={m.plan.horizon} item={m.plan.item} onOpenPlan={onOpenPlan} onOpenGoal={onOpenGoal} />}
+            {m.chart && <ChartCard chart={m.chart} />}
+            {m.table && <TableCard table={m.table} />}
+            {m.report && <ReportCard report={m.report} />}
             {m.ids && m.ids.length > 0 && m.goal == null && !m.plan && (
               <div className="flex flex-col gap-1 rounded-2xl border-2 border-line p-1">
-                <div className="px-2 pt-1 text-xs font-semibold text-faint">{m.ids.length} on the map · tap one for details</div>
+                <div className="px-2 pt-1 text-xs font-semibold text-faint">{m.title ?? `${m.ids.length} on the map`} · tap one for details</div>
                 {m.ids.map((id) => byId.get(id)).filter((o): o is Overlap => !!o).map((o) => (
                   <OverlapCard key={o.id} me={me} o={o} req={latestFor(requests, o.id)} onClick={() => onOpen(o.id)} />
                 ))}

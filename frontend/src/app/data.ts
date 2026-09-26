@@ -57,7 +57,7 @@ export type Notice = {
 export type ChatAction = {  // what the chat asks the screen to do
   type: string; ids?: number[]; id?: number; opportunity_id?: number; opportunity_ids?: number[]; bbox?: [number, number, number, number];
   action?: "send_request" | "respond"; note?: string; label?: string; title?: string; request_id?: number; decision?: "approved" | "declined"; feedback?: string;
-  horizon?: string; item?: string;
+  horizon?: string; item?: string; chart?: unknown; table?: unknown; report?: unknown;  // hand-overs: rendered as cards
 };
 
 export type ChatReply = { reply: string; ui_actions: ChatAction[]; unsourced: string[]; offline?: boolean };

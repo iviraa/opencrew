@@ -16,6 +16,7 @@ import { NewsTab, Split } from "./tabs";
 import HazardsTab, { type HazardFocus } from "./hazards/HazardsTab";
 import PlanPanel from "./plan/PlanItems";
 import PlanTimeline from "./plan/PlanTimeline";
+import type { Chart, Report, Table } from "./generate/types";
 import { planLine, type Horizon } from "./plan/types";
 import { usePlans } from "./plan/usePlans";
 
@@ -208,21 +209,30 @@ export default function Shell() {
     setChat(next); setChatBusy(true); say("Let me check...", "thinking");
     try {
       const r = await api.chat(next.map(({ role, text }) => ({ role, text })));
+      const explicit = r.ui_actions.filter((a) => a.type === "show_overlaps").pop();  // crewly named exactly which overlaps to show
       const lists = r.ui_actions.map((a) => a.ids ?? a.opportunity_ids).filter((x): x is number[] => !!x?.length);  // last non-empty list wins
       const open = r.ui_actions.filter((a) => a.type === "open_overlap" || a.type === "select").pop();
       const openId = open ? (open.id ?? open.opportunity_id) : undefined;
-      const ids = lists.pop() ?? (openId != null ? [openId] : undefined);
+      const ids = explicit?.title != null || (explicit && !lists.length) ? (explicit.ids ?? []) : lists.pop() ?? (openId != null ? [openId] : undefined);
+      const title = explicit?.title;
+      const chart = r.ui_actions.filter((a) => a.type === "chart").pop()?.chart as Chart | undefined;
+      const table = r.ui_actions.filter((a) => a.type === "table").pop()?.table as Table | undefined;
+      const report = r.ui_actions.filter((a) => a.type === "report").pop()?.report as Report | undefined;
       const confirm = r.ui_actions.filter((a) => a.type === "confirm"), goal = r.ui_actions.filter((a) => a.type === "goal").pop()?.id;
       const remembered = r.ui_actions.some((a) => a.type === "memory");
       const planned = r.ui_actions.filter((a) => a.type === "plan" && a.id != null).pop();
       const plan = planned ? { id: planned.id!, horizon: planned.horizon, item: planned.item } : undefined;
-      setChat([...next, { role: "model", text: r.reply || "Done.", ids, offline: r.offline, ...(confirm.length && { confirm }), ...(goal != null && { goal }), ...(plan && { plan }) }]);
+      setChat([...next, { role: "model", text: r.reply || "Done.", ids, ...(title && { title }), offline: r.offline, ...(confirm.length && { confirm }), ...(goal != null && { goal }), ...(plan && { plan }),
+        ...(chart && { chart }), ...(table && { table }), ...(report && { report }) }]);
       if (remembered) setMemoryTick((t) => t + 1);  // crewly saved or dropped a note
       if (r.offline) say("I'm out of energy for today, sorry!", "sad");
       else if (plan) plans.load(plan.id).then((p) => say(planLine(p, plan.horizon), p.items.length ? "talking" : "nod")).catch(() => say("I built a plan, take a look.", "nod"));
       else if (goal != null) say("Goal set! Check the drafts I wrote.", "happy");
       else if (confirm.length) say("Tap Confirm and I'll do it.", "nod");
       else if (remembered) say("Got it, I'll keep that in mind.", "nod");
+      else if (report) say("Your report is ready. Open it to print or save.", "happy");
+      else if (chart) say("Here's your chart.", "nod");
+      else if (table) say(`Here are ${table.count} rows, with a CSV download.`, "nod");
       else say(ids && ids.length > 1 ? `I put ${ids.length} overlaps on the map.` : openId != null ? `Here's overlap #${openId}.` : "Here's what I found!");
       if (ids?.length) await showIds(ids);
       if (openId != null) setSelected(openId);

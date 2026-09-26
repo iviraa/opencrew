@@ -16,7 +16,7 @@ from app.feasibility import api as feasibility_api
 from app.hazards import api as hazards_api
 from app.planner import api as planner_api
 from app.companies import companies
-from app.crewly import agent, brief, proactive
+from app.crewly import agent, brief, proactive, generate_api
 from app.db import ROOT, connect, get_conn
 from app.engine.cost import savings_for
 from app.engine.overlap import recompute
@@ -561,6 +561,7 @@ app.include_router(feasibility_api.router)
 app.include_router(planner_api.router)
 from app.news import api as news_api  # noqa: E402  kept with the other routers
 app.include_router(news_api.router)
+app.include_router(generate_api.router)
 
 @app.get("/config.js", include_in_schema=False)
 def web_config():
