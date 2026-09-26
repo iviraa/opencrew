@@ -1,6 +1,9 @@
+import { Handshake, Plus, Sparkles, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, type Headline, type JointPlan as Plan, type PlanConstraints, type PlanMetrics } from "../api";
 import { usd } from "../format";
+import { Button, Section } from "./ui";
+import { Bubble, NumberField, Slider } from "./ui-plan";
 
 type Props = {
   plan: Plan | null;
@@ -13,24 +16,19 @@ type Props = {
 };
 
 const MONTHS = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
-const ROWS: [keyof PlanMetrics, string][] = [["mobilizations", "Crew mobilizations (own utility)"], ["specialty_mobilizations", "Specialty mobilizations"],
-  ["shared_bursts", "Specialty jobs shared across utilities"], ["yards", "Staging yards"], ["slip_months", "Months of slip"],
+const ROWS: [keyof PlanMetrics, string][] = [["mobilizations", "Crew trips (own utility)"], ["specialty_mobilizations", "Specialty crew trips"],
+  ["shared_bursts", "Specialty jobs shared across utilities"], ["yards", "Staging yards"], ["slip_months", "Months of delay"],
   ["late_projects", "Projects late"], ["cost_k", "Modeled cost ($k)"]];
 
-function HeadlineCard({ h, title, note, tone }: { h: Headline; title: string; note: string; tone: "emerald" | "amber" }) {
-  const box = tone === "emerald" ? "bg-emerald-50 ring-emerald-200 text-emerald-900" : "bg-amber-50 ring-amber-200 text-amber-900";
-  const types = Object.values(h.specialty ?? {}).filter((s) => s.before !== s.after);
-  return (
-    <div className={`flex-1 rounded-lg p-3 ring-1 ${box}`}>
-      <div className="text-[10px] font-semibold uppercase tracking-wide opacity-70">{title}</div>
-      <div className="text-base font-semibold leading-5">{h.mobilizations_cut_pct}% fewer mobilizations</div>
-      <div className="mt-0.5">{h.mobilizations_before} → {h.mobilizations_after} total · {h.yards_before} → {h.yards_after} yards</div>
-      {types.length > 0 && <div className="mt-0.5">{types.map((s) => `${s.label} ${s.before} → ${s.after}`).join(" · ")}</div>}
-      {h.crew_mobilizations_after !== h.crew_mobilizations_before && <div className="mt-0.5">crews {h.crew_mobilizations_before} → {h.crew_mobilizations_after}</div>}
-      <div className="mt-1 font-semibold">saves {usd(h.savings_low)}–{usd(h.savings_high)} · {h.late_projects} late</div>
-      <div className="mt-1 text-[10px] opacity-80">{note}</div>
-    </div>
-  );
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+function story(h: Headline) {
+  const trips = Object.values(h.specialty ?? {}).reduce((n, s) => n + (s.before - s.after), 0);
+  const yards = h.yards_before - h.yards_after;
+  const crews = h.crew_mobilizations_before - h.crew_mobilizations_after;
+  const parts = [trips > 0 && `${plural(trips, "fewer trip")} for specialty crews`, crews > 0 && `${plural(crews, "fewer crew trip")}`,
+    yards > 0 && `${plural(yards, "shared yard")}`, h.late_projects === 0 ? "nobody late" : `${plural(h.late_projects, "project")} late`];
+  return parts.filter(Boolean).join(", ");
 }
 
 export default function JointPlan({ plan, solving, onSolve, pending, onDiscardPending, selectedId, onSelect }: Props) {
@@ -39,7 +37,14 @@ export default function JointPlan({ plan, solving, onSolve, pending, onDiscardPe
   const [asking, setAsking] = useState<number | null>(null);
   useEffect(() => { if (plan) setDraft(structuredClone(plan.constraints)); }, [plan]);
 
-  if (!plan || !draft) return <div className="px-4 py-3 text-sm text-slate-400">{solving ? "Solving the joint schedule…" : "Loading the joint plan…"}</div>;
+  if (!plan || !draft) {
+    return (
+      <div className="flex-1 px-5 py-8 text-center">
+        <div className="display text-[18px] font-semibold">{solving ? "Working out the best joint schedule…" : "Loading the joint plan…"}</div>
+        <p className="mt-1 text-[14px] text-muted">The first solve takes about half a minute. After that it is instant.</p>
+      </div>
+    );
+  }
   const crews = plan.headline?.crews ?? {};
   const setCount = (org: string, year: string, n: number) =>
     setDraft({ ...draft, crew_counts: { ...draft.crew_counts, [org]: { ...(draft.crew_counts[org] ?? {}), [year]: n } } });
@@ -54,160 +59,199 @@ export default function JointPlan({ plan, solving, onSolve, pending, onDiscardPe
   const h = plan.headline;
   const jc = h?.joint_contracting;
   const solver = h?.solver;
+  const decisions = [...plan.decisions].sort((a, b) => Number(b.decision === "share") - Number(a.decision === "share"));
 
   return (
-    <div className="flex-1 space-y-4 overflow-y-auto px-4 py-3 text-xs">
-      <p className="text-slate-500">
-        OR-Tools CP-SAT schedules every phase for the {plan.baseline?.projects ?? 0} projects in cross-utility pairs, once for each utility alone and once
-        jointly. General crews stay with their own utility; heavy haul, crane lifts, wire stringing and commissioning can be shared within a
-        {" "}{draft.crew_drive_min} minute drive. Durations, costs and crew counts are editable assumptions, not public data.
-      </p>
-      {plan.status === "infeasible" && <div className="rounded bg-red-50 px-3 py-2 text-red-700 ring-1 ring-red-200">{plan.problem}</div>}
+    <div className="thin-scroll flex-1 overflow-y-auto px-5 pb-6 pt-4">
+      {plan.status === "infeasible" && <div className="mb-4 rounded-2xl bg-gpc-soft px-4 py-3 text-[14px] text-[#b42323]">{plan.problem}</div>}
+
       {h && plan.baseline && plan.coordinated && (
         <>
-          <div className="flex gap-2">
-            <HeadlineCard h={h} title="Strict plan (default)" tone="emerald" note="Specialty crews and yards shared; no assumption about contractors." />
-            {jc && <HeadlineCard h={jc} title="Joint contracting (assumption)" tone="amber" note={`${jc.assumption} ${jc.contractor_pairs} contractor pair(s).`} />}
+          <div className="rounded-[22px] bg-save-soft px-5 py-4">
+            <div className="text-[14px] text-save">Working together saves</div>
+            <div className="display text-[32px] font-semibold leading-tight text-save">{usd(h.savings_low)}–{usd(h.savings_high)}</div>
+            <p className="mt-1 text-[15px] text-ink">{story(h)}.</p>
+            <p className="mt-2 text-[13px] text-muted">
+              Specialty crews (heavy haul, cranes, stringing, commissioning) and yards are shared when sites are within a {draft.crew_drive_min} minute drive.
+              Everyday crews stay with their own utility.
+            </p>
           </div>
+
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <Bubble label="Each utility alone" value={plural(plan.baseline.all_mobilizations ?? plan.baseline.mobilizations, "trip")} sub={`${plural(plan.baseline.yards, "yard")}, ${plural(plan.baseline.late_projects, "late project")}`} />
+            <Bubble tone="desc" label="Together" value={plural(plan.coordinated.all_mobilizations ?? plan.coordinated.mobilizations, "trip")} sub={`${plural(plan.coordinated.yards, "yard")}, ${plural(plan.coordinated.late_projects, "late project")}`} />
+          </div>
+
+          {jc && (
+            <div className="mt-3 rounded-[18px] bg-crew-soft px-4 py-3">
+              <div className="flex items-center gap-2 text-[14px] font-semibold text-[#9a5b00]"><Handshake size={16} /> If one contractor served both utilities</div>
+              <div className="display mt-0.5 text-[20px] font-semibold text-ink">{usd(jc.savings_low)}–{usd(jc.savings_high)}</div>
+              <div className="text-[13px] text-muted">{jc.mobilizations_cut_pct}% fewer trips. This is an assumption, not the default plan.</div>
+            </div>
+          )}
+
           {solver && (
-            <p className="text-[11px] text-slate-500">
-              Separate plans: {solver.separate === "optimal" ? "proven optimal" : "best found"} · coordinated: {solver.coordinated === "optimal"
-                ? "proven optimal" : `best found in the time limit (a proven optimum could be at most $${solver.coordinated_gap_k.toLocaleString()}k cheaper)`}.
+            <p className="mt-3 text-[13px] text-muted">
+              {solver.separate === "optimal" ? "The separate plans are proven best, so the comparison is fair. " : "The separate plans are the best found in time. "}
+              {solver.coordinated === "optimal" ? "The joint plan is proven best too."
+                : `The joint plan is the best found in the time limit; a perfect plan could save at most $${solver.coordinated_gap_k.toLocaleString()}k more.`}
             </p>
           )}
-          <table className="w-full">
-            <thead><tr className="text-left text-slate-500"><th className="py-1 font-medium" /><th className="font-medium">Separate</th><th className="font-medium">Coordinated</th></tr></thead>
-            <tbody>
-              {ROWS.map(([key, label]) => {
-                const a = Number(plan.baseline![key] ?? 0), b = Number(plan.coordinated![key] ?? 0);
-                const better = key === "shared_bursts" ? b > a : b < a;
-                return (
-                  <tr key={key} className="border-t border-slate-100">
-                    <td className="py-1 text-slate-600">{label}</td>
-                    <td>{a.toLocaleString()}</td>
-                    <td className={better ? "font-semibold text-emerald-700" : ""}>{b.toLocaleString()}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
         </>
       )}
 
       {pending && (
-        <div className="rounded-lg bg-blue-50 p-3 ring-1 ring-blue-200">
-          <div className="font-semibold text-blue-900">Crewly proposed these rules</div>
-          <ul className="mt-1 list-disc pl-4 text-blue-900">{pending.rules.map((r) => <li key={r}>{r}</li>)}</ul>
-          <div className="mt-2 flex gap-2">
-            <button onClick={() => { onSolve(pending.constraints); onDiscardPending(); }} disabled={solving}
-              className="rounded bg-blue-600 px-2 py-1 font-semibold text-white disabled:opacity-50">Confirm and solve</button>
-            <button onClick={onDiscardPending} className="rounded bg-white px-2 py-1 font-medium ring-1 ring-slate-300">Discard</button>
+        <div className="mt-4 rounded-[18px] bg-desc-soft px-4 py-3">
+          <div className="flex items-center gap-2 text-[15px] font-semibold text-desc"><Sparkles size={16} /> Crewly suggested new rules</div>
+          <ul className="mt-1.5 list-disc pl-5 text-[14px] text-ink">{pending.rules.map((r) => <li key={r}>{r}</li>)}</ul>
+          <div className="mt-3 flex gap-2">
+            <Button variant="primary" onClick={() => { onSolve(pending.constraints); onDiscardPending(); }} disabled={solving}>Apply and re-plan</Button>
+            <Button variant="ghost" onClick={onDiscardPending}>Discard</Button>
           </div>
         </div>
       )}
 
-      <section className="space-y-2 rounded-lg p-3 ring-1 ring-slate-200">
-        <h3 className="font-semibold uppercase tracking-wide text-slate-500">Constraints</h3>
-        {([["max_slip_months", "Max slip past in-service", 24, "months"], ["max_advance_months", "Max months started early", 24, "months"],
-          ["burst_gap_weeks", "Longest wait for a shared specialty crew", 12, "weeks"]] as const).map(([key, label, max, unit]) => (
-          <label key={key} className="block">
-            <div className="flex justify-between"><span>{label}</span><b>{draft[key]} {unit}</b></div>
-            <input type="range" min={0} max={max} value={draft[key]} onChange={(e) => setDraft({ ...draft, [key]: Number(e.target.value) })} className="w-full accent-slate-900" />
-          </label>
-        ))}
-        <label className="flex items-start gap-2 rounded bg-amber-50 p-2 ring-1 ring-amber-200">
-          <input type="checkbox" checked={draft.joint_contracting} onChange={(e) => setDraft({ ...draft, joint_contracting: e.target.checked })} className="mt-0.5" />
-          <span><b>Joint contracting</b> (assumption, off by default): one contractor serves both utilities' jobs that run at the same time within a
-            {" "}{draft.crew_drive_min} minute drive. Shown as a separate headline.</span>
-        </label>
-        <div>
-          <div className="mb-1">Specialty crews <span className="text-slate-400">(weeks · typical window in its phase · $k per mobilization)</span></div>
-          {Object.entries(draft.bursts ?? {}).map(([key, b]) => (
-            <div key={key} className="mb-1 flex flex-wrap items-center gap-1 rounded bg-slate-50 p-1.5 ring-1 ring-slate-200">
-              <input type="checkbox" checked={b.enabled} onChange={(e) => setBurst(key, { enabled: e.target.checked })} />
-              <span className="w-24 font-medium capitalize">{b.label}</span>
-              <input type="number" min={1} max={26} value={b.weeks} onChange={(e) => setBurst(key, { weeks: Number(e.target.value) })}
-                className="w-10 rounded border border-slate-300 px-1" title="weeks" />
-              <span className="text-slate-400">wk</span>
-              {[0, 1].map((i) => (
-                <input key={i} type="number" min={0} max={100} step={5} value={Math.round(b.window[i] * 100)} title={i ? "window end %" : "window start %"}
-                  onChange={(e) => setBurst(key, { window: (i ? [b.window[0], Number(e.target.value) / 100] : [Number(e.target.value) / 100, b.window[1]]) as [number, number] })}
-                  className="w-11 rounded border border-slate-300 px-1" />
-              ))}
-              <span className="text-slate-400">% of {b.phase}</span>
-              {(["mob_low_k", "mob_high_k"] as const).map((k) => (
-                <input key={k} type="number" min={0} step={10} value={b[k]} title={k === "mob_low_k" ? "low $k" : "high $k"}
-                  onChange={(e) => setBurst(key, { [k]: Number(e.target.value) })} className="w-12 rounded border border-slate-300 px-1" />
-              ))}
-            </div>
-          ))}
-        </div>
-        <div>
-          <div className="mb-1">Crews per utility per year</div>
-          {Object.entries(crews).map(([org, years]) => (
-            <div key={org} className="mb-1 flex flex-wrap items-center gap-1">
-              <span className="w-10 font-semibold uppercase">{org}</span>
-              {Object.keys(years).sort().map((y) => (
-                <label key={y} className="flex items-center gap-0.5 text-[10px] text-slate-500">
-                  {y.slice(2)}
-                  <input type="number" min={0} max={30} value={draft.crew_counts[org]?.[y] ?? years[y]}
-                    onChange={(e) => setCount(org, y, Number(e.target.value))} className="w-9 rounded border border-slate-300 px-1 text-xs text-slate-900" />
-                </label>
-              ))}
-            </div>
-          ))}
-        </div>
-        <div>
-          <div className="mb-1 flex items-center justify-between">
-            <span>Outage blackouts</span>
-            <button onClick={() => setDraft({ ...draft, blackouts: [...draft.blackouts, { site: "*", months: [6, 7, 8], phase_kind: "energization" }] })}
-              className="rounded bg-slate-100 px-1.5 py-0.5 hover:bg-slate-200">Add</button>
-          </div>
-          {draft.blackouts.map((b, i) => (
-            <div key={i} className="mb-1 rounded bg-slate-50 p-1.5 ring-1 ring-slate-200">
-              <div className="flex gap-1">
-                <input value={b.site} onChange={(e) => setDraft({ ...draft, blackouts: draft.blackouts.map((x, j) => (j === i ? { ...x, site: e.target.value } : x)) })}
-                  placeholder="site name or *" className="min-w-0 flex-1 rounded border border-slate-300 px-1" />
-                <button onClick={() => setDraft({ ...draft, blackouts: draft.blackouts.filter((_, j) => j !== i) })} className="px-1 text-slate-400">✕</button>
-              </div>
-              <div className="mt-1 flex gap-0.5">
-                {MONTHS.map((m, k) => {
-                  const on = b.months.includes(k + 1);
+      <div className="mt-5">
+        {h && plan.baseline && plan.coordinated && (
+          <Section title="See the numbers">
+            <table className="w-full text-[14px]">
+              <thead><tr className="text-left text-[13px] text-muted"><th className="pb-1.5 font-medium" /><th className="pb-1.5 font-medium">Alone</th><th className="pb-1.5 font-medium">Together</th></tr></thead>
+              <tbody>
+                {ROWS.map(([key, label]) => {
+                  const a = Number(plan.baseline![key] ?? 0), b = Number(plan.coordinated![key] ?? 0);
+                  const better = key === "shared_bursts" ? b > a : b < a;
                   return (
-                    <button key={k} onClick={() => setDraft({ ...draft, blackouts: draft.blackouts.map((x, j) => (j === i
-                      ? { ...x, months: on ? x.months.filter((n) => n !== k + 1) : [...x.months, k + 1].sort((p, q) => p - q) } : x)) })}
-                      className={`w-5 rounded text-[10px] ${on ? "bg-slate-900 text-white" : "bg-white ring-1 ring-slate-200"}`}>{m}</button>
+                    <tr key={key} className="border-t border-line">
+                      <td className="py-2 pr-2 text-muted">{label}</td>
+                      <td className="py-2">{a.toLocaleString()}</td>
+                      <td className={`py-2 ${better ? "font-semibold text-save" : ""}`}>{b.toLocaleString()}</td>
+                    </tr>
                   );
                 })}
+              </tbody>
+            </table>
+          </Section>
+        )}
+
+        <Section title="Change the rules">
+          <div className="space-y-4">
+            <Slider label="Longest delay allowed" value={draft.max_slip_months} unit="months" max={24} onChange={(n) => setDraft({ ...draft, max_slip_months: n })} />
+            <Slider label="Start early by at most" value={draft.max_advance_months} unit="months" max={24} onChange={(n) => setDraft({ ...draft, max_advance_months: n })} />
+            <Slider label="Longest wait for a shared specialty crew" value={draft.burst_gap_weeks} unit="weeks" max={12} onChange={(n) => setDraft({ ...draft, burst_gap_weeks: n })} />
+
+            <label className="flex cursor-pointer items-start gap-3 rounded-[18px] bg-crew-soft px-4 py-3">
+              <input type="checkbox" checked={draft.joint_contracting} onChange={(e) => setDraft({ ...draft, joint_contracting: e.target.checked })} className="mt-1 h-4 w-4 accent-[#ffb020]" />
+              <span className="text-[14px]"><b>Try joint contracting</b><br />
+                <span className="text-muted">Assume one contractor serves both utilities' jobs that run at the same time within a {draft.crew_drive_min} minute drive. Shown as its own result.</span></span>
+            </label>
+
+            <div>
+              <div className="mb-2 text-[14px] font-semibold">Specialty crews</div>
+              <div className="space-y-2">
+                {Object.entries(draft.bursts ?? {}).map(([key, b]) => (
+                  <div key={key} className={`rounded-[16px] px-3 py-2.5 ring-1 ring-line ${b.enabled ? "bg-surface" : "bg-soft opacity-70"}`}>
+                    <label className="flex items-center gap-2 text-[14px] font-semibold capitalize">
+                      <input type="checkbox" checked={b.enabled} onChange={(e) => setBurst(key, { enabled: e.target.checked })} className="h-4 w-4 accent-[#2f6bff]" />
+                      {b.label}
+                    </label>
+                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-[13px] text-muted">
+                      <span className="flex items-center gap-1.5"><NumberField value={b.weeks} min={1} max={26} width="w-14" title="weeks on site" onChange={(n) => setBurst(key, { weeks: n })} /> weeks</span>
+                      <span className="flex items-center gap-1.5">during {b.phase}, from
+                        <NumberField value={Math.round(b.window[0] * 100)} min={0} max={100} step={5} width="w-16" title="window start %" onChange={(n) => setBurst(key, { window: [n / 100, b.window[1]] })} />
+                        to <NumberField value={Math.round(b.window[1] * 100)} min={0} max={100} step={5} width="w-16" title="window end %" onChange={(n) => setBurst(key, { window: [b.window[0], n / 100] })} />%
+                      </span>
+                      <span className="flex items-center gap-1.5">each trip $
+                        <NumberField value={b.mob_low_k} min={0} step={10} width="w-16" title="low $k" onChange={(n) => setBurst(key, { mob_low_k: n })} />
+                        to <NumberField value={b.mob_high_k} min={0} step={10} width="w-16" title="high $k" onChange={(n) => setBurst(key, { mob_high_k: n })} />k
+                      </span>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-          ))}
-        </div>
-        <button onClick={() => onSolve(draft)} disabled={solving} className="w-full rounded-md bg-slate-900 py-1.5 text-sm font-semibold text-white disabled:opacity-50">
-          {solving ? "Solving…" : "Solve again"}
-        </button>
-      </section>
 
-      <section>
-        <h3 className="mb-1 font-semibold uppercase tracking-wide text-slate-500">Decisions</h3>
-        <ul className="space-y-1.5">
-          {[...plan.decisions].sort((a, b) => Number(b.decision === "share") - Number(a.decision === "share")).map((d) => (
-            <li key={d.opportunity_id}>
-              <button onClick={() => explain(d.opportunity_id)}
-                className={`w-full rounded px-2 py-1.5 text-left ring-1 ${d.opportunity_id === selectedId ? "bg-blue-50 ring-blue-200" : "ring-slate-200 hover:bg-slate-50"}`}>
-                <div className="flex items-center gap-1.5">
-                  <span className={`shrink-0 rounded px-1 text-[10px] font-semibold ${d.decision === "share" ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"}`}>
-                    {d.decision === "share" ? `shared ${(d.shared ?? []).join(", ")}` : "separate"}
-                  </span>
-                  {d.contractor && <span className="shrink-0 rounded bg-amber-100 px-1 text-[10px] font-semibold text-amber-800">contractor</span>}
-                  <span className="truncate">#{d.opportunity_id} {d.a} / {d.b}</span>
+            <div>
+              <div className="mb-2 text-[14px] font-semibold">Crews each utility has, by year</div>
+              {Object.entries(crews).map(([org, years]) => (
+                <div key={org} className="mb-2">
+                  <div className={`mb-1 text-[13px] font-semibold ${org === "desc" ? "text-desc" : "text-[#d93b3b]"}`}>{org === "desc" ? "Dominion Energy SC" : "Georgia Power"}</div>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.keys(years).sort().map((y) => (
+                      <label key={y} className="flex items-center gap-1 text-[12px] text-muted">
+                        {y}
+                        <NumberField value={draft.crew_counts[org]?.[y] ?? years[y]} min={0} max={30} width="w-14" title={`${org} crews in ${y}`} onChange={(n) => setCount(org, y, n)} />
+                      </label>
+                    ))}
+                  </div>
                 </div>
-                <div className="mt-0.5 text-slate-600">{asking === d.opportunity_id ? "Re-solving with a specialty crew forced to serve both…" : why[d.opportunity_id] || d.sentence}</div>
-              </button>
-            </li>
-          ))}
-        </ul>
-      </section>
+              ))}
+            </div>
+
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-[14px] font-semibold">Months with no outage work</span>
+                <Button variant="ghost" className="!px-3 !py-1" onClick={() => setDraft({ ...draft, blackouts: [...draft.blackouts, { site: "*", months: [6, 7, 8], phase_kind: "energization" }] })}>
+                  <Plus size={15} /> Add
+                </Button>
+              </div>
+              {draft.blackouts.length === 0 && <p className="text-[13px] text-muted">None yet. Add one to keep outage work out of chosen months at a site.</p>}
+              {draft.blackouts.map((b, i) => (
+                <div key={i} className="mb-2 rounded-[16px] bg-soft px-3 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <input value={b.site} onChange={(e) => setDraft({ ...draft, blackouts: draft.blackouts.map((x, j) => (j === i ? { ...x, site: e.target.value } : x)) })}
+                      placeholder="Site name, or * for all" aria-label="Site"
+                      className="min-w-0 flex-1 rounded-full bg-surface px-3 py-1 text-[13px] ring-1 ring-line focus:outline-none focus:ring-2 focus:ring-desc" />
+                    <button aria-label="Remove" onClick={() => setDraft({ ...draft, blackouts: draft.blackouts.filter((_, j) => j !== i) })}
+                      className="grid h-7 w-7 place-items-center rounded-full text-muted hover:bg-surface"><X size={15} /></button>
+                  </div>
+                  <div className="mt-2 flex gap-1">
+                    {MONTHS.map((m, k) => {
+                      const on = b.months.includes(k + 1);
+                      return (
+                        <button key={k} aria-pressed={on} onClick={() => setDraft({ ...draft, blackouts: draft.blackouts.map((x, j) => (j === i
+                          ? { ...x, months: on ? x.months.filter((n) => n !== k + 1) : [...x.months, k + 1].sort((p, q) => p - q) } : x)) })}
+                          className={`h-7 w-7 rounded-full text-[12px] font-semibold ${on ? "bg-ink text-white" : "bg-surface text-muted ring-1 ring-line"}`}>{m}</button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <Button variant="primary" className="w-full" onClick={() => onSolve(draft)} disabled={solving}>{solving ? "Re-planning…" : "Re-plan with these rules"}</Button>
+          </div>
+        </Section>
+
+        <Section title="Why each pair was or wasn't shared" count={decisions.length} defaultOpen>
+          <div className="mb-2 flex flex-wrap gap-3 text-[12px] text-muted">
+            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-save" />shared</span>
+            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-crew" />close enough, kept apart</span>
+            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-far" />too far by road</span>
+          </div>
+          <ul className="space-y-1">
+            {decisions.map((d) => {
+              const dot = d.decision === "share" ? "bg-save" : d.eligible ? "bg-crew" : "bg-far";
+              return (
+                <li key={d.opportunity_id}>
+                  <button onClick={() => explain(d.opportunity_id)}
+                    className={`w-full rounded-[16px] px-3 py-2.5 text-left transition ${d.opportunity_id === selectedId ? "bg-desc-soft" : "hover:bg-soft"}`}>
+                    <div className="flex items-start gap-2.5">
+                      <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${dot}`} />
+                      <div className="min-w-0">
+                        <div className="truncate text-[14px] font-semibold">{d.a} <span className="font-normal text-muted">and</span> {d.b}</div>
+                        {d.decision === "share" && (d.shared?.length ?? 0) > 0 && <div className="text-[13px] font-semibold text-save">Shares {d.shared.join(", ")}{d.contractor ? ", plus one contractor" : ""}</div>}
+                        <div className="mt-0.5 text-[13px] leading-snug text-muted">
+                          {asking === d.opportunity_id ? "Checking what would happen if they shared…" : why[d.opportunity_id] || d.sentence}
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </Section>
+      </div>
     </div>
   );
 }
