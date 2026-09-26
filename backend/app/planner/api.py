@@ -46,6 +46,11 @@ def owned(conn, plan_id, user):
     return plan
 
 
+@router.get("/{plan_id}")
+def one(plan_id: int, user=Depends(current_user), conn=Depends(get_conn)):
+    return as_json(owned(conn, plan_id, user))  # a plan card in the chat re-fetches by id
+
+
 @router.patch("/{plan_id}/items/{item_id}")
 def patch_item(plan_id: int, item_id: str, body: ItemPatch, user=Depends(current_user), conn=Depends(get_conn)):
     plan = owned(conn, plan_id, user)

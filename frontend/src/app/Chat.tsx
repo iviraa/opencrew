@@ -7,15 +7,18 @@ import { company, type ChatAction, type CollabRequest, type Me, type Overlap } f
 import { GoalChip } from "./GoalPanel";
 import MemoryList from "./Memory";
 import { OverlapCard, latestFor } from "./panels";
+import PlanCard from "./plan/PlanCard";
+import type { PlanStore } from "./plan/usePlans";
 
-export type ChatMsg = { role: "user" | "model"; text: string; ids?: number[]; offline?: boolean; confirm?: ChatAction[]; goal?: number };
+export type ChatMsg = { role: "user" | "model"; text: string; ids?: number[]; offline?: boolean; confirm?: ChatAction[]; goal?: number; plan?: { id: number; horizon?: string; item?: string } };
 
 const html = (s: string) => DOMPurify.sanitize(marked.parse(s, { async: false }) as string);
 
-export default function Chat({ me, msgs, busy, overlaps, requests, onSend, onOpen, onClose, onDone, onOpenRequest, onOpenGoal, onClear, memoryTick = 0 }: {
-  me: Me; msgs: ChatMsg[]; busy: boolean; overlaps: Overlap[] | null; requests: CollabRequest[];
+export default function Chat({ me, msgs, busy, overlaps, requests, plans, onSend, onOpen, onClose, onDone, onOpenRequest, onOpenGoal, onOpenPlan, onClear, memoryTick = 0 }: {
+  me: Me; msgs: ChatMsg[]; busy: boolean; overlaps: Overlap[] | null; requests: CollabRequest[]; plans: PlanStore;
   onSend: (text: string) => void; onOpen: (id: number) => void; onClose: () => void;
-  onDone: (r: CollabRequest) => void; onOpenRequest: (id: number) => void; onOpenGoal: (id: number) => void; onClear?: () => void; memoryTick?: number;
+  onDone: (r: CollabRequest) => void; onOpenRequest: (id: number) => void; onOpenGoal: (id: number) => void; onOpenPlan: (id: number, item?: string) => void;
+  onClear?: () => void; memoryTick?: number;
 }) {
   const [text, setText] = useState("");
   const [showMemory, setShowMemory] = useState(false);
@@ -24,6 +27,7 @@ export default function Chat({ me, msgs, busy, overlaps, requests, onSend, onOpe
   const lastSent = requests.find((r) => r.from_company === me.company);  // newest first
   const ideas = [
     lastSent ? `Did ${company(lastSent.to_company).name} approve my last request?` : "Any requests waiting for me?",
+    "Plan my next quarter",
     "What overlaps happen in 2025?",
     "Show crossings and same-land overlaps",
     "Any severe weather coming this week?",
@@ -41,7 +45,7 @@ export default function Chat({ me, msgs, busy, overlaps, requests, onSend, onOpe
       <div className="flex items-center gap-2 pb-3">
         <div className="min-w-0 flex-1">
           <h2 className="font-logo text-xl font-semibold leading-tight">Ask Crewly</h2>
-          <div className="text-sm text-muted">Overlaps, requests, weather</div>
+          <div className="text-sm text-muted">Overlaps, plans, requests, weather</div>
         </div>
         <button onClick={() => setShowMemory(!showMemory)} aria-label="What Crewly remembers" aria-pressed={showMemory} title="What Crewly remembers"
           className={`grid h-8 w-8 place-items-center rounded-full hover:bg-grape-soft ${showMemory ? "bg-grape-soft text-grape" : "text-muted"}`}><Brain size={16} /></button>
@@ -75,7 +79,8 @@ export default function Chat({ me, msgs, busy, overlaps, requests, onSend, onOpe
               <Confirm key={j} me={me} action={a} overlaps={overlaps} requests={requests} onDone={onDone} onOpenRequest={onOpenRequest} />
             ))}
             {m.goal != null && <GoalChip id={m.goal} onOpen={() => onOpenGoal(m.goal!)} />}
-            {m.ids && m.ids.length > 0 && m.goal == null && (
+            {m.plan && <PlanCard store={plans} id={m.plan.id} horizon={m.plan.horizon} item={m.plan.item} onOpenPlan={onOpenPlan} onOpenGoal={onOpenGoal} />}
+            {m.ids && m.ids.length > 0 && m.goal == null && !m.plan && (
               <div className="flex flex-col gap-1 rounded-2xl border-2 border-line p-1">
                 <div className="px-2 pt-1 text-xs font-semibold text-faint">{m.ids.length} on the map · tap one for details</div>
                 {m.ids.map((id) => byId.get(id)).filter((o): o is Overlap => !!o).map((o) => (
