@@ -805,8 +805,10 @@ def run(conn, constraints=None):
     saved = saved_constraints(c)
     fp = hashlib.sha1(json.dumps([saved, data], sort_keys=True, default=str).encode()).hexdigest()
     hit = None if force else conn.execute("SELECT * FROM joint_plan WHERE fingerprint = %s ORDER BY id DESC LIMIT 1", (fp,)).fetchone()
-    if hit:
-        return {**as_result(hit), "cached": True}  # same rules and data: same plan, so demo numbers never wobble
+    if hit:  # same rules and data: same plan, so demo numbers never wobble
+        cols = "constraints, job_ids, status, problem, baseline, coordinated, headline, schedule, decisions, fingerprint"
+        row = conn.execute(f"INSERT INTO joint_plan ({cols}) SELECT {cols} FROM joint_plan WHERE id = %s RETURNING *", (hit["id"],)).fetchone()
+        return {**as_result(row), "cached": True}  # stored as the newest run so "latest" is the last plan asked for
     res, origin, tasks, near, crews = solve_all(data, c)
     if res["status"] == "infeasible":
         row = conn.execute("INSERT INTO joint_plan (constraints, job_ids, status, problem, fingerprint) VALUES (%s, %s, 'infeasible', %s, %s) RETURNING id",
