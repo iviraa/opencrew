@@ -27,6 +27,7 @@ export type CrewlyAction =
   | { type: "storm"; at: string }
   | { type: "live" }
   | { type: "reload" }
+  | { type: "outlook"; at: string; scenario: "none" | "helene" }
   | { type: "status"; opportunity_id: number; status: string }
   | { type: "assumptions"; values: Record<string, { low: number; high: number }> }
   | { type: "view"; horizon: string | null; tier: Tier | null; tab: string | null }

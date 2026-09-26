@@ -2,6 +2,7 @@ import { FileText, Info, Send } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, type Assumption, type Job, type OpportunityDetail, type Savings } from "../api";
 import { BASIS_LABEL, FLAG_LABEL, QUALITY_LABEL, STATUSES, TIER_HINT, miles, monthYear, pct, title, tooFar, usd } from "../format";
+import HazardBadge from "./HazardBadge";
 import BriefModal from "./BriefModal";
 import Outreach from "./Outreach";
 import PlanDecision from "./PlanDecision";
@@ -207,6 +208,7 @@ function JobCard({ job }: { job: Job }) {
       <div className="text-[13px] font-semibold" style={{ color: job.color }}>{job.org_name}</div>
       <div className="mt-0.5 text-[15px] font-semibold leading-snug">{job.name}</div>
       {job.phase && <div className="mt-1 text-[13px] text-muted">Phase: {job.phase} (estimated from the project window)</div>}
+      <div className="mt-1.5"><HazardBadge jobId={job.parent_job_id ?? job.id} /></div>
       <div className="mt-1.5 text-[14px]">
         {capital(title(job.job_type))}{job.voltage_kv ? `, ${job.voltage_kv} kV` : ""}, {monthYear(job.start_at)} to {monthYear(job.end_at)}
       </div>

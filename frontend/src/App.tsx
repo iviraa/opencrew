@@ -178,10 +178,7 @@ export default function App() {
       if (a.type === "select") { if (a.horizon) setHorizon(a.horizon); setSelectedId(a.opportunity_id); }
       if (a.type === "storm") { setHorizon("emergency"); setScenario("helene"); setLiveAt(Date.parse(a.at)); }
       if (a.type === "live") { setHorizon("emergency"); setScenario("none"); setLiveAt(null); }
-      if ((a as { type: string }).type === "outlook") {
-        const o = a as unknown as { at: string; scenario: "none" | "helene" };
-        setHorizon("emergency"); setScenario(o.scenario); setLiveAt(o.scenario === "helene" ? Date.parse(o.at) : null);
-      }
+      if (a.type === "outlook") { setHorizon("emergency"); setScenario(a.scenario); setLiveAt(a.scenario === "helene" ? Date.parse(a.at) : null); }
       if (a.type === "fly") setFly({ bbox: a.bbox, at: Date.now() });
       if (a.type === "reload") setReload((n) => n + 1);
       if (a.type === "status") { setOpps((xs) => xs.map((o) => (o.id === a.opportunity_id ? { ...o, status: a.status } : o))); setDetail((d) => (d && d.id === a.opportunity_id ? { ...d, status: a.status } : d)); }
