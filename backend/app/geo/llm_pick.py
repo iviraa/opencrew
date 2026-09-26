@@ -17,13 +17,16 @@ Candidates:
 Answer with the candidate number or -1."""
 
 
+_down = [False]  # set after a quota or outage error so one run does not stall on retries
+
+
 def _cache():
     return json.loads(CACHE.read_text()) if CACHE.exists() else {}
 
 
 def choose(job, options):
     """Gemini picks one of the given OSM candidates or none; it never supplies coordinates."""
-    if not provider():
+    if not provider() or _down[0]:
         return None
     key = f"{job['name']}|{','.join(o['osm'] for o in options)}"
     cache = _cache()
@@ -32,7 +35,8 @@ def choose(job, options):
         try:
             out = json.loads(generate_json(PROMPT.format(name=job["name"], desc=(job.get("description") or "")[:600], options=text), SCHEMA))
         except Exception:
-            return None  # model busy or offline: leave unplaced this run, retry next build
+            _down[0] = True
+            return None  # model busy or out of quota: leave unplaced this run, retry next build
         cache[key] = out
         CACHE.write_text(json.dumps(cache, indent=1))
     i = cache[key].get("choice", -1)

@@ -18,6 +18,7 @@ MAX_SPAN_KM = 100  # longest plausible line in these filings
 MIN_CONF = 0.6
 TOWN_CONF = 0.35  # a town centroid is only an area, never a site
 LLM_CONF = 0.6
+DIRECTIONS = {"east", "west", "north", "south", "upper", "lower"}  # "east villa rica" can sit at villa rica
 OUT_OF_STATE = 0.6  # tie lines cross the border, so penalise instead of reject
 
 OPERATORS = {"desc": re.compile(r"dominion|sce&g|south carolina electric", re.I), "gpc": re.compile(r"georgia power|southern", re.I)}
@@ -83,18 +84,22 @@ class Locator:
             return []
         point = self.gold_project.get((squash(project), key)) or self.gold.get((org, key))
         if point:
-            return [{"lat": point[0], "lon": point[1], "conf": 1.0, "via": "organizer", "name": name}]
+            return [{"lat": point[0], "lon": point[1], "conf": 1.0, "via": "organizer", "name": name, "query": name}]
         home = self.home(org)
         out = []
         short = len(key) < 6 and " " not in key  # "creek" must not match "acree"
+        words = [w for w in key.split() if len(w) >= 4 and w not in DIRECTIONS]
         for s in self.osm:
             sc = fuzz.token_sort_ratio(key, s["norm"])
             if sc < 80 or (short and key != s["norm"]):
                 continue
+            theirs = s["norm"].split()
+            if len(words) > 1 and not all(max((fuzz.ratio(w, t) for t in theirs), default=0) >= 85 for w in words):
+                continue  # "mountain view" needs both words, so "pine mountain" is not it
             conf = sc / 100 * (1.0 if OPERATORS[org].search(s.get("operator") or "") else 0.85)
             conf *= 1.0 if home.contains(Point(s["lon"], s["lat"])) else OUT_OF_STATE
             if conf >= MIN_CONF:
-                out.append({"lat": s["lat"], "lon": s["lon"], "conf": round(conf, 3), "via": s["osm"], "name": s["name"]})
+                out.append({"lat": s["lat"], "lon": s["lon"], "conf": round(conf, 3), "via": s["osm"], "name": s["name"], "query": name})
         return sorted(out, key=lambda c: -c["conf"])
 
     def home(self, org):
@@ -131,7 +136,7 @@ class Locator:
         lat, lon = float(hit["lat"]), float(hit["lon"])
         if not self.home(org).contains(Point(lon, lat)):
             return None
-        return {"lat": lat, "lon": lon, "conf": TOWN_CONF, "via": f"town:{hit.get('display_name', '')[:60]}", "name": name, "approx": True}
+        return {"lat": lat, "lon": lon, "conf": TOWN_CONF, "via": f"town:{hit.get('display_name', '')[:60]}", "name": name, "query": name, "approx": True}
 
     def place_job(self, org, job):
         """Best defensible location for a filed project, or [None] with a reason."""
@@ -150,12 +155,16 @@ class Locator:
         if options:
             chosen = llm_pick.choose(job, options)
             if chosen:
-                return [{"lat": chosen["lat"], "lon": chosen["lon"], "conf": LLM_CONF, "via": f"gemini:{chosen['osm']}", "name": chosen["name"]}], None
+                return [{"lat": chosen["lat"], "lon": chosen["lon"], "conf": LLM_CONF, "via": f"gemini:{chosen['osm']}", "name": chosen["name"], "query": job["name"]}], None
         local = [n for n, e in zip(names, job.get("endpoints") or names) if not foreign(e)] + mentioned
         for n in local:
             hit = self.town(org, n)
             if hit:
                 return [hit], None
+        if re.match(r"\s*(SAV\s*:\s*)?CC\b", job["name"]):
+            return [None], "customer connection named after a customer or project, not a mapped station or town"
+        if options:
+            return [None], f"only loose name matches ({', '.join(o['name'] for o in options[:3])}), none confirmed"
         return [None], "no substation, plant or town with this name was found in the utility's state"
 
     def place(self, org, endpoints, project="", max_span=MAX_SPAN_KM):
