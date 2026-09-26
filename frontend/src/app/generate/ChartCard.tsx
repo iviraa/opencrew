@@ -6,8 +6,8 @@ import { download, fmt, toCsv, type Chart, type ChartKind } from "./types";
 const W = 320, H = 190, PAD = { l: 44, r: 8, t: 8, b: 34 };
 const KINDS: ChartKind[] = ["bar", "line", "stacked"];
 
-// a small inline chart: bars, lines or stacked bars, no library
-function Svg({ chart, onHover }: { chart: Chart; onHover: (t: string | null) => void }) {
+// a small inline chart: bars, lines or stacked bars, no library; findings reuse it
+export function ChartSvg({ chart, onHover }: { chart: Chart; onHover: (t: string | null) => void }) {
   const n = chart.x.length, series = chart.series;
   const stacked = chart.kind === "stacked";
   const tops = Array.from({ length: n }, (_, i) => stacked ? series.reduce((s, sr) => s + (sr.values[i] ?? 0), 0) : Math.max(...series.map((sr) => sr.values[i] ?? 0)));
@@ -86,7 +86,7 @@ export default function ChartCard({ chart: initial }: { chart: Chart }) {
     <div ref={box} className={`pop-in rounded-2xl border-2 border-pen bg-white p-2 ${busy ? "opacity-70" : ""}`}>
       <div className="px-1 text-sm font-semibold leading-snug">{chart.title}</div>
       <div className="px-1 text-[11px] text-faint">{hover ?? chart.source}</div>
-      <Svg chart={chart} onHover={setHover} />
+      <ChartSvg chart={chart} onHover={setHover} />
       {chart.series.length > 1 && (
         <div className="flex flex-wrap gap-2 px-1 text-[11px] text-muted">
           {chart.series.map((s) => <span key={s.name} className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm" style={{ background: s.color ?? "#5b2bb5" }} />{s.name}</span>)}
