@@ -3,6 +3,7 @@ from collections import Counter
 from datetime import date
 
 from app.db import ROOT, connect, init_schema
+from app.outreach import seed_contacts
 from app.engine.overlap import recompute
 from app.engine.phases import build_phases
 from app.geo.geolocate import Locator
@@ -32,6 +33,7 @@ def main():
     with connect() as conn:
         init_schema(conn, reset=True)
         conn.cursor().executemany("INSERT INTO org (id, name, color) VALUES (%s, %s, %s)", ORGS)
+        seed_contacts(conn)
         stats = Counter()
         for org, title, rel, parser, observed in FILINGS:
             pages = pdf.read_pages(ROOT / rel)

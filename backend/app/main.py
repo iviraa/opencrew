@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from pydantic import BaseModel
 
 from app.config import ASSUMPTIONS
+from app import outreach
 from app.crewly import agent, brief
 from app.db import get_conn
 from app.engine.cost import savings
@@ -85,6 +86,71 @@ def make_brief(opp_id: int, conn=Depends(get_conn)):
     if not out:
         raise HTTPException(404, "opportunity not found")
     return out
+
+
+@api.get("/opportunities/{opp_id}/contacts")
+def opp_contacts(opp_id: int, conn=Depends(get_conn)):
+    return outreach.contacts(conn, opp_id)
+
+
+@api.get("/opportunities/{opp_id}/outreach")
+def opp_outreach(opp_id: int, conn=Depends(get_conn)):
+    return outreach.listing(conn, opp_id)
+
+
+class Draft(BaseModel):
+    opportunity_id: int
+    contact_id: int
+    kind: str = "utility_intro"
+
+
+class Edit(BaseModel):
+    subject: str
+    body: str
+
+
+class Approve(BaseModel):
+    approved_by: str
+
+
+class Reply(BaseModel):
+    summary: str = ""
+
+
+def found(row, msg="outreach not found or in the wrong state"):
+    if not row:
+        raise HTTPException(409, msg)
+    return row
+
+
+@api.post("/outreach")
+def draft_outreach(body: Draft, conn=Depends(get_conn)):
+    return found(outreach.draft(conn, body.opportunity_id, body.contact_id, body.kind), "opportunity or contact not found")
+
+
+@api.patch("/outreach/{outreach_id}")
+def edit_outreach(outreach_id: int, body: Edit, conn=Depends(get_conn)):
+    return found(outreach.edit(conn, outreach_id, body.subject, body.body))
+
+
+@api.post("/outreach/{outreach_id}/approve")
+def approve_outreach(outreach_id: int, body: Approve, conn=Depends(get_conn)):
+    if not body.approved_by.strip():
+        raise HTTPException(400, "approver name required")
+    return found(outreach.approve(conn, outreach_id, body.approved_by.strip()))
+
+
+@api.post("/outreach/{outreach_id}/send")
+def send_outreach(outreach_id: int, conn=Depends(get_conn)):
+    row, err = outreach.send(conn, outreach_id)
+    if err:
+        raise HTTPException(409, err)
+    return row
+
+
+@api.post("/outreach/{outreach_id}/replied")
+def replied_outreach(outreach_id: int, body: Reply, conn=Depends(get_conn)):
+    return found(outreach.mark_replied(conn, outreach_id, body.summary))
 
 
 @api.get("/assumptions")
