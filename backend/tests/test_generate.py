@@ -54,7 +54,7 @@ def test_report_page_escapes_and_prints():
 
 
 def test_report_kinds_and_default_sections():
-    assert set(reports.KINDS) == {"feasibility", "cost_analysis", "hazard_exposure", "plan", "pack"}
+    assert set(reports.KINDS) == {"feasibility", "cost_analysis", "hazard_exposure", "plan", "pack", "finding"}
     with pytest.raises(ValueError):
         reports.build(None, "gpc", "nope")
 

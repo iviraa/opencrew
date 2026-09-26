@@ -60,7 +60,7 @@ def star(finding_id: int, on: int = 1, user=Depends(current_user), conn=Depends(
     f = experiments.star(conn, finding_id, user["company"], bool(on))
     if not f:
         raise HTTPException(404, "finding not found")
-    return f
+    return {"starred": f["starred"], "id": finding_id}
 
 
 @router.delete("/finding/{finding_id}")

@@ -118,7 +118,7 @@ def test_add_project_finds_new_overlaps_then_vanishes(conn):
 @needs_db
 def test_rule_and_exclusion_reach_the_plan(conn):
     f = experiments.run(conn, "gpc", "apply_rule", {"months": [8, 9], "horizon": "year"})
-    assert "plan_savings_low" in f["scenario"]["metrics"] and f["knobs"][0]["type"] == "months"
+    assert "plan_savings_low" in f["scenario"]["metrics"] and {k["name"] for k in f["knobs"]} == {"phase", "months", "where"}
     g = experiments.run(conn, "gpc", "exclude_partner", {"partner": "Dominion", "horizon": "year", "opportunity_id": 18})
     assert g["scenario"]["metrics"]["pairs"]["value"] == 0 and any("no longer exists" in n for n in g["notes"])
     c = experiments.compare(conn, "gpc", f["id"], g["id"])
@@ -133,3 +133,52 @@ def test_findings_are_kept_starred_and_deleted(conn):
     assert experiments.star(conn, f["id"], "gpc")["starred"] is True
     assert experiments.listing(conn, "gpc", starred=True)[0]["id"] == f["id"]
     assert experiments.delete(conn, f["id"], "gpc") == 1
+
+
+# ---------- the shapes the chat cards send ----------
+
+def test_canonical_kinds_and_aliases():
+    from app.scenario import normalize
+    assert normalize.kind_of("assumption") == "assumption" and normalize.kind_of("change_assumptions") == "assumption"
+    assert normalize.kind_of("rule") == "rule" and normalize.kind_of("apply_rule") == "rule" and normalize.kind_of("replay") == "replay_year"
+    with pytest.raises(ValueError):
+        normalize.kind_of("teleport")
+
+
+def test_dotted_knob_names_resolve_into_nested_params():
+    from app.scenario import normalize
+    p = normalize.resolve({"changes": [{"kind": "shift_window", "params": {"months": 3}}], "changes.0.params.months": -2, "changes.1.kind": "budget", "months": 1})
+    assert p["changes"][0]["params"]["months"] == -2 and p["changes"][1]["kind"] == "budget" and p["months"] == 1
+    assert "changes.0.params.months" not in p
+
+
+def test_assumption_pct_and_storm_place_shapes():
+    from app.scenario import normalize
+    from app.config import ASSUMPTIONS
+    o = normalize.assumption_overrides({"name": "crew_day_usd", "pct": 50})
+    assert o["crew_day_usd"]["low"] == round(float(ASSUMPTIONS["crew_day_usd"]["low"]) * 1.5, 4)
+    with pytest.raises(ValueError):
+        normalize.assumption_overrides({"name": "drive_limit_min", "pct": 10})
+    ev = normalize.storm_event({"place": {"lon": -80.0, "lat": 32.8}, "category": 3, "date": "2027-09-10", "radius_km": 80})
+    assert ev == {"kind": "storm", "date": "2027-09-10", "category": 3, "lon": -80.0, "lat": 32.8, "radius_km": 80.0}
+    assert normalize.quarter_of({"quarter": "Q2", "year": 2027}) == "2027Q2" and normalize.quarter_of({"quarter": "2028Q1"}) == "2028Q1"
+
+
+@needs_db
+def test_card_shaped_params_run_and_knobs_match_them(conn):
+    f = experiments.run(conn, "gpc", "assumption", {"name": "crew_day_usd", "pct": 20, "opportunity_id": 18})
+    assert f["kind"] == "assumption" and {k["name"] for k in f["knobs"]} == {"name", "pct"} and f["params"]["pct"] == 20
+    g = experiments.run(conn, "gpc", "compose", {"changes": [{"kind": "shift_window", "params": {"opportunity_id": 18, "months": 3}},
+                                                             {"kind": "storm", "params": {"place": {"lon": -79.93, "lat": 32.78}, "category": 3, "date": "2027-09-10", "radius_km": 80}}],
+                                                 "changes.0.params.months": -1})
+    assert g["params"]["changes"][0]["params"]["months"] == -1 and g["knobs"][0]["name"] == "changes.0.months"
+    assert any(k.startswith("event_") or k in ("affected_days_low",) for k in g["scenario"]["metrics"])
+    assert experiments.compare(conn, "gpc", f["id"], g["id"])["title"]
+
+
+@needs_db
+def test_finding_report_renders_the_numbers(conn):
+    from app.crewly import reports
+    f = experiments.run(conn, "gpc", "shift_window", {"opportunity_id": 18, "months": 3})
+    r = reports.build(conn, "gpc", "finding", str(f["id"]))
+    assert "What moved" in r["html"] and "shared build window" in r["html"] and r["title"].startswith("Finding:")

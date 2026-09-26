@@ -35,13 +35,12 @@ def list_findings(ctx, conn, starred=False):
 
 
 PARAMS = ("params by kind: shift_window {opportunity_id, side: ours|theirs, months} or {job_id, months} or {job_id, start, end}; "
-          "change_assumptions {overrides: {crew_day_usd: 6000 or {low, high}, ...}, opportunity_id? or horizon?}; swap_partner {opportunity_id, partner}; "
-          "exclude_partner {partner, horizon?, opportunity_id?}; add_project {name, kv, start, in_service, ends: [two station names] or coords: [[lon,lat],[lon,lat]]}; "
-          "cancel_project {job_id, horizon?}; apply_rule {months: [8, 9], job_id?, horizon?}; capacity {crews_extra, quarter: '2027Q2', horizon?}; "
-          "budget {cap_usd or target_savings_usd, horizon?}; best_windows {opportunity_id or job_ids}; "
-          "event {kind: storm, place or lon/lat, date, category} or {kind: historical, name: helene} or {kind: year, year: 2018}, plus opportunity_id?; "
-          "compose {changes: [{kind, params}, ...], base_finding_id?} to stack several changes and evaluate once. "
-          "storm, replay and sensitivity take the storm lab's params (place or lon/lat, date, category; year; the assumption to sweep).")
+          "assumption {name: crew_day_usd, pct: 20} or {name, value} (an overlap via opportunity_id, else the plan); swap_partner {opportunity_id, partner}; "
+          "exclude_partner {partner, horizon?, opportunity_id?}; add_project {name, kv, start, end, from: station name or {lon, lat}, to: same}; "
+          "cancel_project {opportunity_id, side} or {job_id}; rule {phase, months: [8, 9], where: coast|everywhere, horizon?}; "
+          "capacity {crews, quarter: 'Q2', year, horizon?}; budget {cap_usd or target_savings_usd, horizon?}; best_windows {opportunity_id or job_ids}; "
+          "storm {place: county or city name or {lon, lat}, date, category, opportunity_id?}; replay_year {year, opportunity_id?}; "
+          "sensitivity {opportunity_id, metric?}; compose {changes: [{kind, params}, ...], base_finding_id?} stacks several changes and evaluates once.")
 
 
 def scenario_tools(ctx):

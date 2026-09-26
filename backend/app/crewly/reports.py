@@ -11,6 +11,7 @@ KINDS = {
     "hazard_exposure": ("Hazard exposure", ["now7", "season", "month"]),
     "plan": ("Coordination plan", ["totals", "items", "risks"]),
     "pack": ("Overlap pack", ["brief", "feasibility", "cost_analysis", "hazard_exposure"]),
+    "finding": ("Experiment finding", ["stack", "metrics", "deltas", "notes", "evidence", "sources"]),
 }
 
 TABLE_SQL = """
@@ -146,6 +147,31 @@ def sec_plan(conn, company, horizon, sections):
     return "".join(out)
 
 
+def sec_finding(conn, company, ref, sections):
+    """One experiment: the question, what was changed, base against scenario, and what moved."""
+    from app.scenario import experiments
+    f = experiments.get(conn, int(ref), company) if str(ref).isdigit() else None
+    if not f:
+        raise ValueError("this report needs a finding id")
+    fmt = lambda v, u: (f"${v:,.0f}" if u == "USD" else f"{v:g}{'%' if u == '%' else ''}" + (f" {u}" if u and u not in ("USD", "%") else "")) if isinstance(v, (int, float)) else str(v if v is not None else "")  # noqa: E731
+    out = [f"<h2>{esc(f['title'])}</h2><p class='sub'>{esc(f.get('question') or '')}</p>"]
+    changes = f["params"].get("changes") if f["kind"] == "compose" else [{"kind": f["kind"], "params": {k: v for k, v in f["params"].items() if k != "changes"}}]
+    if "stack" in sections and changes:
+        out.append("<h3>What was changed</h3>" + table(["Change", "Settings"], [[c["kind"].replace("_", " "), esc(json.dumps({k: v for k, v in c["params"].items() if k != "base_finding_id"}, default=str)[:200])] for c in changes]))
+    base, scen = f["base"]["metrics"], f["scenario"]["metrics"]
+    if "metrics" in sections:
+        keys = [k for k in base if k in scen] + [k for k in scen if k not in base]
+        out.append("<h3>Base against scenario</h3>" + table(["Metric", "Base", "Scenario"], [[(base.get(k) or scen.get(k)).get("label") or k, fmt(base[k]["value"], base[k].get("unit")) if k in base else "", fmt(scen[k]["value"], scen[k].get("unit")) if k in scen else ""] for k in keys]))
+    if "deltas" in sections and f["deltas"]:
+        moved = [d for d in f["deltas"] if d.get("delta")]
+        if moved:
+            out.append("<h3>What moved</h3>" + table(["Metric", "Change", "Percent"], [[d["label"], ("+" if d["delta"] > 0 else "") + fmt(d["delta"], d.get("unit")), f"{d['pct']:+.1f}%" if d.get("pct") is not None else ""] for d in moved]))
+    for key, head in (("notes", "Notes"), ("evidence", "Evidence"), ("sources", "Sources")):
+        if key in sections and f.get(key):
+            out.append(f"<h3>{head}</h3><ul>" + "".join(f"<li>{esc(str(x))}</li>" for x in f[key][:20]) + "</ul>")
+    return "".join(out), f"Finding: {f['title'][:90]}"
+
+
 def sec_brief(conn, company, opp):
     from app.crewly import brief
     b = brief.build(conn, opp)
@@ -169,6 +195,8 @@ def build(conn, company, kind, ref_id=None, sections=None):
     who = name(company)
     if kind == "plan":
         body, title = sec_plan(conn, company, ref or "quarter", sections), f"{label}: {who}"
+    elif kind == "finding":
+        body, title = sec_finding(conn, company, ref, sections)
     else:
         if not ref:
             raise ValueError("this report needs an overlap id like #18" + (" or a site id" if kind == "hazard_exposure" else ""))

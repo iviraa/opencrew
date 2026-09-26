@@ -197,6 +197,9 @@ def deltas(base, scen):
         else:
             row["delta"] = None
         out.append(row)
+    for k, s in scen.items():  # an event only exists in the scenario: its numbers count from zero
+        if k not in base and k.startswith("event_") and isinstance(s.get("value"), (int, float)):
+            out.append({"metric": k, "label": s.get("label") or k, "base": 0, "scenario": s["value"], "unit": s.get("unit"), "delta": round(s["value"], 2), "pct": None})
     return out
 
 
