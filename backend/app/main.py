@@ -1,12 +1,14 @@
+import os
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.config import ASSUMPTIONS
 from app import outreach
 from app.crewly import agent, brief
-from app.db import get_conn
+from app.db import ROOT, get_conn
 from app.engine.cost import savings
 from app.engine.overlap import recompute
 from app.queries import JOB_SQL, OPP_SQL, shareable
@@ -187,4 +189,13 @@ def crewly(body: Chat, conn=Depends(get_conn)):
     return agent.run(conn, body.messages)
 
 
+@api.get("/health")
+def health(conn=Depends(get_conn)):
+    return {"ok": True, "jobs": conn.execute("SELECT count(*) AS n FROM job").fetchone()["n"]}
+
+
 app.include_router(api)
+
+STATIC = os.environ.get("STATIC_DIR") or str(ROOT / "frontend/dist")
+if os.path.isdir(STATIC):
+    app.mount("/", StaticFiles(directory=STATIC, html=True), name="web")  # built react app
