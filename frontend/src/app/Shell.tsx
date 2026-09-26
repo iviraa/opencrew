@@ -4,7 +4,7 @@ import Chat, { type ChatMsg } from "./Chat";
 import { chatHistory } from "./history";
 import Suggestion from "./Suggestion";
 import {
-  COMPANY, TIER_LABEL, ago, api, miles, usd, notices as noticesApi, requests as requestsApi, supabase,
+  TIER_LABEL, ago, api, company, partnerOf, setCompanies, miles, usd, notices as noticesApi, requests as requestsApi, supabase,
   type CollabRequest, type Jobs, type Me, type Notice, type Overlap, type SuggestionAction,
 } from "./data";
 import MapPane, { bboxOf, esc, type Fit, type Scene } from "./MapPane";
@@ -34,6 +34,12 @@ function mid(line: GeoJSON.LineString): GeoJSON.Point {
   return { type: "Point", coordinates: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] };
 }
 
+// "Dominion Energy SC" when there is one neighbor, "3 neighboring utilities" otherwise
+function neighbors(os: Overlap[], me: Me) {
+  const ids = new Set(os.map((o) => partnerOf(me, o)));
+  return ids.size === 1 ? company([...ids][0]).name : `${ids.size} neighboring utilities`;
+}
+
 export default function Shell() {
   const [me, setMe] = useState<Me | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -43,6 +49,7 @@ export default function Shell() {
   const [mode, setMode] = useState<"projects" | "scanning" | "overlaps">("projects");
   const [scanStep, setScanStep] = useState(0);
   const [focus, setFocus] = useState<number[] | null>(null);  // overlaps the chat asked to show
+  const [partner, setPartner] = useState<string | null>(null);  // one neighboring utility, or all
   const [selected, setSelected] = useState<number | null>(null);
   const [fit, setFit] = useState<Fit | null>(null);
   const [stack, setStack] = useState<Panel[]>([]);
@@ -64,7 +71,8 @@ export default function Shell() {
 
   // who am I, my projects, requests and notifications
   useEffect(() => {
-    api.me().then((m) => { setMe(m); say(`Hi ${m.name}! Want me to find overlaps?`, "wave"); }).catch((e) => setErr(String(e.message ?? e)));
+    Promise.all([api.me(), api.companies().then(setCompanies).catch(() => {})])  // names and colors for every utility first
+      .then(([m]) => { setMe(m); say(`Hi ${m.name}! Want me to find overlaps?`, "wave"); }).catch((e) => setErr(String(e.message ?? e)));
     api.projects().then((p) => {
       setProjects(p);
       const b = bboxOf([p]);
@@ -107,7 +115,8 @@ export default function Shell() {
         const list = await requestsApi.list().catch(() => null);
         if (list) setReqs(list);
         noticesApi.list().then(setNotes).catch(() => {});
-        const who = COMPANY[meRef.current!.other].name;
+        const r = list?.find((x) => x.id === n.request_id);
+        const who = r ? company(n.kind === "request" ? r.from_company : r.to_company).name : "A neighboring utility";
         setToast({ request: n.request_id!, text: n.kind === "request" ? `${who} sent you a collaboration request` : `${who} ${n.kind} your request` });
         setRing((x) => x + 1);
         say(n.kind === "request" ? `${who} wants to team up!` : n.kind === "approved" ? `${who} approved our request!` : `${who} declined our request.`,
@@ -144,7 +153,7 @@ export default function Shell() {
     const [data] = await Promise.all([ov ? Promise.resolve(ov) : api.overlaps(), animate ? wait(SCAN_MS) : null]);
     setOv(data); setMode("overlaps");
     if (animate) {
-      say(data.overlaps.length ? `Found ${data.overlaps.length} overlaps with ${COMPANY[meRef.current!.other].name}!` : "No overlaps nearby right now.", "happy");
+      say(data.overlaps.length ? `Found ${data.overlaps.length} overlaps with ${neighbors(data.overlaps, meRef.current!)}!` : "No overlaps nearby right now.", "happy");
       const b = bboxOf([data.jobs]);
       if (b) setFit({ bbox: b, key: `all${Date.now()}` });
     }
@@ -177,7 +186,7 @@ export default function Shell() {
   const showIds = useCallback(async (ids: number[]) => {
     setTab("overlaps");
     const data = ov ?? await loadOverlaps(false);
-    setMode("overlaps"); setFocus(ids); setSelected(null);
+    setMode("overlaps"); setFocus(ids); setSelected(null); setPartner(null);
     const keep = new Set(ids);
     const os = data.overlaps.filter((o) => keep.has(o.id));
     const jobIds = new Set(os.flatMap((o) => [o.job_a, o.job_b]));
@@ -236,15 +245,23 @@ export default function Shell() {
   const visible = useMemo(() => {
     if (!ov) return [];
     const keep = focus ? new Set(focus) : null;
-    return ov.overlaps.filter((o) => !keep || keep.has(o.id));
-  }, [ov, focus]);
+    return ov.overlaps.filter((o) => (!keep || keep.has(o.id)) && (!partner || partnerOf(me!, o) === partner));
+  }, [ov, focus, partner, me]);
+
+  const partners = useMemo(() => {  // neighbors with overlaps, most first
+    if (!ov || !me) return [];
+    const keep = focus ? new Set(focus) : null;
+    const n = new Map<string, number>();
+    ov.overlaps.filter((o) => !keep || keep.has(o.id)).forEach((o) => n.set(partnerOf(me, o), (n.get(partnerOf(me, o)) ?? 0) + 1));
+    return [...n].map(([id, c]) => ({ id, n: c })).sort((a, b) => b.n - a.n);
+  }, [ov, focus, me]);
 
   const scene = useMemo<Scene>(() => {
     if (!me) return {};
     const lines: GeoJSON.Feature[] = [], points: GeoJSON.Feature[] = [];
     const add = (f: GeoJSON.Feature, props: Record<string, unknown>) => (f.geometry?.type === "Point" ? points : lines).push(feature(f, props));
     if (mode !== "overlaps" || !ov) {
-      projects?.features.forEach((f) => add(f, { color: COMPANY[me.company].color, width: 3, radius: 5, opacity: mode === "scanning" ? 0.5 : 0.9,
+      projects?.features.forEach((f) => add(f, { color: me.color, width: 3, radius: 5, opacity: mode === "scanning" ? 0.5 : 0.9,
         title: `<b>${esc(f.properties.name)}</b><br/>${esc(me.name)}` }));
       return { lines: { type: "FeatureCollection", features: lines }, points: { type: "FeatureCollection", features: points } };
     }
@@ -253,8 +270,8 @@ export default function Shell() {
     const hot = sel ? new Set([sel.job_a, sel.job_b]) : null;
     ov.jobs.features.filter((f) => involved.has(f.properties.id)).forEach((f) => {
       const on = !hot || hot.has(f.properties.id);
-      add(f, { color: COMPANY[f.properties.org_id as "desc" | "gpc"].color, width: on && hot ? 5 : 3, radius: on && hot ? 7 : 5, opacity: on ? 0.95 : 0.12,
-        title: `<b>${esc(f.properties.name)}</b><br/>${esc(COMPANY[f.properties.org_id as "desc" | "gpc"].name)}` });
+      add(f, { color: company(f.properties.org_id).color, width: on && hot ? 5 : 3, radius: on && hot ? 7 : 5, opacity: on ? 0.95 : 0.12,
+        title: `<b>${esc(f.properties.name)}</b><br/>${esc(company(f.properties.org_id).name)}` });
     });
     visible.forEach((o) => {
       const on = !sel || sel.id === o.id;
@@ -292,6 +309,10 @@ export default function Shell() {
 
   const overlapsSide = !me ? null : mode === "overlaps" && ov ? (
     <OverlapList me={me} overlaps={visible} requests={reqs} selected={selected} focused={!!focus} onOpen={openOverlap}
+      partners={partners} partner={partner} onPartner={(p) => {
+        setPartner(p); setSelected(null);
+        say(p ? `Showing our overlaps with ${company(p).name}.` : "Showing every neighbor again.", "nod");
+      }}
       onClearFocus={() => { setFocus(null); say("Showing all our overlaps again.", "nod"); const b = bboxOf([ov.jobs]); if (b) setFit({ bbox: b, key: `all${Date.now()}` }); }} />
   ) : (
     <ProjectList me={me} projects={projects} onPick={pickProject} />
@@ -319,7 +340,7 @@ export default function Shell() {
           <span className="flex-1" />
           {me && (
             <span className="flex items-center gap-2 rounded-full bg-soft px-3 py-1 text-sm font-semibold">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ background: COMPANY[me.company].color }} />{me.name}
+              <span className="h-2.5 w-2.5 rounded-full" style={{ background: me.color }} />{me.name}
             </span>
           )}
         </nav>
@@ -341,9 +362,9 @@ export default function Shell() {
                   <div className="pop-in flex flex-col items-center gap-5">
                     <div className="radar">
                       <span className="radar-ring" /><span className="radar-ring" style={{ animationDelay: ".8s" }} /><span className="radar-ring" style={{ animationDelay: "1.6s" }} />
-                      <span className="blip" style={{ left: "64%", top: "30%", background: COMPANY[me.other].color }} />
-                      <span className="blip" style={{ left: "28%", top: "58%", background: COMPANY[me.company].color, animationDelay: ".5s" }} />
-                      <span className="blip" style={{ left: "52%", top: "72%", background: COMPANY[me.other].color, animationDelay: "1s" }} />
+                      <span className="blip" style={{ left: "64%", top: "30%", background: "#ff9f1c" }} />
+                      <span className="blip" style={{ left: "28%", top: "58%", background: me.color, animationDelay: ".5s" }} />
+                      <span className="blip" style={{ left: "52%", top: "72%", background: "#00b8a9", animationDelay: "1s" }} />
                     </div>
                     <div className="text-center">
                       <div className="font-logo text-2xl font-semibold"><span className="dots">Scanning for nearby projects</span></div>
@@ -407,7 +428,7 @@ export default function Shell() {
                       onDismiss={() => { setNotes((xs) => xs.filter((x) => x.id !== n.id)); noticesApi.dismiss(n.id); }} />;
                   }
                   const r = reqs.find((x) => x.id === n.request_id);
-                  const who = COMPANY[me.other].name;
+                  const who = r ? company(n.kind === "request" ? r.from_company : r.to_company).name : "A neighboring utility";
                   return (
                     <button key={n.id} onClick={() => { openRequest(n.request_id!); setPop(null); }} className="flex gap-2.5 rounded-2xl px-2 py-2 text-left hover:bg-soft">
                       <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.read_at ? "bg-transparent" : "bg-[#ff1f3d]"}`} />
@@ -433,7 +454,7 @@ export default function Shell() {
           {pop === "profile" && me && (
             <div className="pop-in absolute bottom-[calc(100%+14px)] right-0 w-[260px] rounded-3xl border-2 border-pen bg-white p-4 shadow-xl">
               <div className="flex items-center gap-2.5">
-                <span className="grid h-10 w-10 place-items-center rounded-full font-logo text-lg font-semibold text-white" style={{ background: COMPANY[me.company].color }}>{me.name[0]}</span>
+                <span className="grid h-10 w-10 place-items-center rounded-full font-logo text-lg font-semibold text-white" style={{ background: me.color }}>{me.name[0]}</span>
                 <span className="min-w-0">
                   <span className="block font-semibold leading-tight">{me.name}</span>
                   <span className="text-sm text-muted">@{me.username}</span>

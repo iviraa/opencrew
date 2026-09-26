@@ -1,13 +1,13 @@
 import { Check, Send, X } from "lucide-react";
 import { useState } from "react";
-import { COMPANY, overlapFor, requests as requestsApi, type ChatAction, type CollabRequest, type Me, type Overlap } from "./data";
+import { company, overlapFor, requests as requestsApi, type ChatAction, type CollabRequest, type Me, type Overlap } from "./data";
 import { say } from "./mascot";
 
 // what already happened, read from live requests so a reloaded chat never offers the same send twice
 function doneState(me: Me, a: ChatAction, reqs: CollabRequest[]) {
   if (a.action === "send_request") {
     const r = reqs.find((x) => x.opportunity_id === a.opportunity_id && x.from_company === me.company && x.status !== "declined");
-    return r ? { r, text: r.status === "approved" ? `Approved by ${COMPANY[me.other].short}` : `Sent to ${COMPANY[me.other].short}` } : null;
+    return r ? { r, text: r.status === "approved" ? `Approved by ${company(r.to_company).short}` : `Sent to ${company(r.to_company).short}` } : null;
   }
   const r = reqs.find((x) => x.id === a.request_id);
   return r && r.status !== "pending" ? { r, text: r.status === "approved" ? "You approved it" : "You declined it" } : null;
@@ -31,7 +31,7 @@ export default function Confirm({ me, action, overlaps, requests, onDone, onOpen
         ? await requestsApi.send(me, await overlapFor(action.opportunity_id!, overlaps), text)
         : await requestsApi.respond(action.request_id!, action.decision!, text);
       onDone(r);
-      say(send ? `Done! Request sent to ${me.other_name}.` : action.decision === "approved" ? "Approved! I'll let them know." : "Declined. I'll pass on your feedback.",
+      say(send ? `Done! Request sent to ${company(r.to_company).name}.` : action.decision === "approved" ? "Approved! I'll let them know." : "Declined. I'll pass on your feedback.",
         send || action.decision === "approved" ? "happy" : "nod");
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e)); say("That didn't go through.", "sad");

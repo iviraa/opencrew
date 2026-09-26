@@ -3,7 +3,7 @@ import { marked } from "marked";
 import { ArrowUp, Brain, CloudOff, Eraser, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import Confirm from "./Confirm";
-import type { ChatAction, CollabRequest, Me, Overlap } from "./data";
+import { company, type ChatAction, type CollabRequest, type Me, type Overlap } from "./data";
 import { GoalChip } from "./GoalPanel";
 import MemoryList from "./Memory";
 import { OverlapCard, latestFor } from "./panels";
@@ -21,8 +21,9 @@ export default function Chat({ me, msgs, busy, overlaps, requests, onSend, onOpe
   const [showMemory, setShowMemory] = useState(false);
   const end = useRef<HTMLDivElement>(null);
   const byId = new Map((overlaps ?? []).map((o) => [o.id, o]));
+  const lastSent = requests.find((r) => r.from_company === me.company);  // newest first
   const ideas = [
-    `Did ${me.other_name} approve my last request?`,
+    lastSent ? `Did ${company(lastSent.to_company).name} approve my last request?` : "Any requests waiting for me?",
     "What overlaps happen in 2025?",
     "Show crossings and same-land overlaps",
     "Any severe weather coming this week?",

@@ -88,7 +88,7 @@ export function GoalPanel({ me, id, overlaps, requests, onBack, onOpenOverlap, o
       } catch (e) { setMsg(`#${steps[i].opportunity_id}: ${e instanceof Error ? e.message : e}`); }
     }
     try { await save(steps); } catch (e) { setMsg(String(e instanceof Error ? e.message : e)); }
-    if (ok) say(`Sent ${ok} request${ok === 1 ? "" : "s"} to ${me.other_name}!`, "happy");
+    if (ok) say(`Sent ${ok} request${ok === 1 ? "" : "s"}!`, "happy");
     setBusy(false); setAsking(null);
   };
 

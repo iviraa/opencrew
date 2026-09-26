@@ -128,6 +128,9 @@ def app_tools(ctx):
     for name in ("estimate_savings", "search_projects", "project_details", "compare_projects", "focus_map",
                  "outlook", "site_hazards", "weather_alerts", "incidents_near"):
         tools[name] = shared[name]
+    for name in ("search_projects", "project_details"):  # the planner tools only knew two companies
+        fn, desc, props, req = tools[name]
+        tools[name] = (fn, desc, {**props, "org": {"type": "string", "description": "company id, e.g. " + ", ".join(list(companies())[:4])}}, req)
     tools.update(act_tools(ctx))
     tools.update(memory_tools(ctx))
     return tools

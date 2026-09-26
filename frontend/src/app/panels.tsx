@@ -1,7 +1,7 @@
 import { ArrowDownLeft, ArrowUpRight, Check, ChevronLeft, Clock3, Handshake, MapPin, Send, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
-  COMPANY, TIER_LABEL, ago, api, miles, month, requests as requestsApi, usd,
+  TIER_LABEL, company, partnerOf, ago, api, miles, month, requests as requestsApi, usd,
   type CollabRequest, type Jobs, type Me, type Overlap, type OverlapDetail,
 } from "./data";
 import { say } from "./mascot";
@@ -73,7 +73,7 @@ export function ProjectList({ me, projects, onPick }: { me: Me; projects: Jobs |
       <div className="thin-scroll -mr-2 flex-1 overflow-y-auto pr-2">
         {rows.map((p) => (
           <button key={p.id} onClick={() => onPick(p.id)} className="group flex w-full gap-2.5 rounded-xl px-2 py-2 text-left hover:bg-soft">
-            <span className="mt-1 h-8 w-1 shrink-0 rounded-full" style={{ background: COMPANY[me.company].color }} />
+            <span className="mt-1 h-8 w-1 shrink-0 rounded-full" style={{ background: me.color }} />
             <span className="min-w-0">
               <span className="line-clamp-2 text-sm font-semibold leading-snug">{p.name}</span>
               <span className="text-xs text-muted">{[p.voltage_kv && `${p.voltage_kv} kV`, `${month(p.start_at)} to ${month(p.end_at)}`].filter(Boolean).join(" · ")}</span>
@@ -93,6 +93,9 @@ export function OverlapCard({ me, o, req, active, onClick }: { me: Me; o: Overla
       className={`w-full rounded-2xl border-2 px-3 py-2.5 text-left transition ${active ? "border-pen bg-grape-soft" : "border-transparent hover:border-line hover:bg-soft"}`}>
       <div className="mb-1 flex items-center gap-2">
         <TierChip tier={o.tier} /><span className="text-xs text-faint">#{o.id}</span>
+        <span className="flex min-w-0 items-center gap-1 truncate text-xs font-semibold text-muted">
+          <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: company(partnerOf(me, o)).color }} />{company(partnerOf(me, o)).short}
+        </span>
         <span className="flex-1" />{req && <StatusChip status={req.status} />}
       </div>
       <div className="line-clamp-2 text-sm font-semibold leading-snug">{s.ours.name}</div>
@@ -106,18 +109,34 @@ export function OverlapCard({ me, o, req, active, onClick }: { me: Me; o: Overla
   );
 }
 
-export function OverlapList({ me, overlaps, requests, selected, focused, onOpen, onClearFocus }: {
+export function OverlapList({ me, overlaps, requests, selected, focused, partners, partner, onPartner, onOpen, onClearFocus }: {
   me: Me; overlaps: Overlap[]; requests: CollabRequest[]; selected: number | null; focused: boolean;
+  partners: { id: string; n: number }[]; partner: string | null; onPartner: (id: string | null) => void;
   onOpen: (id: number) => void; onClearFocus: () => void;
 }) {
+  const total = partners.reduce((a, p) => a + p.n, 0);
   return (
     <>
-      <PanelHeader title={`${overlaps.length} overlap${overlaps.length === 1 ? "" : "s"}`} sub={`with ${me.other_name} projects nearby`}
+      <PanelHeader title={`${overlaps.length} overlap${overlaps.length === 1 ? "" : "s"}`}
+        sub={partner ? `with ${company(partner).name}` : partners.length === 1 ? `with ${company(partners[0].id).name}` : "with neighboring utilities"}
         right={focused ? (
           <button onClick={onClearFocus} className="mt-1 flex items-center gap-1 rounded-full bg-grape-soft px-2.5 py-1 text-xs font-semibold text-grape hover:bg-grape hover:text-white">
             From chat <X size={13} />
           </button>
         ) : undefined} />
+      {partners.length > 1 && (
+        <div className="thin-scroll -mx-1 mb-2 flex gap-1.5 overflow-x-auto px-1 pb-1">
+          <button onClick={() => onPartner(null)} className={`shrink-0 rounded-full border-2 px-2.5 py-0.5 text-xs font-semibold ${partner ? "border-line text-muted hover:border-pen" : "border-pen bg-grape-soft"}`}>
+            All {total}
+          </button>
+          {partners.map((p) => (
+            <button key={p.id} onClick={() => onPartner(p.id === partner ? null : p.id)}
+              className={`flex shrink-0 items-center gap-1.5 rounded-full border-2 px-2.5 py-0.5 text-xs font-semibold ${p.id === partner ? "border-pen bg-grape-soft" : "border-line text-muted hover:border-pen"}`}>
+              <span className="h-2 w-2 rounded-full" style={{ background: company(p.id).color }} />{company(p.id).short} {p.n}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="thin-scroll -mr-2 flex flex-1 flex-col gap-1 overflow-y-auto pr-2">
         {overlaps.map((o) => <OverlapCard key={o.id} me={me} o={o} req={latestFor(requests, o.id)} active={o.id === selected} onClick={() => onOpen(o.id)} />)}
         {!overlaps.length && <p className="px-2 py-6 text-center text-sm text-muted">No overlaps match.</p>}
@@ -165,7 +184,7 @@ export function OverlapDetailPanel({ me, id, requests, onBack, onSent, onOpenReq
     setSending(true); setErr(null);
     try {
       onSent(await requestsApi.send(me, d, note));
-      setJustSent(true); setNote(""); say(`Request sent to ${me.other_name}!`, "happy");
+      setJustSent(true); setNote(""); say(`Request sent to ${company(partnerOf(me, d)).name}!`, "happy");
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e)); say("That request didn't go through.", "sad");
     } finally { setSending(false); }
@@ -173,6 +192,7 @@ export function OverlapDetailPanel({ me, id, requests, onBack, onSent, onOpenReq
 
   if (!d) return <><PanelHeader title={`Overlap #${id}`} onBack={onBack} /><p className="text-sm text-muted">{err ?? <span className="dots">Loading</span>}</p></>;
   const s = sides(me, d);
+  const them = company(partnerOf(me, d));
   const ourJob = d.a.id === s.ours.job ? d.a : d.b;
   const theirJob = d.a.id === s.ours.job ? d.b : d.a;
   const budget = (ourJob.cost_usd ?? 0) + (theirJob.cost_usd ?? 0);
@@ -193,9 +213,9 @@ export function OverlapDetailPanel({ me, id, requests, onBack, onSent, onOpenReq
 
         <section className="flex flex-col gap-2">
           <h3 className="text-sm font-semibold text-muted">Projects</h3>
-          <ProjectBlock who={`Ours · ${me.name}`} color={COMPANY[me.company].color} name={s.ours.name} start={s.ours.start} end={s.ours.end}
+          <ProjectBlock who={`Ours · ${me.name}`} color={company(me.company).color} name={s.ours.name} start={s.ours.start} end={s.ours.end}
             extra={[ourJob.voltage_kv && `${ourJob.voltage_kv} kV`, ourJob.cost_usd && usd(ourJob.cost_usd)].filter(Boolean).join(" · ")} />
-          <ProjectBlock who={`Theirs · ${me.other_name}`} color={COMPANY[me.other].color} name={s.theirs.name} start={s.theirs.start} end={s.theirs.end}
+          <ProjectBlock who={`Theirs · ${them.name}`} color={them.color} name={s.theirs.name} start={s.theirs.start} end={s.theirs.end}
             extra={[theirJob.voltage_kv && `${theirJob.voltage_kv} kV`, theirJob.cost_usd && usd(theirJob.cost_usd)].filter(Boolean).join(" · ")} />
         </section>
 
@@ -239,25 +259,25 @@ export function OverlapDetailPanel({ me, id, requests, onBack, onSent, onOpenReq
           {(justSent && !req) || (req?.status === "pending" && req.from_company === me.company) ? (  // the live status wins once it arrives
             <div className="pop-in">
               <p className="flex items-center gap-1.5 text-sm font-semibold text-save"><Check size={16} /> Collaboration request sent</p>
-              <p className="mt-0.5 text-xs text-muted">We'll let you know when {me.other_name} answers.</p>
+              <p className="mt-0.5 text-xs text-muted">We'll let you know when {them.name} answers.</p>
             </div>
           ) : req?.status === "pending" ? (
             <div>
-              <p className="text-sm">{me.other_name} sent you a request for this overlap.</p>
+              <p className="text-sm">{them.name} sent you a request for this overlap.</p>
               <button onClick={() => onOpenRequest(req.id)} className="pen-btn mt-2 bg-grape px-4 py-1.5 text-sm font-semibold text-white">Review request</button>
             </div>
           ) : (
             <>
               {req && (
                 <div className="mb-2 text-sm">
-                  <StatusChip status={req.status} /> <span className="text-muted">{req.from_company === me.company ? `by ${me.other_name}` : "by you"} {ago(req.responded_at ?? req.created_at)}</span>
+                  <StatusChip status={req.status} /> <span className="text-muted">{req.from_company === me.company ? `by ${them.name}` : "by you"} {ago(req.responded_at ?? req.created_at)}</span>
                   {req.feedback && <p className="mt-1 rounded-xl bg-soft px-2.5 py-1.5 text-xs italic">"{req.feedback}"</p>}
                   <button onClick={() => onOpenRequest(req.id)} className="mt-1 text-xs font-semibold text-grape underline">See request</button>
                 </div>
               )}
               {req?.status !== "approved" && (
                 <>
-                  <p className="mb-1.5 text-sm text-muted">Ask {me.other_name} to plan this work together.</p>
+                  <p className="mb-1.5 text-sm text-muted">Ask {them.name} to plan this work together.</p>
                   <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={2000} placeholder="Add a note (optional)"
                     className="w-full resize-none rounded-xl border-2 border-line px-2.5 py-2 text-sm outline-none focus:border-pen" />
                   <button onClick={send} disabled={sending} className="pen-btn mt-2 flex w-full items-center justify-center gap-2 bg-grape px-4 py-2 text-sm font-semibold text-white">
@@ -283,7 +303,7 @@ export function RequestPanel({ me, id, requests, onBack, onOpenOverlap, onRespon
   const [err, setErr] = useState<string | null>(null);
   if (!r) return <><PanelHeader title="Request" onBack={onBack} /><p className="text-sm text-muted">Loading...</p></>;
   const incoming = r.to_company === me.company;
-  const them = COMPANY[incoming ? r.from_company : r.to_company];
+  const them = company(incoming ? r.from_company : r.to_company);
 
   const answer = async (decision: "approved" | "declined") => {
     setBusy(decision); setErr(null);
@@ -369,7 +389,7 @@ export function HistoryPanel({ me, requests, onBack, onOpen, onGoals }: { me: Me
                 {out ? <ArrowUpRight size={15} /> : <ArrowDownLeft size={15} />}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="flex items-center gap-2"><span className="text-xs text-muted">{out ? `To ${COMPANY[r.to_company].short}` : `From ${COMPANY[r.from_company].short}`} · {ago(r.created_at)}</span></span>
+                <span className="flex items-center gap-2"><span className="text-xs text-muted">{out ? `To ${company(r.to_company).short}` : `From ${company(r.from_company).short}`} · {ago(r.created_at)}</span></span>
                 <span className="line-clamp-2 text-sm font-semibold leading-snug">{out ? r.summary.ours : r.summary.theirs}</span>
                 <span className="mt-0.5 inline-block"><StatusChip status={r.status} /></span>
               </span>
