@@ -5,7 +5,7 @@ import {
   type AgentTask, type CollabRequest, type GoalStep, type Me, type Overlap,
 } from "./data";
 import { say } from "./mascot";
-import { PanelHeader, StatusChip } from "./panels";
+import { PanelHeader, StatusChip, VerdictChip } from "./panels";
 
 type State = "draft" | "skipped" | CollabRequest["status"];
 
@@ -139,7 +139,10 @@ export function GoalPanel({ me, id, overlaps, requests, onBack, onOpenOverlap, o
           const st = states[i];
           return (
             <div key={s.opportunity_id} className={`rounded-2xl border-2 px-3 py-2.5 ${st === "draft" && live ? "border-line" : "border-transparent bg-soft"}`}>
-              <div className="mb-1 flex items-center gap-2"><StateChip state={st} /><span className="text-xs text-faint">#{s.opportunity_id}</span></div>
+              <div className="mb-1 flex items-center gap-2">
+                <StateChip state={st} />{s.feasibility && <VerdictChip verdict={s.feasibility.verdict} score={s.feasibility.score} />}
+                <span className="text-xs text-faint">#{s.opportunity_id}</span>
+              </div>
               <div className="line-clamp-2 text-sm font-semibold leading-snug">{s.title}</div>
               {st === "draft" && live ? (
                 <>
