@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS job (
   source_page    INT,
   extraction     TEXT,                   -- parser | llm | manual | feed
   confidence     REAL,
+  located_via    JSONB,                  -- how each endpoint was found: organizer, osm id, gemini pick, town
   simulated      BOOLEAN DEFAULT FALSE,
   created_at     TIMESTAMPTZ DEFAULT now()
 );

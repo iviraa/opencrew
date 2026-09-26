@@ -9,11 +9,15 @@ from shapely.geometry import Point, shape
 from shapely.prepared import prep
 
 from app.db import ROOT
-from app.geo.nominatim import geocode
+from app.geo import llm_pick
+from app.geo.names import endpoint_names, foreign, mentioned_stations, stated_full_miles
+from app.geo.nominatim import TOWN, geocode, lookup
 
 HOME = {"desc": "SC", "gpc": "GA"}
 MAX_SPAN_KM = 100  # longest plausible line in these filings
 MIN_CONF = 0.6
+TOWN_CONF = 0.35  # a town centroid is only an area, never a site
+LLM_CONF = 0.6
 OUT_OF_STATE = 0.6  # tie lines cross the border, so penalise instead of reject
 
 OPERATORS = {"desc": re.compile(r"dominion|sce&g|south carolina electric", re.I), "gpc": re.compile(r"georgia power|southern", re.I)}
@@ -82,9 +86,10 @@ class Locator:
             return [{"lat": point[0], "lon": point[1], "conf": 1.0, "via": "organizer", "name": name}]
         home = self.home(org)
         out = []
+        short = len(key) < 6 and " " not in key  # "creek" must not match "acree"
         for s in self.osm:
             sc = fuzz.token_sort_ratio(key, s["norm"])
-            if sc < 80:
+            if sc < 80 or (short and key != s["norm"]):
                 continue
             conf = sc / 100 * (1.0 if OPERATORS[org].search(s.get("operator") or "") else 0.85)
             conf *= 1.0 if home.contains(Point(s["lon"], s["lat"])) else OUT_OF_STATE
@@ -105,10 +110,58 @@ class Locator:
         hit = geocode(self.states[HOME[org]][0], key.title())  # town-level guess, shown as approx
         return hit if hit and km((hit["lat"], hit["lon"]), near) <= 60 else None  # must sit near the located endpoint
 
-    def place(self, org, endpoints, project=""):
+    def loose(self, org, names, limit=8):
+        """Weaker OSM matches inside the home state, for gemini to choose from."""
+        home, out = self.home(org), {}
+        for n in names:
+            key = norm(n)
+            if len(key) < 3:
+                continue
+            for s in self.osm:
+                sc = fuzz.token_set_ratio(key, s["norm"])
+                if sc >= 70 and home.contains(Point(s["lon"], s["lat"])):
+                    out[s["osm"]] = max(out.get(s["osm"], (0, s)), (sc, s), key=lambda x: x[0])
+        return [s for _, s in sorted(out.values(), key=lambda x: -x[0])[:limit]]
+
+    def town(self, org, name):
+        state = self.states[HOME[org]][0]
+        hit = lookup(f"{name.title()}, {state}")
+        if not hit or hit.get("addresstype") not in TOWN:
+            return None  # a county or region is too vague for a station
+        lat, lon = float(hit["lat"]), float(hit["lon"])
+        if not self.home(org).contains(Point(lon, lat)):
+            return None
+        return {"lat": lat, "lon": lon, "conf": TOWN_CONF, "via": f"town:{hit.get('display_name', '')[:60]}", "name": name, "approx": True}
+
+    def place_job(self, org, job):
+        """Best defensible location for a filed project, or [None] with a reason."""
+        names = endpoint_names(job)
+        stated = stated_full_miles(job.get("description"))
+        span = min(MAX_SPAN_KM, stated * 1.609 * 1.8 + 8) if stated else MAX_SPAN_KM  # the filing says how long the line is
+        picks = self.place(org, names or [job["name"]], job["name"], span)
+        if any(picks):
+            return picks, None
+        for n in mentioned_stations(job.get("description")):  # "install reactors at Anthony Shoals substation"
+            c = self.candidates(org, n, job["name"])
+            if c:
+                return [{**c[0], "via": f"description:{c[0]['via']}"}], None
+        mentioned = mentioned_stations(job.get("description"))
+        options = self.loose(org, names + mentioned)
+        if options:
+            chosen = llm_pick.choose(job, options)
+            if chosen:
+                return [{"lat": chosen["lat"], "lon": chosen["lon"], "conf": LLM_CONF, "via": f"gemini:{chosen['osm']}", "name": chosen["name"]}], None
+        local = [n for n, e in zip(names, job.get("endpoints") or names) if not foreign(e)] + mentioned
+        for n in local:
+            hit = self.town(org, n)
+            if hit:
+                return [hit], None
+        return [None], "no substation, plant or town with this name was found in the utility's state"
+
+    def place(self, org, endpoints, project="", max_span=MAX_SPAN_KM):
         cands = [self.candidates(org, e, project)[:5] for e in endpoints]
         if len(cands) == 2 and cands[0] and cands[1]:
-            pairs = [(a, b) for a in cands[0] for b in cands[1] if km((a["lat"], a["lon"]), (b["lat"], b["lon"])) <= MAX_SPAN_KM]
+            pairs = [(a, b) for a in cands[0] for b in cands[1] if km((a["lat"], a["lon"]), (b["lat"], b["lon"])) <= max_span]
             if pairs:
                 return list(max(pairs, key=lambda p: p[0]["conf"] + p[1]["conf"]))
             keep = 0 if cands[0][0]["conf"] >= cands[1][0]["conf"] else 1  # endpoints disagree; keep the stronger one
