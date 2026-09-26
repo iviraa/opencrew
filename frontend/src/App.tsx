@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, type Assumption, type CrewlyAction, type ReviewItem, type StormFrame, type JobCollection, type Opportunity, type OpportunityDetail, type Tier } from "./api";
+import { api, type Assumption, type CrewlyAction, type JointPlan as Plan, type PlanConstraints, type ReviewItem, type StormFrame, type JobCollection, type Opportunity, type OpportunityDetail, type Tier } from "./api";
 import BriefModal from "./components/BriefModal";
+import CrewLanes from "./components/CrewLanes";
 import Crewly from "./components/Crewly";
 import DetailPanel from "./components/DetailPanel";
 import IngestModal from "./components/IngestModal";
+import JointPlan from "./components/JointPlan";
 import MapView from "./components/MapView";
 import OpportunityList from "./components/OpportunityList";
 import ReviewPanel from "./components/ReviewPanel";
@@ -48,6 +50,10 @@ export default function App() {
   const [listTab, setListTab] = useState<{ tab: string; at: number } | null>(null);
   const [timelineFilter, setTimelineFilter] = useState<{ years: [number, number] | null; orgs: string[] | null } | null>(null);
   const [crewlyBrief, setCrewlyBrief] = useState<{ markdown: string; source: string } | null>(null);
+  const [planView, setPlanView] = useState(false);
+  const [plan, setPlan] = useState<Plan | null>(null);
+  const [solving, setSolving] = useState(false);
+  const [pending, setPending] = useState<{ constraints: PlanConstraints; rules: string[] } | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -84,6 +90,17 @@ export default function App() {
   }, [selectedId, horizon]);
 
   useEffect(() => { api.review().then(setReview).catch(() => {}); }, [reload]);
+
+  useEffect(() => {
+    if (!planView) return;
+    setSolving(true);
+    api.plan().then(setPlan).catch((e) => setError(String(e))).finally(() => setSolving(false));
+  }, [planView, reload]);
+
+  const solvePlan = (c: PlanConstraints) => {
+    setSolving(true);
+    api.solvePlan(c).then(setPlan).catch((e) => setError(e instanceof Error ? e.message : String(e))).finally(() => setSolving(false));
+  };
 
   const placeAt = (lon: number, lat: number) => {
     if (placingId == null) return;
@@ -133,6 +150,8 @@ export default function App() {
       if (a.type === "view") { if (a.horizon) switchHorizon(a.horizon); if (a.tier) setTier(a.tier); if (a.tab === "review") setReviewOpen(true); else if (a.tab) { setReviewOpen(false); setListTab({ tab: a.tab, at: Date.now() }); } }
       if (a.type === "timeline") setTimelineFilter({ years: a.years, orgs: a.orgs });
       if (a.type === "brief") { setSelectedId(a.opportunity_id); setCrewlyBrief({ markdown: a.markdown, source: a.source }); }
+      if (a.type === "plan") { setReviewOpen(false); setListTab({ tab: "plan", at: Date.now() }); setReload((n) => n + 1); }
+      if (a.type === "pending_constraints") { setPending({ constraints: a.constraints, rules: a.rules }); setReviewOpen(false); setListTab({ tab: "plan", at: Date.now() }); }
     }
   };
 
@@ -185,7 +204,8 @@ export default function App() {
           {reviewOpen
             ? <ReviewPanel items={review} placingId={placingId} onPlace={setPlacingId} onClose={() => { setReviewOpen(false); setPlacingId(null); }} />
             : <OpportunityList items={opps} shown={shown} selectedId={selectedId} tier={tier} onTier={setTier} onSelect={setSelectedId}
-            crewlyFiltered={crewlyIds !== null} onClearCrewly={() => setCrewlyIds(null)} loading={loading} roadOnly={roadOnly} onRoadOnly={setRoadOnly} tabRequest={listTab}
+            crewlyFiltered={crewlyIds !== null} onClearCrewly={() => setCrewlyIds(null)} loading={loading} roadOnly={roadOnly} onRoadOnly={setRoadOnly} tabRequest={listTab} onTab={(t) => setPlanView(t === "plan")}
+            planPanel={<JointPlan plan={plan} solving={solving} onSolve={solvePlan} pending={pending} onDiscardPending={() => setPending(null)} selectedId={selectedId} onSelect={setSelectedId} />}
             emptyText={horizon === "emergency" ? "No cross-utility restoration overlaps yet at this time. Scrub the replay forward." : "No opportunities match these filters."} />}
         </aside>
         <section className="flex min-w-0 flex-1 flex-col">
@@ -199,7 +219,10 @@ export default function App() {
             )}
           </div>
           <div className="h-[210px] shrink-0 border-t border-slate-200">
-            {horizon === "emergency"
+            {planView && horizon === "long" && !reviewOpen
+              ? <CrewLanes rows={plan?.schedule ?? []} colors={Object.fromEntries((jobs?.features ?? []).map((f) => [f.properties.org_id, f.properties.color]))}
+                  selected={selected ? [selected.job_a, selected.job_b] : []} />
+              : horizon === "emergency"
               ? <StormReplay frame={storm} at={stormAt} onAt={setStormAt} start={STORM_START} end={STORM_END} landfall={LANDFALL} loading={stormLoading} />
               : <Timeline jobs={jobs} opportunities={shown} selected={selected} onSelect={setSelectedId} filter={timelineFilter} onClearFilter={() => setTimelineFilter(null)}
                   hoverKey={hover?.key ?? null} scrollToHover={hover?.from === "map"} onHover={(key) => setHover(key ? { key, from: "timeline" } : null)} />}

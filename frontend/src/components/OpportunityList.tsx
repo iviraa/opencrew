@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { Opportunity, Tier } from "../api";
 import Procurement from "./Procurement";
 import { FLAG_LABEL, TIER_COLOR, TIER_LABEL, miles, pct, title, usd } from "../format";
@@ -17,6 +17,8 @@ type Props = {
   roadOnly: boolean;
   onRoadOnly: (v: boolean) => void;
   tabRequest?: { tab: string; at: number } | null;
+  planPanel?: ReactNode;
+  onTab?: (tab: string) => void;
 };
 
 export function TierChip({ tier }: { tier: Tier }) {
@@ -27,17 +29,21 @@ export function TierChip({ tier }: { tier: Tier }) {
   );
 }
 
-export default function OpportunityList({ items, shown, crewlyFiltered, onClearCrewly, selectedId, tier, onTier, onSelect, loading, emptyText, roadOnly, onRoadOnly, tabRequest }: Props) {
-  const [tab, setTab] = useState<"overlaps" | "equipment">("overlaps");
-  useEffect(() => { if (tabRequest?.tab === "overlaps" || tabRequest?.tab === "equipment") setTab(tabRequest.tab); }, [tabRequest]);  // crewly can switch tabs
+export default function OpportunityList({ items, shown, crewlyFiltered, onClearCrewly, selectedId, tier, onTier, onSelect, loading, emptyText, roadOnly, onRoadOnly, tabRequest, planPanel, onTab }: Props) {
+  const [tab, setTabState] = useState<"overlaps" | "equipment" | "plan">("overlaps");
+  const setTab = (t: "overlaps" | "equipment" | "plan") => { setTabState(t); onTab?.(t); };
+  useEffect(() => { if (tabRequest?.tab === "overlaps" || tabRequest?.tab === "equipment" || tabRequest?.tab === "plan") setTab(tabRequest.tab); }, [tabRequest]);  // crewly can switch tabs
   const tabs = (
     <div className="mb-2 flex gap-4 text-sm">
-      {(["overlaps", "equipment"] as const).map((t) => (
+      {(["overlaps", "equipment", "plan"] as const).map((t) => (
         <button key={t} onClick={() => setTab(t)}
-          className={`border-b-2 pb-1 font-semibold capitalize ${tab === t ? "border-slate-900 text-slate-900" : "border-transparent text-slate-400"}`}>{t}</button>
+          className={`border-b-2 pb-1 font-semibold capitalize ${tab === t ? "border-slate-900 text-slate-900" : "border-transparent text-slate-400"}`}>{t === "plan" ? "Joint plan" : t}</button>
       ))}
     </div>
   );
+  if (tab === "plan") {
+    return <div className="flex h-full flex-col"><div className="border-b border-slate-200 px-4 pt-3">{tabs}</div>{planPanel}</div>;
+  }
   if (tab === "equipment") {
     return <div className="flex h-full flex-col"><div className="border-b border-slate-200 px-4 pt-3">{tabs}</div><Procurement /></div>;
   }

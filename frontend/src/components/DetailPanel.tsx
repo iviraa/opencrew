@@ -3,6 +3,7 @@ import { api, type Assumption, type Job, type OpportunityDetail, type Savings } 
 import { BASIS_LABEL, FLAG_LABEL, QUALITY_LABEL, STATUSES, miles, monthYear, pct, title, usd } from "../format";
 import BriefModal from "./BriefModal";
 import Outreach from "./Outreach";
+import PlanDecision from "./PlanDecision";
 import Vendors from "./Vendors";
 import { TierChip } from "./OpportunityList";
 
@@ -83,6 +84,7 @@ export default function DetailPanel({ detail, assumptions, onClose, onStatus, on
           </div>
         </section>
 
+        {detail.horizon === "long" && <PlanDecision opportunityId={detail.id} />}
         <Vendors opportunityId={detail.id} />
 
         <section className="rounded-lg bg-emerald-50 p-3 ring-1 ring-emerald-200">

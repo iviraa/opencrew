@@ -8,7 +8,7 @@ export type Job = {
 };
 
 export type Opportunity = {
-  id: number; job_a: string; job_b: string; distance_m: number; center_distance_m: number; overlap_m: number; drive_min: number | null; drive_km: number | null; tier: Tier;
+  id: number; job_a: string; job_b: string; horizon: string; distance_m: number; center_distance_m: number; overlap_m: number; drive_min: number | null; drive_km: number | null; tier: Tier;
   time_overlap: number; time_gap_days: number | null; risk: number; vulnerability: number; score: number; flags: string[]; savings_low: number; savings_high: number;
   status: string; link: GeoJSON.LineString;
   a_name: string; a_phase: string | null; a_start: string; a_org: string; a_color: string; a_conf: number; a_quality: string;
@@ -32,6 +32,7 @@ export type CrewlyAction =
   | { type: "timeline"; years: [number, number] | null; orgs: string[] | null }
   | { type: "brief"; opportunity_id: number; markdown: string; source: string }
   | { type: "plan" }
+  | { type: "pending_constraints"; constraints: PlanConstraints; rules: string[] }
   | { type: "fly"; bbox: [number, number, number, number] };
 
 export type CrewlyReply = { reply: string; ui_actions: CrewlyAction[]; tool_calls: { name: string; args: Record<string, unknown> }[]; unsourced: string[] };
@@ -66,17 +67,40 @@ export type Vendor = { name: string; address: string; phone: string | null; webs
 
 export type JobCollection = GeoJSON.FeatureCollection<GeoJSON.Geometry, Job>;
 
-export type PlanLimits = { max_delay_months: number; max_drive_min: number; min_overlap_months: number };
+export type PlanConstraints = {
+  max_slip_months: number; slip_overrides: Record<string, number>; max_advance_months: number;
+  crew_counts: Record<string, Record<string, number>>; blackouts: { site: string; months: number[]; phase_kind: string }[];
+  chain_gap_months: number; crew_drive_min: number; crew_km: number; yard_km: number; costs: Record<string, number>;
+};
+
+export type PlanMetrics = {
+  projects: number; mobilizations: number; yards: number; idle_months: number; slip_months: number; slipped_projects: number;
+  late_projects: number; advance_months: number; shared_crews: number; cost_k: number;
+};
+
+export type PlanRow = {
+  job_id: string; name: string; org: string; crew: string; crew_org: string; yard: string; yard_label: string;
+  phases: { phase: string; start: string; end: string }[]; filed_start: string; filed_end: string; in_service: string;
+  slip: number; slip_limit: number; shift: number; baseline_crew: string | null; why: string | null;
+};
 
 export type PlanDecisionItem = {
-  opportunity_id: number; a: string; b: string; decision: "share" | "no_share"; sentence: string; savings_mid: number;
-  drive_min: number | null; shift: { project: string; months: number } | null; overlap_months: number | null; reasons: { rule: string }[];
+  opportunity_id: number; a: string; b: string; job_a: string; job_b: string; decision: "share" | "no_share"; sentence: string;
+  reasons: { rule: string }[]; drive_min: number | null; km: number | null; eligible: boolean;
 };
 
-export type CrewPlanResult = {
-  plan_id: number; limits: PlanLimits; decisions: PlanDecisionItem[];
-  summary: { pairs: number; shared: number; savings_mid_total: number; rejected_by: Record<string, number> };
+export type PlanHeadline = {
+  mobilizations_before: number; mobilizations_after: number; mobilizations_cut: number; mobilizations_cut_pct: number;
+  yards_before: number; yards_after: number; savings_low: number; savings_high: number; late_projects: number; cost_cut_k: number;
+  crews: Record<string, Record<string, number>>;
 };
+
+export type JointPlan = {
+  plan_id: number; status: string; problem?: string | null; constraints: PlanConstraints; baseline: PlanMetrics | null;
+  coordinated: PlanMetrics | null; headline: PlanHeadline | null; schedule: PlanRow[]; decisions: PlanDecisionItem[];
+};
+
+export type PlanCheck = { constraints: PlanConstraints; notes: string[]; errors: string[]; valid: boolean };
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const json = typeof init?.body === "string";  // FormData sets its own multipart header
@@ -121,7 +145,8 @@ export const api = {
   crewly: (messages: { role: string; text: string }[]) => call<CrewlyReply>("/crewly", { method: "POST", body: JSON.stringify({ messages }) }),
   setStatus: (id: number, status: string) =>
     call<{ id: number; status: string }>(`/opportunities/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
-  plan: () => call<CrewPlanResult>("/plan"),
-  runPlan: (limits: PlanLimits) => call<CrewPlanResult>("/plan/run", { method: "POST", body: JSON.stringify(limits) }),
+  plan: () => call<JointPlan>("/plan"),
+  solvePlan: (constraints: Partial<PlanConstraints>) => call<JointPlan>("/plan/solve", { method: "POST", body: JSON.stringify({ constraints }) }),
+  checkPlan: (constraints: Partial<PlanConstraints>) => call<PlanCheck>("/plan/constraints", { method: "POST", body: JSON.stringify({ constraints }) }),
   explainPlan: (id: number) => call<{ decisions: PlanDecisionItem[] }>(`/plan/explain?opportunity_id=${id}`),
 };
