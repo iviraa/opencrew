@@ -86,6 +86,7 @@ export default function Timeline({ jobs, opportunities, selected, onSelect, hove
             <div className="absolute inset-y-0 bg-violet-500/10" style={{ left: x(overlap[0]), width: `calc(${x(overlap[1])} - ${x(overlap[0])})` }} />
           )}
         </div>
+        {rows.length === 0 && <div className="px-3 py-4 text-xs text-slate-400">{jobs ? "No projects in the current list." : "Loading projects…"}</div>}
         {rows.map((r) => {
           const header = r.org !== lastOrg;
           lastOrg = r.org;

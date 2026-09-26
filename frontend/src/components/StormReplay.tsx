@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { StormFrame } from "../api";
 
-type Props = { frame: StormFrame | null; at: number; onAt: (t: number) => void; start: number; end: number; landfall: number };
+type Props = { frame: StormFrame | null; at: number; onAt: (t: number) => void; start: number; end: number; landfall: number; loading: boolean };
 
 const STEP_MS = 3 * 3600e3;
 
@@ -10,7 +10,7 @@ function rel(t: number, landfall: number) {
   return h === 0 ? "Landfall" : `T${h > 0 ? "+" : "−"}${Math.abs(h)}h`;
 }
 
-export default function StormReplay({ frame, at, onAt, start, end, landfall }: Props) {
+export default function StormReplay({ frame, at, onAt, start, end, landfall, loading }: Props) {
   const [playing, setPlaying] = useState(false);
   const atRef = useRef(at);
   atRef.current = at;
@@ -39,6 +39,7 @@ export default function StormReplay({ frame, at, onAt, start, end, landfall }: P
         <div className="text-xs text-slate-500">
           {new Date(at).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} ET
         </div>
+        {(loading || !frame) && <div className="text-[11px] text-slate-400">{frame ? "updating…" : "loading storm data…"}</div>}
         <div className="ml-auto text-[11px] text-slate-400">Hurricane Helene, Sept 2024 · historical replay from NHC, NWS and SPC archives</div>
       </div>
       <input type="range" min={start} max={end} step={STEP_MS / 3} value={at} onChange={(e) => { setPlaying(false); onAt(Number(e.target.value)); }}

@@ -39,18 +39,36 @@ export default function App() {
   const [storm, setStorm] = useState<StormFrame | null>(null);
   const [fly, setFly] = useState<{ bbox: [number, number, number, number]; at: number } | null>(null);
   const [hover, setHover] = useState<{ key: string; from: "map" | "timeline" } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [stormLoading, setStormLoading] = useState(false);
 
   useEffect(() => {
+    setLoading(true);
     Promise.all([api.jobs(horizon), api.opportunities(horizon), api.assumptions()])
       .then(([j, o, a]) => { setJobs(j); setOpps(o); setAssumptions(a); })
-      .catch((e) => setError(String(e)));
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoading(false));
   }, [horizon, reload]);
 
   useEffect(() => {
     if (horizon !== "emergency") { setStorm(null); return; }
-    const id = setTimeout(() => api.storm(stormAt).then(setStorm).catch((e) => setError(String(e))), 120);
+    setStormLoading(true);
+    const id = setTimeout(() => api.storm(stormAt).then(setStorm).catch((e) => setError(String(e))).finally(() => setStormLoading(false)), 120);
     return () => clearTimeout(id);
   }, [horizon, stormAt]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (ingestOpen) setIngestOpen(false);  // close the top-most thing only
+      else if (placingId != null) setPlacingId(null);
+      else if (crewlyOpen) setCrewlyOpen(false);
+      else if (selectedId != null) setSelectedId(null);
+      else if (reviewOpen) setReviewOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [ingestOpen, placingId, crewlyOpen, selectedId, reviewOpen]);
 
   useEffect(() => { api.review().then(setReview).catch(() => {}); }, [reload]);
 
@@ -138,7 +156,8 @@ export default function App() {
           {reviewOpen
             ? <ReviewPanel items={review} placingId={placingId} onPlace={setPlacingId} onClose={() => { setReviewOpen(false); setPlacingId(null); }} />
             : <OpportunityList items={opps} shown={shown} selectedId={selectedId} tier={tier} onTier={setTier} onSelect={setSelectedId}
-            crewlyFiltered={crewlyIds !== null} onClearCrewly={() => setCrewlyIds(null)} />}
+            crewlyFiltered={crewlyIds !== null} onClearCrewly={() => setCrewlyIds(null)} loading={loading}
+            emptyText={horizon === "emergency" ? "No cross-utility restoration overlaps yet at this time. Scrub the replay forward." : "No opportunities match these filters."} />}
         </aside>
         <section className="flex min-w-0 flex-1 flex-col">
           <div className="relative min-h-0 flex-1">
@@ -152,7 +171,7 @@ export default function App() {
           </div>
           <div className="h-[210px] shrink-0 border-t border-slate-200">
             {horizon === "emergency"
-              ? <StormReplay frame={storm} at={stormAt} onAt={setStormAt} start={STORM_START} end={STORM_END} landfall={LANDFALL} />
+              ? <StormReplay frame={storm} at={stormAt} onAt={setStormAt} start={STORM_START} end={STORM_END} landfall={LANDFALL} loading={stormLoading} />
               : <Timeline jobs={jobs} opportunities={shown} selected={selected} onSelect={setSelectedId}
                   hoverKey={hover?.key ?? null} scrollToHover={hover?.from === "map"} onHover={(key) => setHover(key ? { key, from: "timeline" } : null)} />}
           </div>

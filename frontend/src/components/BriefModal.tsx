@@ -1,7 +1,14 @@
 import { marked } from "marked";
+import { useEffect } from "react";
 
 export default function BriefModal({ markdown, source, onClose }: { markdown: string; source: string; onClose: () => void }) {
   const html = marked.parse(markdown) as string;
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
+    window.addEventListener("keydown", onKey, true);  // capture so the app-level handler doesn't also close the panel
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [onClose]);
 
   const download = () => {
     const a = document.createElement("a");

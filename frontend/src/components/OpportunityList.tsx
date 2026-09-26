@@ -12,6 +12,8 @@ type Props = {
   tier: Tier | null;
   onTier: (t: Tier | null) => void;
   onSelect: (id: number) => void;
+  loading: boolean;
+  emptyText: string;
 };
 
 export function TierChip({ tier }: { tier: Tier }) {
@@ -22,7 +24,7 @@ export function TierChip({ tier }: { tier: Tier }) {
   );
 }
 
-export default function OpportunityList({ items, shown, crewlyFiltered, onClearCrewly, selectedId, tier, onTier, onSelect }: Props) {
+export default function OpportunityList({ items, shown, crewlyFiltered, onClearCrewly, selectedId, tier, onTier, onSelect, loading, emptyText }: Props) {
   const [tab, setTab] = useState<"overlaps" | "equipment">("overlaps");
   const tabs = (
     <div className="mb-2 flex gap-4 text-sm">
@@ -61,7 +63,9 @@ export default function OpportunityList({ items, shown, crewlyFiltered, onClearC
         </div>
       </div>
       <ol className="flex-1 overflow-y-auto">
-        {shown.map((o, i) => (
+        {loading && <li className="px-4 py-6 text-sm text-slate-400">Loading opportunities…</li>}
+        {!loading && shown.length === 0 && <li className="px-4 py-6 text-sm text-slate-500">{emptyText}</li>}
+        {!loading && shown.map((o, i) => (
           <li key={o.id}>
             <button onClick={() => onSelect(o.id)}
               className={`w-full border-b border-slate-100 px-4 py-3 text-left hover:bg-slate-50 ${o.id === selectedId ? "bg-blue-50/70" : ""}`}>
