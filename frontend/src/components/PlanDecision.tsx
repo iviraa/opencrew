@@ -14,7 +14,7 @@ export default function PlanDecision({ opportunityId }: { opportunityId: number 
       {d === undefined ? <p className="text-slate-400">Checking the joint plan…</p> : (
         <>
           <span className={`rounded px-1.5 py-0.5 font-semibold ${d.decision === "share" ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"}`}>
-            {d.decision === "share" ? "Shared crew" : "Separate crews"}
+            {d.decision === "share" ? `Shared ${(d.shared ?? []).join(", ")}` : "Nothing shared"}
           </span>
           <p className="mt-1.5 text-slate-700">{d.sentence}</p>
         </>

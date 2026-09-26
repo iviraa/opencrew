@@ -1,4 +1,4 @@
-import type { PlanRow } from "../api";
+import type { PlanBurst, PlanRow } from "../api";
 import { monthYear } from "../format";
 
 const time = (iso: string) => new Date(iso).getTime();
@@ -7,7 +7,10 @@ export default function CrewLanes({ rows, colors, selected }: { rows: PlanRow[];
   if (!rows.length) return <div className="p-4 text-sm text-slate-400">Solve the joint plan to see crew lanes.</div>;
   const crews = [...new Set(rows.map((r) => r.crew))].sort();
   const task = (r: PlanRow) => [time(r.phases.find((p) => p.phase === "clearing")!.start), time(r.phases.find((p) => p.phase === "construction")!.end)];
-  const ts = rows.flatMap((r) => [...task(r), time(r.filed_start), time(r.filed_end)]);
+  const bursts: (PlanBurst & { row: PlanRow })[] = rows.flatMap((r) => (r.bursts ?? []).map((b) => ({ ...b, row: r })));
+  const resources = [...new Set(bursts.map((b) => b.resource))].sort((a, b) =>
+    Number(bursts.some((x) => x.resource === b && x.shared)) - Number(bursts.some((x) => x.resource === a && x.shared)) || a.localeCompare(b));
+  const ts = [...rows.flatMap((r) => [...task(r), time(r.filed_start), time(r.filed_end)]), ...bursts.flatMap((b) => [time(b.start), time(b.end)])];
   const [t0, t1] = [Math.min(...ts), Math.max(...ts)];
   const x = (t: number) => `${((t - t0) / (t1 - t0)) * 100}%`;
   const years: number[] = [];
@@ -16,7 +19,7 @@ export default function CrewLanes({ rows, colors, selected }: { rows: PlanRow[];
   return (
     <div className="flex h-full flex-col bg-white">
       <div className="relative h-6 shrink-0 border-b border-slate-200 text-[10px] text-slate-400">
-        <span className="absolute left-3 top-1 w-[150px] truncate" title="Solid bars: planned crew work in the joint plan. Dashed: the filed dates.">
+        <span className="absolute left-3 top-1 w-[150px] truncate" title="Solid bars: planned work in the joint plan. Dashed: the filed dates.">
           Crew lanes · <span className="inline-block h-2 w-3 rounded-sm border border-dashed border-slate-400 align-middle" /> filed
         </span>
         <div className="absolute inset-y-0 left-[160px] right-0">
@@ -46,6 +49,27 @@ export default function CrewLanes({ rows, colors, selected }: { rows: PlanRow[];
             </div>
           </div>
         ))}
+        {resources.length > 0 && (
+          <div className="sticky top-0 bg-slate-50 px-3 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+            Specialty crews · shared ones serve both utilities
+          </div>
+        )}
+        {resources.map((res) => {
+          const items = bursts.filter((b) => b.resource === res);
+          const shared = items.some((b) => b.shared);
+          return (
+            <div key={res} className={`flex h-6 items-center border-b border-slate-50 ${shared ? "bg-emerald-50/60" : ""}`}>
+              <div className="w-[160px] shrink-0 truncate px-3 text-[11px] text-slate-700">{res}{shared && <b className="ml-1 text-emerald-700">shared</b>}</div>
+              <div className="relative h-full flex-1 overflow-hidden">
+                {items.map((b) => (
+                  <div key={`${b.row.job_id}-${b.burst}`} title={`${b.label} at ${b.row.name}\n${b.start} → ${b.end}${b.partner ? `\nsame crew as ${b.partner}` : ""}`}
+                    className={`absolute top-1 h-4 rounded-sm ${selected.includes(b.row.job_id) ? "ring-2 ring-slate-900" : ""}`}
+                    style={{ left: x(time(b.start)), width: `max(5px, calc(${x(time(b.end))} - ${x(time(b.start))}))`, background: colors[b.row.org] ?? "#64748b" }} />
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

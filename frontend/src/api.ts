@@ -79,32 +79,47 @@ export type Vendor = { name: string; address: string; phone: string | null; webs
 
 export type JobCollection = GeoJSON.FeatureCollection<GeoJSON.Geometry, Job>;
 
+export type BurstSpec = {
+  label: string; resource: string; phase: string; window: [number, number]; weeks: number; mob_low_k: number; mob_high_k: number;
+  applies: string[]; enabled: boolean;
+};
+
 export type PlanConstraints = {
   max_slip_months: number; slip_overrides: Record<string, number>; max_advance_months: number;
   crew_counts: Record<string, Record<string, number>>; blackouts: { site: string; months: number[]; phase_kind: string }[];
   chain_gap_months: number; crew_drive_min: number; crew_km: number; yard_km: number; costs: Record<string, number>;
+  bursts: Record<string, BurstSpec>; burst_gap_weeks: number; joint_contracting: boolean; jc_overlap_months: number; model?: number;
 };
 
 export type PlanMetrics = {
-  projects: number; mobilizations: number; yards: number; idle_months: number; slip_months: number; slipped_projects: number;
-  late_projects: number; advance_months: number; shared_crews: number; cost_k: number;
+  projects: number; mobilizations: number; specialty_mobilizations: number; specialty: Record<string, number>; all_mobilizations: number;
+  shared_bursts: number; contractor_pairs: number; yards: number; idle_months: number; burst_idle_weeks: number; burst_shift_weeks: number;
+  slip_months: number; slipped_projects: number; late_projects: number; advance_months: number; cost_k: number;
 };
+
+export type PlanBurst = { burst: string; label: string; resource: string; shared: boolean; start: string; end: string; partner: string | null };
 
 export type PlanRow = {
   job_id: string; name: string; org: string; crew: string; crew_org: string; yard: string; yard_label: string;
   phases: { phase: string; start: string; end: string }[]; filed_start: string; filed_end: string; in_service: string;
-  slip: number; slip_limit: number; shift: number; baseline_crew: string | null; why: string | null;
+  slip: number; slip_limit: number; shift: number; baseline_crew: string | null; why: string | null; bursts: PlanBurst[];
 };
 
 export type PlanDecisionItem = {
   opportunity_id: number; a: string; b: string; job_a: string; job_b: string; decision: "share" | "no_share"; sentence: string;
-  reasons: { rule: string }[]; drive_min: number | null; km: number | null; eligible: boolean;
+  reasons: { rule: string }[]; drive_min: number | null; km: number | null; eligible: boolean; shared: string[]; contractor?: boolean;
 };
 
-export type PlanHeadline = {
+export type Headline = {
   mobilizations_before: number; mobilizations_after: number; mobilizations_cut: number; mobilizations_cut_pct: number;
-  yards_before: number; yards_after: number; savings_low: number; savings_high: number; late_projects: number; cost_cut_k: number;
-  crews: Record<string, Record<string, number>>;
+  crew_mobilizations_before: number; crew_mobilizations_after: number; specialty: Record<string, { label: string; before: number; after: number }>;
+  shared_bursts: number; yards_before: number; yards_after: number; savings_low: number; savings_high: number; late_projects: number; cost_cut_k: number;
+};
+
+export type PlanHeadline = Headline & {
+  crews: Record<string, Record<string, number>>; free_projects?: number;
+  solver?: { separate: string; coordinated: string; coordinated_gap_k: number };
+  joint_contracting: (Headline & { contractor_pairs: number; pairs: string[][]; assumption: string }) | null;
 };
 
 export type JointPlan = {
