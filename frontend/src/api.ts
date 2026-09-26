@@ -28,11 +28,23 @@ export type CrewlyAction =
 
 export type CrewlyReply = { reply: string; ui_actions: CrewlyAction[]; tool_calls: { name: string; args: Record<string, unknown> }[]; unsourced: string[] };
 
+export type Contact = { id: number; org_id: string; org_name: string; role: string; email: string | null; is_demo: boolean };
+
+export type OutreachItem = {
+  id: number; opportunity_id: number; contact_id: number; subject: string; body: string; state: string; approved_by: string | null;
+  sent_at: string | null; reply_summary: string | null; email: string | null; org_name: string;
+};
+
 export type JobCollection = GeoJSON.FeatureCollection<GeoJSON.Geometry, Job>;
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, { headers: { "Content-Type": "application/json" }, ...init });
-  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+  if (!res.ok) {
+    const text = await res.text();
+    let detail = text;
+    try { detail = JSON.parse(text).detail ?? text; } catch { /* plain text error */ }
+    throw new Error(detail);
+  }
   return res.json();
 }
 
@@ -46,6 +58,16 @@ export const api = {
   brief: (id: number) => call<{ markdown: string; summary_source: string }>(`/opportunities/${id}/brief`, { method: "POST" }),
   tracts: () => call<GeoJSON.FeatureCollection>("/layers/tracts"),
   review: () => call<{ id: number; org_id: string; reason: string; name: string }[]>("/review"),
+  contacts: (id: number) => call<Contact[]>(`/opportunities/${id}/contacts`),
+  outreach: (id: number) => call<OutreachItem[]>(`/opportunities/${id}/outreach`),
+  draftOutreach: (opportunity_id: number, contact_id: number) =>
+    call<OutreachItem>("/outreach", { method: "POST", body: JSON.stringify({ opportunity_id, contact_id }) }),
+  editOutreach: (id: number, subject: string, body: string) =>
+    call<OutreachItem>(`/outreach/${id}`, { method: "PATCH", body: JSON.stringify({ subject, body }) }),
+  approveOutreach: (id: number, approved_by: string) =>
+    call<OutreachItem>(`/outreach/${id}/approve`, { method: "POST", body: JSON.stringify({ approved_by }) }),
+  sendOutreach: (id: number) => call<OutreachItem>(`/outreach/${id}/send`, { method: "POST" }),
+  markReplied: (id: number) => call<OutreachItem>(`/outreach/${id}/replied`, { method: "POST", body: JSON.stringify({ summary: "" }) }),
   crewly: (messages: { role: string; text: string }[]) => call<CrewlyReply>("/crewly", { method: "POST", body: JSON.stringify({ messages }) }),
   setStatus: (id: number, status: string) =>
     call<{ id: number; status: string }>(`/opportunities/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),

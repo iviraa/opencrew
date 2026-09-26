@@ -39,6 +39,14 @@ export default function App() {
     api.opportunity(selectedId).then(setDetail).catch((e) => setError(String(e)));
   }, [selectedId]);
 
+  const refreshSelected = () => {
+    if (selectedId == null) return;
+    api.opportunity(selectedId).then((d) => {
+      setDetail(d);
+      setOpps((xs) => xs.map((o) => (o.id === d.id ? { ...o, status: d.status } : o)));
+    });
+  };
+
   const setStatus = (id: number, status: string) => {
     api.setStatus(id, status).then(() => {
       setOpps((xs) => xs.map((o) => (o.id === id ? { ...o, status } : o)));
@@ -105,7 +113,7 @@ export default function App() {
         {selectedId != null && (
           <aside className="w-[400px] shrink-0 border-l border-slate-200 bg-white">
             {detail?.id === selectedId
-              ? <DetailPanel detail={detail} assumptions={assumptions} onClose={() => setSelectedId(null)} onStatus={setStatus} />
+              ? <DetailPanel detail={detail} assumptions={assumptions} onClose={() => setSelectedId(null)} onStatus={setStatus} onRefresh={refreshSelected} />
               : <div className="p-4 text-sm text-slate-400">Loading…</div>}
           </aside>
         )}

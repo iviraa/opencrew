@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type Assumption, type Job, type OpportunityDetail, type Savings } from "../api";
 import { BASIS_LABEL, FLAG_LABEL, QUALITY_LABEL, STATUSES, miles, monthYear, pct, title, usd } from "../format";
 import BriefModal from "./BriefModal";
+import Outreach from "./Outreach";
 import { TierChip } from "./OpportunityList";
 
 type Props = {
@@ -9,11 +10,12 @@ type Props = {
   assumptions: Record<string, Assumption>;
   onClose: () => void;
   onStatus: (id: number, status: string) => void;
+  onRefresh: () => void;
 };
 
 type Values = Record<string, { low: number; high: number }>;
 
-export default function DetailPanel({ detail, assumptions, onClose, onStatus }: Props) {
+export default function DetailPanel({ detail, assumptions, onClose, onStatus, onRefresh }: Props) {
   const [values, setValues] = useState<Values>({});
   const [savings, setSavings] = useState<Savings>(detail.savings);
   const [brief, setBrief] = useState<{ markdown: string; summary_source: string } | null>(null);
@@ -113,6 +115,8 @@ export default function DetailPanel({ detail, assumptions, onClose, onStatus }: 
           className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60">
           {drafting ? "Drafting brief…" : "Draft coordination brief"}
         </button>
+
+        <Outreach opportunityId={detail.id} onStatus={onRefresh} />
 
         <section>
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Coordination status</h3>
