@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from pydantic import BaseModel
 
 from app.config import ASSUMPTIONS
-from app.crewly import agent
+from app.crewly import agent, brief
 from app.db import get_conn
 from app.engine.cost import savings
 from app.engine.overlap import recompute
@@ -77,6 +77,14 @@ def set_status(opp_id: int, body: Status, conn=Depends(get_conn)):
     if not row:
         raise HTTPException(404, "opportunity not found")
     return row
+
+
+@api.post("/opportunities/{opp_id}/brief")
+def make_brief(opp_id: int, conn=Depends(get_conn)):
+    out = brief.build(conn, opp_id)
+    if not out:
+        raise HTTPException(404, "opportunity not found")
+    return out
 
 
 @api.get("/assumptions")
