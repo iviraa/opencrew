@@ -8,27 +8,31 @@ from datetime import date, timedelta
 from dateutil.relativedelta import relativedelta
 from ortools.sat.python import cp_model
 
-from app.config import ASSUMPTIONS, PHASES
+from app.config import ASSUMPTIONS, PHASES, mob_share
 from app.ingest.classify import endpoints
 
-MODEL = 2  # bump when the model changes so stored plans get re-solved
+MODEL = 3  # bump when the model changes so stored plans get re-solved
 WPM = 4  # model weeks per month; burst dates are measured from their phase start so the rounding stays inside a phase
-BURSTS = {  # editable assumptions, not public data: duration, where in the phase, cost per mobilization ($k)
+BURSTS = {  # durations and windows are editable assumptions; costs are shares of MISO's per-project mobilization (config.MOB_SHARE)
     "heavy_haul": {"label": "heavy haul", "resource": "heavy-haul rig", "phase": "construction", "window": [0.0, 0.35], "weeks": 2,
-                   "mob_low_k": 40, "mob_high_k": 90, "applies": ["substation", "new_line", "line_upgrade"], "enabled": True},
+                   "applies": ["substation", "new_line", "line_upgrade"], "enabled": True},
     "crane_lift": {"label": "crane lift", "resource": "crane", "phase": "construction", "window": [0.2, 0.8], "weeks": 2,
-                   "mob_low_k": 60, "mob_high_k": 150, "applies": ["substation", "new_line", "line_upgrade"], "enabled": True},
+                   "applies": ["substation", "new_line", "line_upgrade"], "enabled": True},
     "wire_stringing": {"label": "wire stringing", "resource": "stringing crew", "phase": "construction", "window": [0.4, 1.0], "weeks": 4,
-                       "mob_low_k": 80, "mob_high_k": 200, "applies": ["new_line", "line_upgrade"], "enabled": True},
+                       "applies": ["new_line", "line_upgrade"], "enabled": True},
     "commissioning": {"label": "commissioning", "resource": "commissioning team", "phase": "energization", "window": [0.0, 1.0], "weeks": 2,
-                      "mob_low_k": 30, "mob_high_k": 80, "applies": ["substation", "new_line", "line_upgrade"], "enabled": True},
+                      "applies": ["substation", "new_line", "line_upgrade"], "enabled": True},
 }
+for _key, _burst in BURSTS.items():
+    _burst["mob_low_k"], _burst["mob_high_k"] = mob_share(_key)
+GENERAL_K = mob_share("general")
+YARD_K = round((ASSUMPTIONS["yard_usd"]["low"] + ASSUMPTIONS["yard_usd"]["high"]) / 2000)  # midpoint of the sourced yard range, $k
 BURST_KEYS = {"weeks", "window", "mob_low_k", "mob_high_k", "enabled"}
 DEFAULTS = {
     "max_slip_months": 6, "slip_overrides": {}, "max_advance_months": 6, "crew_counts": {}, "blackouts": [],
     "chain_gap_months": 2, "crew_drive_min": 45, "crew_km": 40, "yard_km": 8, "time_limit_s": 8,
     "bursts": BURSTS, "burst_gap_weeks": 2, "joint_contracting": False, "jc_overlap_months": 3,
-    "costs": {"mobilization_k": 100, "yard_k": 275, "idle_k_per_month": 30, "slip_k_per_month": 50, "advance_k_per_month": 5,
+    "costs": {"mobilization_k": round(sum(GENERAL_K) / 2), "yard_k": YARD_K, "idle_k_per_month": 30, "slip_k_per_month": 50, "advance_k_per_month": 5,
               "burst_idle_k_per_week": 10},
 }
 JC_NOTE = "Assumes one contractor serves both utilities' jobs that run at the same time within a 45 minute drive."
@@ -561,7 +565,7 @@ def headline(base, coord, c):
              + (coord["burst_idle_weeks"] - base["burst_idle_weeks"]) * k["burst_idle_k_per_week"]
              + (coord["slip_months"] - base["slip_months"]) * k["slip_k_per_month"]
              + (coord["advance_months"] - base["advance_months"]) * k["advance_k_per_month"]) * 1000
-    mob, yard = ASSUMPTIONS["mobilization_usd"], ASSUMPTIONS["yard_usd"]
+    mob, yard = {"low": GENERAL_K[0] * 1000, "high": GENERAL_K[1] * 1000}, ASSUMPTIONS["yard_usd"]  # general crews are one share of a project's mobilization
     low = dm * mob["low"] + dy * yard["low"] + sum(n * c["bursts"][b]["mob_low_k"] * 1000 for b, n in ds.items()) - extra
     high = dm * mob["high"] + dy * yard["high"] + sum(n * c["bursts"][b]["mob_high_k"] * 1000 for b, n in ds.items()) - extra
     before, after = base["all_mobilizations"], coord["all_mobilizations"]
