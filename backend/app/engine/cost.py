@@ -61,7 +61,7 @@ def span(lo, hi, fmt=money):
 
 
 def count(lo, hi):
-    return span(lo, hi, lambda n: f"{n:,.0f}" if n >= 10 or n == int(n) else f"{n:g}")
+    return span(lo, hi, lambda n: f"{n:,.0f}" if n >= 10 or n == int(n) else f"{n:.1f}" if n >= 1 else f"{n:.2f}")
 
 
 def line_items(tier, overlap_m, a, f, pair):
@@ -137,8 +137,7 @@ def line_items(tier, overlap_m, a, f, pair):
             f"{count(months['low'], months['high'])} months on a {money(budget)} project",
             f"BLS construction escalation {a['escalation_pct_yr']['low']:g}-{a['escalation_pct_yr']['high']:g}% a year "
             "(ECI compensation to PPI construction goods)",
-            lambda end: budget * a["escalation_pct_yr"][end] / 100 * months[end] / 12,
-            over=f"{count(months['low'], months['high'])} months earlier")
+            lambda end: budget * a["escalation_pct_yr"][end] / 100 * months[end] / 12)
     return out
 
 
