@@ -67,10 +67,11 @@ export default function Login() {
             <div className="flex flex-wrap gap-2">
               {people.map((c) => (
                 <button key={c.id} type="button" onClick={() => { setUsername(c.login!); setPassword(DEMO_PASSWORD); setError(null); beaver("wave"); }}
+                  aria-label={`Fill in the ${c.short || c.name} demo login`} title={`Fill in the ${c.short || c.name} demo login`}
                   className="flex items-center gap-2 rounded-full border-2 border-line bg-white px-3 py-1.5 text-sm hover:border-ink">
                   <span className="h-2.5 w-2.5 rounded-full" style={{ background: c.color || colorFor(c.id) }} />
                   <span className="font-semibold">{c.short || c.name}</span>
-                  <span className="text-muted">{c.login} / ***</span>{/* the real password is filled on click, never shown */}
+                  <span className="text-muted">{c.login} / <span aria-hidden="true">***</span></span>{/* the real password is filled on click, never shown */}
                 </button>
               ))}
             </div>
