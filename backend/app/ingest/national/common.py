@@ -130,6 +130,8 @@ def window(kind, start, in_service):
 def to_date(v):
     if v is None or v == "" or (isinstance(v, float) and v != v):
         return None
+    if isinstance(v, (datetime, date)) and v != v:
+        return None  # pandas NaT
     if isinstance(v, datetime):
         return v.date()
     if isinstance(v, date):
