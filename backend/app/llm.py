@@ -80,6 +80,8 @@ def gemini(call):
                     SPENT[model] = today  # out for the day, no point retrying
                     break
                 time.sleep(2 * (attempt + 1))
+    if last is None:
+        raise RuntimeError("RESOURCE_EXHAUSTED: every Gemini model is out of daily quota")  # all skipped as spent today
     raise RuntimeError(f"Gemini is busy right now: {last}")
 
 

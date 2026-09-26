@@ -41,8 +41,20 @@ def my_overlaps(ctx, conn, start_date=None, end_date=None, tier=None, region=Non
         row = _opp_row(r)
         row["windows"] = {r["a_org"]: f"{r['a_start']:%b %Y} to {r['a_end']:%b %Y}", r["b_org"]: f"{r['b_start']:%b %Y} to {r['b_end']:%b %Y}"}
         out.append(row)
-    return ({"count": len(rows), "date_range": [str(s) if s else None, str(e) if e else None], "region_known": bool(box) if region else None,
-             "overlaps": out}, [{"type": "show_overlaps", "ids": [r["id"] for r in rows]}])
+    result = {"count": len(rows), "date_range": [str(s) if s else None, str(e) if e else None], "region_known": bool(box) if region else None,
+              "overlaps": out}
+    if not rows and (s or e):
+        result["when_overlaps_happen"] = busy_years(conn, ctx["company"])  # so the answer can point somewhere useful
+    return result, ([{"type": "show_overlaps", "ids": [r["id"] for r in rows]}] if rows else [])
+
+
+def busy_years(conn, company):
+    """Years where both projects of an overlap are building, with how many overlaps each."""
+    rows = conn.execute(f"""SELECT y, count(*) AS n FROM ({mine_sql(company)}) o,
+                              generate_series(extract(year FROM greatest(o.a_start, o.b_start))::int,
+                                              extract(year FROM least(o.a_end, o.b_end))::int) AS y
+                            GROUP BY y ORDER BY y""").fetchall()
+    return {str(r["y"]): r["n"] for r in rows}
 
 
 def open_overlap(ctx, conn, opportunity_id):
@@ -110,11 +122,13 @@ equipment could be shared. Say "we/our" for {me} and "{other}" for them.
 Rules:
 - Call a tool before stating any number. Every number you write must come from a tool result from this turn or the user's message.
   Never calculate or estimate numbers yourself.
-- To show, list, find or filter overlaps (including by dates like "in March 2027" or "next year"), call my_overlaps; the app plots them
-  and shows clickable cards, so keep your text to a short summary and do not repeat every row.
+- To show, list, find or filter overlaps (including by dates like "in March 2027" or "next year"), call my_overlaps once; the app plots
+  them and shows clickable cards, so keep your text to a one or two sentence summary and do not repeat every row or id.
+- Turn relative dates into start_date and end_date yourself from today's date (e.g. "next year", "this summer", "Q3 2025").
+  Writing the dates you searched is fine. If nothing matches, say so and mention the years in when_overlaps_happen.
 - When the user asks about one overlap, call open_overlap so the side panel opens.
-- Questions about requests ("did they approve my last request?", "any requests waiting for me?") use collab_requests.
-  Mention the feedback they left if there is any.
+- Questions about requests use collab_requests: "my last request" is direction sent, limit 1; "anything waiting for me" is
+  direction received, status pending. Say which overlap it was about, its status, and quote their feedback if there is any.
 - You cannot send or answer requests yourself; tell the user to use the Send request / Approve / Decline buttons.
 - Weather and storm questions use outlook, weather_alerts or site_hazards; damage news uses incidents_near.
 - Keep replies short and warm: one to three sentences or a compact list. Refer to overlaps as "#id" with both project names."""
