@@ -19,7 +19,16 @@ const time = (iso: string) => new Date(iso).getTime();
 
 export default function Timeline({ jobs, opportunities, selected, onSelect, hoverKey, scrollToHover, onHover }: Props) {
   const box = useRef<HTMLDivElement>(null);
+  const axis = useRef<HTMLDivElement>(null);
+  const [axisWidth, setAxisWidth] = useState(800);
   const [all, setAll] = useState(false);
+
+  useEffect(() => {
+    if (!axis.current) return;
+    const ro = new ResizeObserver(([e]) => setAxisWidth(e.contentRect.width));
+    ro.observe(axis.current);
+    return () => ro.disconnect();
+  }, []);
   const byId = useMemo(() => new Map(jobs?.features.map((f) => [f.properties.id, f.properties]) ?? []), [jobs]);
   const rowKey = (j: Job) => j.parent_job_id ?? j.id;
 
@@ -43,6 +52,7 @@ export default function Timeline({ jobs, opportunities, selected, onSelect, hove
   const x = (t: number) => `${((t - t0) / (t1 - t0)) * 100}%`;
   const years = [];
   for (let y = new Date(t0).getFullYear() + 1; y <= new Date(t1).getFullYear(); y++) years.push(y);
+  const step = Math.max(1, Math.ceil((years.length * 36) / Math.max(axisWidth, 1)));  // about 36px per year label
 
   const sel = selected ? [byId.get(selected.job_a), byId.get(selected.job_b)] : [];
   const selKeys = new Set(sel.filter(Boolean).map((j) => rowKey(j!)));
@@ -74,8 +84,10 @@ export default function Timeline({ jobs, opportunities, selected, onSelect, hove
           ))}
           <span className="flex items-center gap-1"><span className="inline-block h-2.5 w-4 rounded-sm border border-dashed border-slate-400" /> earlier plan</span>
         </div>
-        <div className="absolute inset-y-0 left-[260px] right-0">
-        {years.map((y) => <span key={y} className="absolute top-1 -translate-x-1/2" style={{ left: x(new Date(y, 0, 1).getTime()) }}>{y}</span>)}
+        <div ref={axis} className="absolute inset-y-0 left-[260px] right-0">
+          {years.filter((_, i) => i % step === 0).map((y) => (
+            <span key={y} className="absolute top-1 -translate-x-1/2" style={{ left: x(new Date(y, 0, 1).getTime()) }}>{y}</span>
+          ))}
         </div>
       </div>
       <div ref={box} className="relative flex-1 overflow-y-auto">

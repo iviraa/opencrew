@@ -98,7 +98,11 @@ export default function App() {
   };
 
   const counts = new Map<string, number>();
-  jobs?.features.forEach((f) => counts.set(f.properties.org_name, (counts.get(f.properties.org_name) ?? 0) + 1));
+  const orgNames = new Map<string, string>();
+  jobs?.features.forEach((f) => {
+    counts.set(f.properties.org_id, (counts.get(f.properties.org_id) ?? 0) + 1);
+    orgNames.set(f.properties.org_id, f.properties.org_name);
+  });
   const switchHorizon = (h: string) => {
     setHorizon(h); setSelectedId(null); setCrewlyIds(null);
     if (h === "emergency") setFly({ bbox: [-85.2, 30.6, -79.0, 35.0], at: Date.now() });
@@ -128,14 +132,19 @@ export default function App() {
         <nav className="flex rounded-lg bg-slate-100 p-0.5">
           {HORIZONS.map((h) => (
             <button key={h.id} disabled={!h.ready} onClick={() => switchHorizon(h.id)}
-              className={`rounded-md px-3 py-1 text-sm font-medium ${horizon === h.id ? "bg-white shadow-sm" : "text-slate-500"} disabled:cursor-not-allowed disabled:opacity-50`}>
+              className={`whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ${horizon === h.id ? "bg-white shadow-sm" : "text-slate-500"} disabled:cursor-not-allowed disabled:opacity-50`}>
               {h.label}
             </button>
           ))}
         </nav>
-        <div className="ml-auto flex items-center gap-4 text-xs text-slate-500">
-          {[...counts].map(([org, n]) => <span key={org}>{org}: <b className="text-slate-800">{n}</b> {horizon === "near" ? "phases" : horizon === "emergency" ? "restoration jobs" : "projects"}</span>)}
-          <span>Opportunities: <b className="text-slate-800">{opps.length}</b></span>
+        <div className="ml-auto flex items-center gap-4 whitespace-nowrap text-xs text-slate-500">
+          <span>
+            {[...counts].map(([org, n], i) => (
+              <span key={org} title={orgNames.get(org)}>{i > 0 && " · "}{org.toUpperCase()} <b className="text-slate-800">{n}</b></span>
+            ))}{" "}
+            {horizon === "near" ? "phases" : horizon === "emergency" ? "restoration jobs" : "projects"}
+          </span>
+          <span><b className="text-slate-800">{opps.length}</b> opportunities</span>
           {review.length > 0 && (
             <button onClick={() => setReviewOpen((o) => !o)} className="rounded bg-amber-100 px-2 py-0.5 text-amber-800 hover:bg-amber-200"
               title="Projects parsed from filings but not yet placed on the map">{review.length} need location review</button>

@@ -245,7 +245,7 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
   return (
     <div className="relative h-full w-full">
       <div ref={box} className="h-full w-full" />
-      <Legend jobs={jobs} />
+      <Legend jobs={jobs} storm={!!storm} compact={!!selected} />
       <div className="absolute right-12 top-3 flex gap-1.5 text-[11px]">
         {([["grid", "Existing grid"], ["risk", "Hurricane risk"], ["vulnerability", "Social vulnerability"]] as const).map(([key, label]) => (
           <button key={key} onClick={() => setLayers((l) => ({ ...l, [key]: !l[key] }))}
@@ -258,29 +258,58 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
   );
 }
 
-function Legend({ jobs }: { jobs: JobCollection | null }) {
+function Swatch({ className, style, label }: { className: string; style?: React.CSSProperties; label: string }) {
+  return <div className="flex items-center gap-2 py-0.5 text-slate-500"><span className={className} style={style} /> {label}</div>;
+}
+
+function Legend({ jobs, storm, compact }: { jobs: JobCollection | null; storm: boolean; compact: boolean }) {
+  const [open, setOpen] = useState(true);
+  useEffect(() => setOpen(!compact), [compact]);  // fold away while the detail panel narrows the map
   const orgs = new Map<string, string>();
   jobs?.features.forEach((f) => orgs.set(f.properties.org_name, f.properties.color));
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className="absolute bottom-3 left-3 rounded-md bg-white/95 px-2 py-1 text-[11px] font-medium text-slate-700 shadow-md ring-1 ring-slate-200">
+        Legend
+      </button>
+    );
+  }
   return (
-    <div className="absolute left-3 top-3 rounded-lg bg-white/95 px-3 py-2 text-[11px] leading-4 shadow-md ring-1 ring-slate-200">
+    <div className="absolute bottom-3 left-3 max-w-[300px] rounded-lg bg-white/95 px-3 py-2 text-[11px] leading-4 shadow-md ring-1 ring-slate-200">
+      <button onClick={() => setOpen(false)} className="absolute right-1.5 top-1 rounded px-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Hide legend">✕</button>
       {[...orgs].map(([name, color]) => (
         <div key={name} className="flex items-center gap-2 py-0.5">
           <span className="h-1 w-5 rounded" style={{ background: color }} /> {name}
         </div>
       ))}
-      <div className="mt-2 flex items-center gap-2 py-0.5 text-slate-500">
-        <span className="w-5 border-t-2 border-dashed border-slate-500" /> approx route (straight line)
-      </div>
-      <div className="flex items-center gap-2 py-0.5 text-slate-500">
-        <span className="h-2.5 w-2.5 rounded-full border-2 border-slate-500 bg-white" /> one endpoint located
-      </div>
-      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+      {!storm && (
+        <>
+          <div className="mt-2 flex items-center gap-2 py-0.5 text-slate-500">
+            <span className="w-5 border-t-2 border-dashed border-slate-500" /> approx route (straight line)
+          </div>
+          <div className="flex items-center gap-2 py-0.5 text-slate-500">
+            <span className="h-2.5 w-2.5 rounded-full border-2 border-slate-500 bg-white" /> one endpoint located
+          </div>
+        </>
+      )}
+      <div className={`mt-2 flex flex-wrap gap-x-3 gap-y-1 ${storm ? "hidden" : ""}`}>
         {Object.entries(TIER_LABEL).map(([tier, label]) => (
           <span key={tier} className="flex items-center gap-1">
             <span className="h-2.5 w-2.5 rounded-full" style={{ background: TIER_COLOR[tier as keyof typeof TIER_COLOR] }} /> {label}
           </span>
         ))}
       </div>
+      {storm && (
+        <div className="mt-2 border-t border-slate-100 pt-1.5">
+          <Swatch className="h-2.5 w-5 rounded-sm border border-dashed border-rose-600 bg-rose-500/15" label="NHC forecast cone" />
+          <Swatch className="h-1 w-5 rounded bg-rose-900" label="observed track" />
+          <Swatch className="h-2.5 w-5 rounded-sm bg-sky-500/30" label="NWS flash flood warning" />
+          <Swatch className="h-2.5 w-5 rounded-sm bg-gradient-to-r from-amber-500/40 to-red-600/40" label="NWS severe storm or tornado warning" />
+          <Swatch className="h-2 w-2 rounded-full bg-rose-600" label="damage report mentioning power" />
+          <Swatch className="h-2 w-2 rounded-full bg-slate-500" label="other damage report" />
+          <Swatch className="h-3 w-3 rounded-full border-2 border-white bg-green-600 shadow" label="shared staging point" />
+        </div>
+      )}
     </div>
   );
 }
