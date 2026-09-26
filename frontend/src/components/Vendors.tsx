@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { api, type Vendor } from "../api";
 
-const SERVICES = ["crane rental", "equipment rental", "utility contractor"];
+const SERVICES = ["Crane rental", "Equipment rental", "Utility contractor"];
 
 export default function Vendors({ opportunityId }: { opportunityId: number }) {
   const [service, setService] = useState<string | null>(null);
@@ -9,29 +9,34 @@ export default function Vendors({ opportunityId }: { opportunityId: number }) {
   const [note, setNote] = useState<string | null>(null);
 
   const look = (s: string) => {
-    setService(s); setItems([]); setNote("Searching…");
-    api.vendors(opportunityId, s).then((r) => { setItems(r.vendors); setNote(r.vendors.length ? null : "No vendors within 40 km."); })
-      .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
+    setService(s); setItems([]); setNote("Searching nearby…");
+    api.vendors(opportunityId, s.toLowerCase()).then((r) => { setItems(r.vendors); setNote(r.vendors.length ? null : "No vendors found within 40 km."); })
+      .catch((e) => setNote(friendly(e instanceof Error ? e.message : String(e))));
   };
 
   return (
-    <section>
-      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Vendors near the shared site</h3>
-      <div className="flex flex-wrap gap-1.5">
+    <div>
+      <h4 className="text-[15px] font-semibold">Vendors near the shared site</h4>
+      <div className="mt-2 flex flex-wrap gap-2">
         {SERVICES.map((s) => (
           <button key={s} onClick={() => look(s)}
-            className={`rounded px-2 py-1 text-xs font-medium ring-1 ${service === s ? "bg-slate-900 text-white ring-slate-900" : "bg-white ring-slate-300 hover:bg-slate-100"}`}>{s}</button>
+            className={`rounded-full px-3.5 py-1.5 text-[13px] font-semibold transition ${service === s ? "bg-ink text-white" : "bg-soft text-ink ring-1 ring-line hover:bg-white"}`}>{s}</button>
         ))}
       </div>
-      {note && <p className="mt-2 text-xs text-slate-500">{note}</p>}
-      <ul className="mt-2 space-y-1.5">
+      {note && <p className="mt-2 text-[13px] text-muted">{note}</p>}
+      <ul className="mt-2 space-y-2">
         {items.map((v) => (
-          <li key={`${v.name}${v.address}`} className="rounded bg-slate-50 px-2 py-1.5 text-xs ring-1 ring-slate-200">
-            <div className="flex justify-between"><span className="font-medium">{v.name}</span><span className="text-slate-500">{v.distance_km} km</span></div>
-            <div className="text-slate-500">{v.address}{v.phone ? ` · ${v.phone}` : ""}</div>
+          <li key={`${v.name}${v.address}`} className="rounded-2xl bg-soft px-4 py-2.5">
+            <div className="flex items-baseline justify-between gap-2"><span className="text-[14px] font-semibold">{v.name}</span><span className="shrink-0 text-[13px] text-muted">{v.distance_km} km</span></div>
+            <div className="text-[13px] text-muted">{v.address}</div>
+            {v.phone && <div className="text-[13px] text-muted">{v.phone}</div>}
           </li>
         ))}
       </ul>
-    </section>
+    </div>
   );
+}
+
+function friendly(msg: string) {
+  return /GOOGLE_PLACES_KEY/.test(msg) ? "Vendor search needs a Google Places key in the server settings." : msg;
 }
