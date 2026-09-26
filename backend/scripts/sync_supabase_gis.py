@@ -37,6 +37,14 @@ def schema_sql():
 SNAPSHOT = {"job_version": "", "storm_event": "", "incident": "", "outlook": "", "job": "ORDER BY parent_job_id IS NOT NULL"}  # hypertables and parents-before-phases need a plain, ordered copy
 
 
+def table_ddl(table):
+    """CREATE TABLE for a table defined outside schema.sql, taken from the local database."""
+    out = subprocess.run(["pg_dump", "--schema-only", "--no-owner", "--no-privileges", "-t", f"public.{table}", os.environ["DATABASE_URL"]],
+                         capture_output=True, text=True, check=True).stdout
+    m = re.search(r"CREATE TABLE public\.\w+ \((?:.|\n)*?\n\);", out)
+    return m.group(0).replace("CREATE TABLE public.", "CREATE TABLE IF NOT EXISTS planner.").replace("public.", "planner.") if m else ""
+
+
 def dump(table):
     url, src = os.environ["DATABASE_URL"], table
     if table in SNAPSHOT:
@@ -123,6 +131,9 @@ def reference_tables():
 
 def main(schema_only=False, refs_only=False):
     run(schema_sql())
+    extra = "\n".join(table_ddl(t) for t in TABLES)  # tables that modules create themselves
+    if extra.strip():
+        run("SET search_path = planner, extensions;\n" + extra)
     print("schema ready", flush=True)
     if refs_only:
         return reference_tables()
