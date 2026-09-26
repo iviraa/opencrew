@@ -562,6 +562,8 @@ app.include_router(planner_api.router)
 from app.news import api as news_api  # noqa: E402  kept with the other routers
 app.include_router(news_api.router)
 app.include_router(generate_api.router)
+from app.stormlab.api import router as stormlab_router  # noqa: E402
+app.include_router(stormlab_router)
 
 @app.get("/config.js", include_in_schema=False)
 def web_config():
