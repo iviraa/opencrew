@@ -8,7 +8,7 @@ from app.auth import current_user
 from app.db import get_conn
 from app.hazards import exposure, layers
 from app.hazards.config import CACHE, HAZARDS, SOURCES
-from app.hazards.exposure import PERIODS, period_range
+from app.hazards.exposure import PERIODS, PRODUCTS, period_range
 
 router = APIRouter(prefix="/api/app/hazards")
 
@@ -21,11 +21,6 @@ ORDER BY rank, period_start
 """
 CLIMATE_SQL = "SELECT county_fips, hazard, event_days, years, damage_usd FROM hazard_climate WHERE month = %(m)s AND hazard = ANY(%(hazards)s)"
 NRI_SQL = "SELECT county_fips, scores FROM hazard_nri"
-PRODUCTS = {  # which stored products belong to each period view
-    "now7": ["nws_alert", "spc", "spc48", "spc_fire", "wpc_ero", "nhc_gtwo", "wfigs_perimeters", "wfigs_incidents", "usgs"],
-    "weeks": ["spc48", "cpc_6-10 day", "cpc_8-14 day", "cpc_weeks 3-4"],
-    "season": ["cpc_monthly", "cpc_seasonal"],
-}
 
 
 def parse_hazards(s):

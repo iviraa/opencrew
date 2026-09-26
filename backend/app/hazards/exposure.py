@@ -5,6 +5,13 @@ from datetime import date, datetime, timedelta, timezone
 from app.hazards.config import HAZARDS
 
 PERIODS = ("now7", "weeks", "season", "month", "window")
+PRODUCTS = {  # what each period looks at; history covers the rest
+    "now7": ["nws_alert", "spc", "spc48", "spc_fire", "wpc_ero", "nhc_gtwo", "wfigs_perimeters", "wfigs_incidents", "usgs"],
+    "weeks": ["spc48", "cpc_6-10 day", "cpc_8-14 day", "cpc_weeks 3-4"],
+    "season": ["cpc_monthly", "cpc_seasonal"],
+    "month": [], "window": [],
+}
+COUNTED = {"nws_alert", "spc", "spc48", "spc_fire", "wpc_ero", "nhc_gtwo", "wfigs_perimeters", "wfigs_incidents", "usgs"}  # events, not leans
 WEEKS_DAYS, SEASON_DAYS = (7, 28), (28, 120)  # what each outlook period covers, in days from today
 
 SITE_SQL = """
@@ -23,7 +30,7 @@ FROM opportunity op JOIN job ja ON ja.id = op.job_a JOIN job jb ON jb.id = op.jo
 LIVE_SQL = """
 SELECT l.id, l.layer, l.hazard, l.product, l.label, l.rank, l.period_start, l.period_end, l.props
 FROM hazard_layer l
-WHERE l.hazard = ANY(%(hazards)s) AND l.period_end >= %(start)s AND l.period_start <= %(end)s
+WHERE l.hazard = ANY(%(hazards)s) AND l.product = ANY(%(products)s) AND l.period_end >= %(start)s AND l.period_start <= %(end)s
   AND ST_Intersects(l.geom::geometry, %(footprint)s::geometry)
 ORDER BY l.rank DESC, l.period_start
 """
@@ -83,20 +90,22 @@ def history_days(rows, shares):
 
 
 def live_days(rows, start, end):
-    """Days in the period with at least one alert or outlook, per hazard."""
+    """Days in the period with at least one alert, outlook area, fire or quake over the works, per hazard (sets of dates)."""
     out = {}
     for r in rows:
+        if r["product"] not in COUNTED:
+            continue  # a monthly lean is not an event day
         s, e = max(r["period_start"].date(), start), min(r["period_end"].date(), end)
         days = {s + timedelta(days=i) for i in range((e - s).days + 1)} if e >= s else set()
         out.setdefault(r["hazard"], set()).update(days)
-    return {h: len(d) for h, d in out.items()}
+    return out
 
 
 def county_fips_for(conn, footprint_wkb):
     """Counties under a footprint, from the national county file (loaded once into a temp table per connection)."""
     from app.hazards.layers import county_shapes
     from shapely import wkb
-    fp = wkb.loads(bytes(footprint_wkb)) if not hasattr(footprint_wkb, "geom_type") else footprint_wkb
+    fp = footprint_wkb if hasattr(footprint_wkb, "geom_type") else wkb.loads(footprint_wkb, hex=True) if isinstance(footprint_wkb, str) else wkb.loads(bytes(footprint_wkb))
     box = fp.bounds
     return [f for f, g in county_shapes().items() if g.bounds[2] >= box[0] and g.bounds[0] <= box[2] and g.bounds[3] >= box[1] and g.bounds[1] <= box[3]
             and g.intersects(fp)]
@@ -118,13 +127,14 @@ def assess(conn, kind, ident, period="now7", month=None, hazards=None, today=Non
         window = (min(r["a_start"], r["b_start"]), max(r["a_end"], r["b_end"]))
         names, partners = [r["a_name"], r["b_name"]], sorted({r["a_org"], r["b_org"]})
     start, end = period_range(period, month, window, today)
-    live = conn.execute(LIVE_SQL, {"hazards": hazards, "start": datetime.combine(start, datetime.min.time(), timezone.utc),
+    live = conn.execute(LIVE_SQL, {"hazards": hazards, "products": PRODUCTS[period], "start": datetime.combine(start, datetime.min.time(), timezone.utc),
                                     "end": datetime.combine(end, datetime.max.time(), timezone.utc), "footprint": r["footprint"]}).fetchall()
     fips = county_fips_for(conn, r["footprint"])
     hist_rows = conn.execute(COUNTIES_SQL, {"hazards": hazards, "fips": fips}).fetchall() if fips else []
     shares = month_shares(start, end)
     hist = history_days(hist_rows, shares)
-    now_days = live_days(live, start, end)
+    day_sets = live_days(live, start, end)
+    now_days = {h: len(d) for h, d in day_sets.items()}
     out = []
     for h in hazards:
         items = [x for x in live if x["hazard"] == h]
@@ -132,13 +142,15 @@ def assess(conn, kind, ident, period="now7", month=None, hazards=None, today=Non
             continue
         out.append({"hazard": h, "label": HAZARDS[h][0], "why": HAZARDS[h][1],
                     "affected_days": {"forecast": now_days.get(h, 0), **hist.get(h, {"low": 0, "high": 0})},
+                    "leans": [x["label"] for x in items if x["product"] not in COUNTED][:3],
                     "live": [{"id": x["id"], "layer": x["layer"], "product": x["product"], "label": x["label"], "rank": x["rank"],
                               "from": x["period_start"].isoformat(), "to": x["period_end"].isoformat()} for x in items[:6]]})
     out.sort(key=lambda x: (-max(x["affected_days"]["forecast"], x["affected_days"]["high"]), x["hazard"]))
-    total = {"forecast": len({d for x in live for d in [x["period_start"].date()]}),
+    total = {"forecast": len(set().union(*day_sets.values())) if day_sets else 0,
              "low": round(sum(v["low"] for v in hist.values()), 1), "high": round(sum(v["high"] for v in hist.values()), 1)}
     return {"kind": kind, "id": ident, "names": names, "partners": partners, "period": period, "start": start.isoformat(), "end": end.isoformat(),
             "days": (end - start).days + 1, "counties": len(fips), "hazards": out, "affected_days": total,
-            "method": ("Forecast days count calendar days with an active NWS alert or an SPC, WPC, NHC or CPC outlook area over the works. "
+            "method": ("Forecast days count calendar days with an active NWS alert, an SPC, WPC or NHC outlook area, a wildfire or a quake over the works; "
+                       "CPC leans (above or below normal) are listed, not counted. "
                        "History days scale ten years of NOAA Storm Events event-days per county to the months the period covers; "
                        "low and high are the least and most exposed county under the works. Estimates for assessment, not work orders.")}

@@ -17,7 +17,7 @@ type Layers = {
 };
 type Exposure = {
   kind: "site" | "zone"; id: string; names: string[]; partners: string[]; period: string; start: string; end: string; days: number; counties: number;
-  hazards: { hazard: string; label: string; why: string; affected_days: { forecast: number; low: number; high: number }; live: { id: number; layer: string; product: string; label: string; rank: number; from: string; to: string }[] }[];
+  hazards: { hazard: string; label: string; why: string; affected_days: { forecast: number; low: number; high: number }; leans: string[]; live: { id: number; layer: string; product: string; label: string; rank: number; from: string; to: string }[] }[];
   affected_days: { forecast: number; low: number; high: number }; method: string;
 };
 type Open = { kind: "site" | "zone"; id: string } | null;
@@ -32,17 +32,18 @@ export const HAZARD: Record<string, { label: string; color: string; icon: typeof
 const PERIODS: [Period, string][] = [["now7", "Now + 7 days"], ["weeks", "Next weeks"], ["season", "Next season"], ["month", "By month"]];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const GREY = "#c3cad9";
-const day = (s: string) => new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+const day = (s: string) => new Date(s.length === 10 ? `${s}T12:00:00` : s).toLocaleDateString("en-US", { month: "short", day: "numeric" });  // date-only strings stay on their day
+const PAD = 1.5;  // degrees around our sites that count as "near"
 const range = (a: number, b: number) => (a === b ? `${a}` : `${a} to ${b}`);
 
 // one line for the beaver about what the map shows
-function mapLine(l: Layers, ours: number): string {
+function mapLine(l: Layers): string {
   if (l.period === "month") return `${MONTHS[(l.month ?? 1) - 1]} history is on the map: ten years of storms by county.`;
   const n = (k: keyof Layers["layers"]) => l.layers[k]?.features.length ?? 0;
   const parts = [n("alerts") && `${n("alerts")} active alert${n("alerts") === 1 ? "" : "s"}`, n("outlooks") && `${n("outlooks")} outlook area${n("outlooks") === 1 ? "" : "s"}`,
     n("fires") && `${n("fires")} wildfire${n("fires") === 1 ? "" : "s"}`, n("quakes") && `${n("quakes")} quake${n("quakes") === 1 ? "" : "s"}`].filter(Boolean);
   if (!parts.length) return "Nothing on the hazard map for this period. Quiet for our sites.";
-  return `${parts.join(", ")} on the map${ours ? `, ${ours} of our sites inside` : ""}.`;
+  return `${parts.join(", ")} on the map nationwide.`;
 }
 
 export default function HazardsTab({ me, projects, side }: { me: Me; projects: Jobs | null; side: React.ReactNode | null }) {
@@ -61,7 +62,7 @@ export default function HazardsTab({ me, projects, side }: { me: Me; projects: J
   useEffect(() => {
     setData(null); setErr(null);
     const q = `period=${period}&month=${month}&hazards=${[...on].join(",")}`;
-    api.get<Layers>(`/api/app/hazards/layers?${q}`).then((l) => { setData(l); say(mapLine(l, 0), "nod"); })
+    api.get<Layers>(`/api/app/hazards/layers?${q}`).then((l) => { setData(l); say(mapLine(l), "nod"); })
       .catch((e) => { setErr(String(e.message ?? e)); say("I couldn't load the hazard layers.", "sad"); });
   }, [period, month, on]);
 
@@ -73,7 +74,11 @@ export default function HazardsTab({ me, projects, side }: { me: Me; projects: J
         setExp(e);
         const top = e.hazards[0];
         const who = open.kind === "zone" ? `Overlap #${e.id}` : "This site";
-        say(top ? `${who}: ${top.label.toLowerCase()} is the main exposure, ${period === "now7" ? `${top.affected_days.forecast} forecast day${top.affected_days.forecast === 1 ? "" : "s"}` : `about ${range(top.affected_days.low, top.affected_days.high)} affected days`}.` : `${who} has no hazard exposure in this period.`, top ? "surprised" : "happy");
+        const active = period === "now7" && !e.affected_days.forecast;
+        say(!top ? `${who} has no hazard exposure in this period.`
+          : active ? `${who}: nothing active over the works this week. A typical week here sees ${range(e.affected_days.low, e.affected_days.high)} affected days.`
+          : `${who}: ${top.label.toLowerCase()} is the main exposure, ${period === "now7" ? `${top.affected_days.forecast} forecast day${top.affected_days.forecast === 1 ? "" : "s"}` : `about ${range(top.affected_days.low, top.affected_days.high)} affected days`}.`,
+          !top || active ? "happy" : "surprised");
       }).catch((e) => setErr(String(e.message ?? e)));
   }, [open, period, month, on]);
 
@@ -128,11 +133,18 @@ export default function HazardsTab({ me, projects, side }: { me: Me; projects: J
   };
   const toggle = (h: string) => setOn((s) => { const n = new Set(s); if (n.has(h)) n.delete(h); else n.add(h); return n; });
 
+  const home = useMemo(() => bboxOf([projects ?? undefined]), [projects]);
+  const near = (f: GeoJSON.Feature) => {
+    const b = bboxOf([fc([f])]);
+    return !!home && !!b && b[2] >= home[0] - PAD && b[0] <= home[2] + PAD && b[3] >= home[1] - PAD && b[1] <= home[3] + PAD;
+  };
   const items = useMemo(() => {
     const L = data?.layers;
     const all = [...(L?.alerts?.features ?? []), ...(L?.outlooks?.features ?? []), ...(L?.fires?.features ?? []), ...(L?.quakes?.features ?? [])];
-    return all.sort((a, b) => (b.properties.rank ?? 0) - (a.properties.rank ?? 0) || a.properties.period_start.localeCompare(b.properties.period_start));
-  }, [data]);
+    return all.sort((a, b) => Number(near(b)) - Number(near(a)) || (b.properties.rank ?? 0) - (a.properties.rank ?? 0) || a.properties.period_start.localeCompare(b.properties.period_start));
+  }, [data, home]);  // eslint-disable-line react-hooks/exhaustive-deps
+  const nearCount = useMemo(() => items.filter(near).length, [items, home]);  // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (home && !fit) setFit({ bbox: home, key: "home", maxZoom: 8 }); }, [home]);  // eslint-disable-line react-hooks/exhaustive-deps
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
     for (const f of items) c[f.properties.hazard] = (c[f.properties.hazard] ?? 0) + 1;
@@ -149,11 +161,11 @@ export default function HazardsTab({ me, projects, side }: { me: Me; projects: J
     </div>
   );
 
-  const controls = (
+  const periodRow = (
     <>
       <div className="mb-2 flex gap-1 rounded-full bg-soft p-1 text-xs font-semibold">
         {PERIODS.map(([k, label]) => (
-          <button key={k} onClick={() => { setPeriod(k); setOpen(null); }} className={`flex-1 rounded-full py-1 ${period === k ? "bg-white shadow-sm" : "text-muted"}`}>{label}</button>
+          <button key={k} onClick={() => setPeriod(k)} className={`flex-1 rounded-full py-1 ${period === k ? "bg-white shadow-sm" : "text-muted"}`}>{label}</button>
         ))}
       </div>
       {period === "month" && (
@@ -164,6 +176,22 @@ export default function HazardsTab({ me, projects, side }: { me: Me; projects: J
           ))}
         </div>
       )}
+    </>
+  );
+
+  const controls = (
+    <>
+      {periodRow}
+      <select aria-label="Assess a site or overlap" value={open ? `${open.kind}:${open.id}` : ""} onChange={(e) => e.target.value && pick(e.target.value)}
+        className="mb-2 w-full rounded-full border-2 border-line bg-white px-3 py-1.5 text-sm outline-none focus:border-pen">
+        <option value="">Assess a site or overlap...</option>
+        <optgroup label="Our overlaps">
+          {(ov?.overlaps ?? []).map((o) => <option key={o.id} value={`zone:${o.id}`}>#{o.id} {o.a_org === me.company ? o.a_name : o.b_name} with {company(o.a_org === me.company ? o.b_org : o.a_org)?.short ?? "neighbor"}</option>)}
+        </optgroup>
+        <optgroup label="Our sites">
+          {(projects?.features ?? []).map((f) => <option key={f.properties.id} value={`site:${f.properties.id}`}>{f.properties.name}</option>)}
+        </optgroup>
+      </select>
       <div className="mb-2 flex flex-wrap gap-1">
         {Object.entries(HAZARD).map(([h, v]) => (
           <button key={h} onClick={() => toggle(h)} aria-pressed={on.has(h)}
@@ -190,17 +218,21 @@ export default function HazardsTab({ me, projects, side }: { me: Me; projects: J
         {period === "month" && data && (
           <p className="rounded-2xl bg-soft px-3 py-2 text-sm text-muted">Counties shaded by affected days in a typical {MONTHS[month - 1]}. Click a project or overlap for its exposure.</p>
         )}
-        {items.length > 0 && <SectionTitle>On the map · {items.length}</SectionTitle>}
-        {items.slice(0, 80).map((f) => {
+        {items.length > 0 && <SectionTitle>Near our sites · {nearCount}</SectionTitle>}
+        {items.length > 0 && !nearCount && <p className="px-2 text-sm text-muted">Nothing active near our sites.</p>}
+        {items.slice(0, 80).map((f, i) => {
           const p = f.properties, H = HAZARD[p.hazard];
           return (
-            <button key={p.id} onClick={() => { const b = bboxOf([fc([f])]); if (b) flyTo(b, String(p.id), 8); }} className="flex gap-2.5 rounded-2xl px-2 py-1.5 text-left hover:bg-soft">
+            <div key={p.id} className="contents">
+            {i === nearCount && <SectionTitle>Elsewhere · {items.length - nearCount}</SectionTitle>}
+            <button onClick={() => { const b = bboxOf([fc([f])]); if (b) flyTo(b, String(p.id), 8); }} className="flex gap-2.5 rounded-2xl px-2 py-1.5 text-left hover:bg-soft">
               <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full text-white" style={{ background: H?.color ?? GREY }}><H.icon size={14} /></span>
               <span className="min-w-0">
                 <span className="line-clamp-2 block text-sm font-semibold leading-snug">{p.label}</span>
                 <span className="block text-xs text-muted">{day(p.period_start)} to {day(p.period_end)}{p.props?.places ? ` · ${String(p.props.places).slice(0, 60)}` : ""}</span>
               </span>
             </button>
+            </div>
           );
         })}
         {data && (
@@ -214,6 +246,7 @@ export default function HazardsTab({ me, projects, side }: { me: Me; projects: J
     <>
       <PanelHeader title={open.kind === "zone" ? `Overlap #${open.id}` : exp?.names[0] ?? "Site"} onBack={() => setOpen(null)}
         sub={exp ? `${day(exp.start)} to ${day(exp.end)} · ${exp.days} days${exp.partners.length > 1 ? ` · with ${exp.partners.filter((p) => p !== me.company).map((p) => company(p)?.short ?? p).join(", ")}` : ""}` : "Assessing"} />
+      {periodRow}
       <div className="thin-scroll -mr-2 flex flex-1 flex-col gap-2 overflow-y-auto pr-2">
         {!exp && !err && <p className="text-sm text-muted"><span className="dots">Checking exposure</span></p>}
         {exp && open.kind === "zone" && <p className="text-xs text-muted">{exp.names[0]} with {exp.names[1]}</p>}
@@ -221,7 +254,7 @@ export default function HazardsTab({ me, projects, side }: { me: Me; projects: J
           <div className="rounded-2xl bg-soft px-3 py-2.5">
             <div className="text-[11px] font-semibold uppercase tracking-wide text-faint">Affected days in this period</div>
             <div className="font-logo text-2xl font-semibold">{period === "now7" ? exp.affected_days.forecast : range(exp.affected_days.low, exp.affected_days.high)}</div>
-            <div className="text-xs text-muted">{period === "now7" ? "days with an active alert or outlook over the works" : `typical days with a work-affecting event, across ${exp.counties} count${exp.counties === 1 ? "y" : "ies"} under the works`}</div>
+            <div className="text-xs text-muted">{period === "now7" ? `days with an active alert or outlook over the works; a typical week here sees ${range(exp.affected_days.low, exp.affected_days.high)}` : `typical days with a work-affecting event, across ${exp.counties} count${exp.counties === 1 ? "y" : "ies"} under the works`}</div>
           </div>
         )}
         {exp?.hazards.map((h) => {
@@ -235,7 +268,8 @@ export default function HazardsTab({ me, projects, side }: { me: Me; projects: J
                 <span className="text-sm font-semibold">{period === "now7" ? `${h.affected_days.forecast} d` : `${range(h.affected_days.low, h.affected_days.high)} d`}</span>
               </div>
               <div className="mt-0.5 text-xs text-muted">{h.why}</div>
-              {h.live.map((x) => <div key={x.id} className="mt-1 rounded-xl bg-soft px-2 py-1 text-xs">{x.label} · {day(x.from)} to {day(x.to)}</div>)}
+              {h.live.filter((x) => !x.product.startsWith("cpc_")).map((x) => <div key={x.id} className="mt-1 rounded-xl bg-soft px-2 py-1 text-xs">{x.label} · {day(x.from)} to {day(x.to)}</div>)}
+              {h.leans.map((l) => <div key={l} className="mt-1 rounded-xl bg-grape-soft px-2 py-1 text-xs">Lean: {l}</div>)}
             </div>
           );
         })}

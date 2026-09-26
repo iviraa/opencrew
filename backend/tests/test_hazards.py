@@ -112,10 +112,12 @@ def test_month_shares_and_history_scale_to_the_period():
 
 
 def test_live_days_count_calendar_days_per_hazard():
-    rows = [{"hazard": "wind", "period_start": datetime(2026, 9, 26, 12, tzinfo=timezone.utc), "period_end": datetime(2026, 9, 28, 6, tzinfo=timezone.utc)},
-            {"hazard": "wind", "period_start": datetime(2026, 9, 27, 0, tzinfo=timezone.utc), "period_end": datetime(2026, 9, 27, 1, tzinfo=timezone.utc)},
-            {"hazard": "flood", "period_start": datetime(2026, 9, 20, 0, tzinfo=timezone.utc), "period_end": datetime(2026, 9, 21, 0, tzinfo=timezone.utc)}]
-    assert exposure.live_days(rows, date(2026, 9, 26), date(2026, 10, 3)) == {"wind": 3, "flood": 0}
+    rows = [{"hazard": "wind", "product": "nws_alert", "period_start": datetime(2026, 9, 26, 12, tzinfo=timezone.utc), "period_end": datetime(2026, 9, 28, 6, tzinfo=timezone.utc)},
+            {"hazard": "wind", "product": "spc", "period_start": datetime(2026, 9, 27, 0, tzinfo=timezone.utc), "period_end": datetime(2026, 9, 27, 1, tzinfo=timezone.utc)},
+            {"hazard": "flood", "product": "nws_alert", "period_start": datetime(2026, 9, 20, 0, tzinfo=timezone.utc), "period_end": datetime(2026, 9, 21, 0, tzinfo=timezone.utc)},
+            {"hazard": "heat", "product": "cpc_seasonal", "period_start": datetime(2026, 9, 1, tzinfo=timezone.utc), "period_end": datetime(2026, 11, 30, tzinfo=timezone.utc)}]
+    days = exposure.live_days(rows, date(2026, 9, 26), date(2026, 10, 3))
+    assert {h: len(d) for h, d in days.items()} == {"wind": 3, "flood": 0}  # the seasonal lean is listed, never counted
 
 
 def test_api_query_parsing():
