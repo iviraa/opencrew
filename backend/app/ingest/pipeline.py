@@ -16,7 +16,7 @@ ON CONFLICT (id) DO UPDATE SET work_window = EXCLUDED.work_window, window_basis 
 """  # a newer filing updates the plan; job_version keeps the history
 
 
-def geometry(job, picks):
+def geometry(job, picks, router=None):
     found = [p for p in picks if p]
     if not found:
         return None
@@ -25,6 +25,9 @@ def geometry(job, picks):
     if job["job_type"] == "substation" or len(found) == 1:
         partial = job["job_type"] != "substation" and len(picks) > 1
         return f"POINT({pts[0]})", "partial_point" if partial else "matched_point", round(conf * (0.8 if partial else 1), 3)
+    path = router.route((found[0]["lon"], found[0]["lat"]), (found[1]["lon"], found[1]["lat"])) if router else None
+    if path:
+        return "LINESTRING(" + ", ".join(f"{x} {y}" for x, y in path) + ")", "existing_path", conf  # follows a mapped line
     return f"LINESTRING({pts[0]}, {pts[1]})", "straight_line", conf
 
 
@@ -33,7 +36,7 @@ def review(conn, org, raw, reason, doc_id, page):
                  (org, json.dumps(raw, default=str), reason, doc_id, page))
 
 
-def store(conn, loc, org, doc_id, pages, rows, bad, observed, extraction="parser"):
+def store(conn, loc, org, doc_id, pages, rows, bad, observed, extraction="parser", router=None):
     stats = Counter()
     conn.execute("DELETE FROM job_review WHERE org_id = %s AND raw->>'id' = ANY(%s)", (org, [j["id"] for j in rows]))  # re-ingest replaces old entries
     for b in bad:
@@ -44,7 +47,7 @@ def store(conn, loc, org, doc_id, pages, rows, bad, observed, extraction="parser
             stats["ceii_page"] += 1
             continue
         picks = loc.place(org, job["endpoints"] or [job["name"]], job["name"])
-        geo = geometry(job, picks)
+        geo = geometry(job, picks, router)
         if not geo:
             review(conn, org, job, "no location match", doc_id, job["source_page"])
             stats["unplaced"] += 1

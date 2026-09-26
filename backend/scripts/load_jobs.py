@@ -4,6 +4,7 @@ from app.db import ROOT, connect, init_schema
 from app.engine.overlap import recompute
 from app.engine.phases import build_phases
 from app.geo.geolocate import Locator
+from app.geo.routes import graph
 from app.ingest import desc, gpc, pdf, pipeline
 from app.outreach import seed_contacts
 from app.storm.restoration import build_restoration
@@ -28,7 +29,7 @@ def main():
                 print("CEII: skipped", title)
                 continue
             rows, bad = parser.parse(pages)
-            print(org, dict(pipeline.store(conn, loc, org, doc_id, pages, rows, bad, observed)))
+            print(org, dict(pipeline.store(conn, loc, org, doc_id, pages, rows, bad, observed, router=graph())))
         print(recompute(conn, "long"))
         print("phases", build_phases(conn), recompute(conn, "near"))
         print("restoration", build_restoration(conn), recompute(conn, "emergency"))

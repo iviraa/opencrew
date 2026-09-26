@@ -10,18 +10,20 @@ MIRRORS = ["https://overpass-api.de/api/interpreter", "https://maps.mail.ru/osm/
 LATS, LONS = [30.3, 31.6, 32.8, 34.0, 35.3], [-85.7, -83.9, -82.1, -80.3, -78.5]
 TILES = [(s, w, n, e) for s, n in zip(LATS, LATS[1:]) for w, e in zip(LONS, LONS[1:])]  # GA + SC in 16 tiles
 QUERY = '[out:json][timeout:180];(nwr["power"="substation"]["name"]({b});nwr["power"="plant"]["name"]({b}););out center tags;'
+LINES = '[out:json][timeout:180];way["power"="line"]({b});out tags geom;'
 CACHE = ROOT / "data/layers/osm_tiles"
+LINE_CACHE = ROOT / "data/layers/osm_line_tiles"
 
 
-def fetch(i, bbox):
-    path = CACHE / f"{i}.json"
+def fetch(i, bbox, query=QUERY, cache=CACHE):
+    path = cache / f"{i}.json"
     if path.exists():
         return json.loads(path.read_text())
     b = ",".join(map(str, bbox))
     for attempt in range(12):
         url = MIRRORS[(i + attempt) % len(MIRRORS)]  # spread tiles across mirrors
         try:
-            r = httpx.post(url, data={"data": QUERY.format(b=b)}, timeout=200, headers={"User-Agent": "opencrew/0.1 (hackathon)"})
+            r = httpx.post(url, data={"data": query.format(b=b)}, timeout=200, headers={"User-Agent": "opencrew/0.1 (hackathon)"})
             if r.headers.get("content-type", "").startswith("application/json"):
                 els = r.json()["elements"]
                 path.write_text(json.dumps(els))
@@ -52,5 +54,22 @@ def main():
     print("saved", len(out), path)
 
 
+def lines():
+    LINE_CACHE.mkdir(parents=True, exist_ok=True)
+    with ThreadPoolExecutor(4) as pool:
+        tiles = list(pool.map(lambda t: fetch(t[0], t[1], LINES, LINE_CACHE), enumerate(TILES)))
+    seen, out = set(), []
+    for el in (el for els in tiles for el in els):
+        if el["id"] in seen or "geometry" not in el:
+            continue
+        seen.add(el["id"])
+        out.append({"osm": f"way/{el['id']}", "voltage": el["tags"].get("voltage"), "operator": el["tags"].get("operator"),
+                    "name": el["tags"].get("name"), "coords": [[round(p["lon"], 6), round(p["lat"], 6)] for p in el["geometry"]]})
+    path = ROOT / "data/layers/osm_lines.json"
+    path.write_text(json.dumps(out))
+    print("saved", len(out), path)
+
+
 if __name__ == "__main__":
-    main()
+    import sys
+    lines() if "lines" in sys.argv else main()

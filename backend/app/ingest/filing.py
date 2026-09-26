@@ -10,6 +10,7 @@ from app.db import ROOT
 from app.engine.overlap import recompute
 from app.engine.phases import build_phases
 from app.geo.geolocate import Locator, register
+from app.geo.routes import graph
 from app.ingest import desc, gpc, llm_extract, pdf, pipeline
 
 UPLOADS = ROOT / "data/raw/uploads"
@@ -76,7 +77,7 @@ def ingest(conn, path, org=None, org_name=None, state="SC", color="#16a34a", url
     if blocked:
         return {"error": "refused: document is marked CEII", "doc_id": doc_id}
     rows, bad = parser.parse(pages) if parser else llm_extract.extract(org, pages)
-    stats = pipeline.store(conn, Locator(), org, doc_id, pages, rows, bad, datetime.now(timezone.utc), "parser" if parser else "llm")
+    stats = pipeline.store(conn, Locator(), org, doc_id, pages, rows, bad, datetime.now(timezone.utc), "parser" if parser else "llm", graph())
     build_phases(conn)
     return {"org": org, "method": "parser" if parser else "gemini", "pages": len(pages), "rows": len(rows), **stats,
             "long": recompute(conn, "long"), "near": recompute(conn, "near"), "seconds": round(time.perf_counter() - t0, 1)}

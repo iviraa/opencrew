@@ -1,3 +1,5 @@
+import re
+
 import openpyxl
 from rapidfuzz import fuzz, process
 
@@ -35,6 +37,19 @@ def main():
         else:
             print(f"{o['overlap_id']:8} {pair:56} {o['distance_mi']:8.2f}  MISSING")
     print(f"\n{passed}/{len(rows)} organizer overlaps found; {len(opps)} opportunities total from {len(jobs)} placed jobs")
+    routes()
+
+
+def routes():
+    with connect() as conn:
+        rows = conn.execute("""SELECT name, description, ST_Length(geom) / %s AS route_mi FROM job
+                               WHERE horizon = 'long' AND geom_quality = 'existing_path'""", (MILE_M,)).fetchall()
+    stated = [(r, float(m[1])) for r in rows if (m := re.search(r"(\d+(?:\.\d+)?)\s*miles", f"{r['name']} {r['description'] or ''}", re.I))]
+    print(f"\n{len(rows)} lines follow mapped OSM routes; {len(stated)} filings state a length:")
+    for r, miles in stated:
+        print(f"  {r['name'][:50]:50} route {r['route_mi']:5.1f} mi  filing {miles:5.1f} mi")
+    close = sum(1 for r, miles in stated if abs(r["route_mi"] - miles) <= 0.1 * miles)
+    print(f"{close}/{len(stated)} routes within 10% of the stated length (most others state only the rebuilt segment)")
 
 
 if __name__ == "__main__":

@@ -141,7 +141,7 @@ function Metric({ label, value }: { label: string; value: string }) {
 }
 
 function JobCard({ job }: { job: Job }) {
-  const approx = job.confidence < 0.7 || job.geom_quality !== "matched_point";
+  const approx = job.confidence < 0.7 || ["straight_line", "partial_point", "manual"].includes(job.geom_quality);
   return (
     <div className="rounded-lg border border-slate-200 p-3" style={{ borderLeft: `4px solid ${job.color}` }}>
       <div className="text-[11px] font-medium" style={{ color: job.color }}>{job.org_name}</div>
