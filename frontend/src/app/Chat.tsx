@@ -1,22 +1,24 @@
 import DOMPurify from "dompurify";
 import { marked } from "marked";
-import { ArrowUp, CloudOff, X } from "lucide-react";
+import { ArrowUp, Brain, CloudOff, Eraser, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import Confirm from "./Confirm";
 import type { ChatAction, CollabRequest, Me, Overlap } from "./data";
 import { GoalChip } from "./GoalPanel";
+import MemoryList from "./Memory";
 import { OverlapCard, latestFor } from "./panels";
 
 export type ChatMsg = { role: "user" | "model"; text: string; ids?: number[]; offline?: boolean; confirm?: ChatAction[]; goal?: number };
 
 const html = (s: string) => DOMPurify.sanitize(marked.parse(s, { async: false }) as string);
 
-export default function Chat({ me, msgs, busy, overlaps, requests, onSend, onOpen, onClose, onDone, onOpenRequest, onOpenGoal }: {
+export default function Chat({ me, msgs, busy, overlaps, requests, onSend, onOpen, onClose, onDone, onOpenRequest, onOpenGoal, onClear, memoryTick = 0 }: {
   me: Me; msgs: ChatMsg[]; busy: boolean; overlaps: Overlap[] | null; requests: CollabRequest[];
   onSend: (text: string) => void; onOpen: (id: number) => void; onClose: () => void;
-  onDone: (r: CollabRequest) => void; onOpenRequest: (id: number) => void; onOpenGoal: (id: number) => void;
+  onDone: (r: CollabRequest) => void; onOpenRequest: (id: number) => void; onOpenGoal: (id: number) => void; onClear?: () => void; memoryTick?: number;
 }) {
   const [text, setText] = useState("");
+  const [showMemory, setShowMemory] = useState(false);
   const end = useRef<HTMLDivElement>(null);
   const byId = new Map((overlaps ?? []).map((o) => [o.id, o]));
   const ideas = [
@@ -40,8 +42,15 @@ export default function Chat({ me, msgs, busy, overlaps, requests, onSend, onOpe
           <h2 className="font-logo text-xl font-semibold leading-tight">Ask Crewly</h2>
           <div className="text-sm text-muted">Overlaps, requests, weather</div>
         </div>
+        <button onClick={() => setShowMemory(!showMemory)} aria-label="What Crewly remembers" aria-pressed={showMemory} title="What Crewly remembers"
+          className={`grid h-8 w-8 place-items-center rounded-full hover:bg-grape-soft ${showMemory ? "bg-grape-soft text-grape" : "text-muted"}`}><Brain size={16} /></button>
+        {onClear && msgs.length > 0 && (
+          <button onClick={onClear} aria-label="Clear chat" title="Clear chat" className="grid h-8 w-8 place-items-center rounded-full text-muted hover:bg-grape-soft"><Eraser size={16} /></button>
+        )}
         <button onClick={onClose} aria-label="Close chat" className="grid h-8 w-8 place-items-center rounded-full border-2 border-pen bg-white hover:bg-grape-soft"><X size={16} strokeWidth={2.5} /></button>
       </div>
+
+      {showMemory && <MemoryList tick={memoryTick} />}
 
       <div className="thin-scroll -mr-2 flex flex-1 flex-col gap-2.5 overflow-y-auto pr-2">
         {!msgs.length && (
