@@ -1,72 +1,76 @@
-from datetime import datetime, timezone
+from datetime import date
 
-from app.engine.plan import construction, decide, min_delay, overlap_months, sentence
-
-
-def dt(y, m=1):
-    return datetime(y, m, 1, tzinfo=timezone.utc)
+from app.engine import plan
 
 
-def row(id, a, b, a_win, b_win, low=100000, high=200000, drive=None, ja=None, jb=None):
-    return {"id": id, "a_name": a, "b_name": b, "job_a": ja or a, "job_b": jb or b, "a_org": "desc", "b_org": "gpc",
-            "a_start": a_win[0], "a_end": a_win[1], "b_start": b_win[0], "b_end": b_win[1],
-            "savings_low": low, "savings_high": high, "score": 0.5, "drive_min": drive}
+def job(id, org, start, end, name=None):
+    return {"id": id, "org_id": org, "name": name or id, "start_at": start, "in_service": end}
 
 
-def test_construction_is_middle_phase():
-    s, e = construction(dt(2020), dt(2030))
-    assert abs((s - dt(2023, 7)).days) <= 2 and abs((e - dt(2029)).days) <= 2  # 35% and 90% of ten years
+def data(jobs, pairs, opps=()):
+    sites = {f"job:{j['id']}": {"id": f"job:{j['id']}", "label": f"at {j['name']}", "lon": 0, "lat": 0} for j in jobs}
+    near = {j["id"]: [f"job:{j['id']}"] for j in jobs}
+    return {"jobs": jobs, "opps": list(opps), "pairs": [{"a": a, "b": b, "km": km} for a, b, km in pairs], "sites": sites, "near": near}
 
 
-def test_min_delay_whole_months():
-    fixed = (dt(2025, 1), dt(2026, 1))
-    assert min_delay(fixed, (dt(2024, 6), dt(2025, 6)), 3) == 0  # already overlaps 5 months
-    assert min_delay(fixed, (dt(2024, 1), dt(2024, 12)), 3) == 4  # needs to move into 2025 by 3 months
-    assert min_delay(fixed, (dt(2027, 1), dt(2028, 1)), 3) is None  # later project cannot be delayed backwards
-    assert min_delay(fixed, (dt(2024, 1), dt(2024, 3)), 3) is None  # too short to ever overlap 3 months
-    assert round(overlap_months(fixed, (dt(2025, 7), dt(2027, 1)))) == 6
+def solve(d, **cons):
+    c = plan.merge({"time_limit_s": 5, **cons})
+    res, *_ = plan.solve_all(d, c)
+    return res
 
 
-def test_delay_limit_rejects_with_numbers():
-    rows = [row(1, "Jasper", "McIntosh", (dt(2020), dt(2024)), (dt(2024, 6), dt(2027)))]
-    _, _, out = decide(rows, {"max_delay_months": 2})
-    d = out[0]
-    assert d["decision"] == "no_share"
-    r = d["reasons"][0]
-    assert r["rule"] == "max_delay" and r["limit_months"] == 2 and r["needed_months"] > 2
-    assert "your limit is 2" in d["sentence"]
+def test_durations_fill_the_window():
+    for total in (4, 7, 18, 36, 61):
+        d = plan.durations(total)
+        assert sum(d.values()) == total and min(d.values()) >= 1
 
 
-def test_drive_rule_and_unknown_drive():
-    win = (dt(2020), dt(2024))
-    _, _, out = decide([row(1, "A", "B", win, win, drive=72), row(2, "C", "D", win, win, drive=None)])
-    by = {d["opportunity_id"]: d for d in out}
-    assert by[1]["decision"] == "no_share" and by[1]["reasons"] == [{"rule": "drive_time", "minutes": 72, "limit": 45}]
-    assert "72 minutes apart by road; your limit is 45" in by[1]["sentence"]
-    assert by[2]["decision"] == "share" and by[2]["notes"] == [{"rule": "drive_unknown"}]
+def test_cross_utility_chain_saves_a_mobilization():
+    # DESC crew work ends right before GPC's nearby job starts; no utility can chain alone
+    d = data([job("desc-a", "desc", date(2024, 1, 1), date(2025, 1, 1)), job("gpc-b", "gpc", date(2024, 9, 1), date(2025, 9, 1))],
+             [("desc-a", "gpc-b", 5.0)], [{"id": 1, "job_a": "desc-a", "job_b": "gpc-b", "drive_min": 20}])
+    res = solve(d, max_advance_months=0)
+    assert res["baseline"]["mobilizations"] == 2
+    assert res["coordinated"]["mobilizations"] == 1 and res["coordinated"]["shared_crews"] == 1
+    assert res["coordinated"]["cost_k"] <= res["baseline"]["cost_k"]
+    assert res["headline"]["mobilizations_cut_pct"] == 50 and res["headline"]["late_projects"] == 0
 
 
-def test_crew_goes_to_bigger_saving():
-    win = (dt(2020), dt(2024))
-    rows = [row(1, "Jasper", "McIntosh", win, win, 100000, 100000), row(2, "Jasper", "Goshen", win, win, 300000, 400000)]
-    _, summary, out = decide(rows)
-    by = {d["opportunity_id"]: d for d in out}
-    assert by[2]["decision"] == "share"
-    r = by[1]["reasons"][0]
-    assert r == {"rule": "crew_taken", "project": "Jasper", "job_id": "Jasper", "by_opportunity": 2,
-                 "their_savings_mid": 350000, "this_savings_mid": 100000}
-    assert summary["shared"] == 1 and summary["rejected_by"]["crew_taken"] == 1
+def test_drive_time_blocks_sharing():
+    d = data([job("desc-a", "desc", date(2024, 1, 1), date(2025, 1, 1)), job("gpc-b", "gpc", date(2024, 9, 1), date(2025, 9, 1))],
+             [("desc-a", "gpc-b", 5.0)], [{"id": 1, "job_a": "desc-a", "job_b": "gpc-b", "drive_min": 70}])
+    res = solve(d, max_advance_months=0)
+    assert res["coordinated"]["mobilizations"] == 2  # 70 minutes by road is over the 45 minute crew limit
 
 
-def test_accepted_shift_sentence():
-    rows = [row(1, "Jasper", "McIntosh", (dt(2020), dt(2024)), (dt(2023, 3), dt(2026)))]
-    _, _, out = decide(rows, {"max_delay_months": 12})
-    d = out[0]
-    assert d["decision"] == "share" and d["shift"]["months"] > 0
-    assert d["sentence"].startswith(f"Share crews by delaying {d['shift']['project']} {d['shift']['months']} month")
+def test_coordinated_never_worse_and_shared_yard():
+    jobs = [job("desc-a", "desc", date(2024, 1, 1), date(2026, 1, 1)), job("gpc-b", "gpc", date(2024, 1, 1), date(2026, 1, 1))]
+    d = data(jobs, [("desc-a", "gpc-b", 3.0)], [{"id": 1, "job_a": "desc-a", "job_b": "gpc-b", "drive_min": 10}])
+    d["sites"]["opp:1"] = {"id": "opp:1", "label": "between", "lon": 0, "lat": 0}
+    d["near"] = {"desc-a": ["job:desc-a", "opp:1"], "gpc-b": ["job:gpc-b", "opp:1"]}
+    res = solve(d)
+    assert res["baseline"]["yards"] == 2 and res["coordinated"]["yards"] == 1
+    assert res["coordinated"]["cost_k"] <= res["baseline"]["cost_k"]
+
+
+def test_blackout_moves_energization():
+    d = data([job("desc-a", "desc", date(2024, 1, 1), date(2025, 7, 1), "Okatie sub")], [])
+    res = solve(d, blackouts=[{"site": "Okatie", "months": [5, 6, 7, 8], "phase_kind": "energization"}], max_advance_months=3)
+    st = res["sched"]["desc-a"]["starts"]
+    origin = date(2023, 10, 1)  # three months of allowed advance before the filed start
+    t = plan.prepare(d, plan.merge({"max_advance_months": 3}))[1]["desc-a"]
+    months = {plan.month_date(origin, st["energization"] + i).month for i in range(t["dur"]["energization"])}
+    assert not months & {5, 6, 7, 8}
+
+
+def test_slip_limit_and_crew_counts_make_it_infeasible():
+    jobs = [job("desc-a", "desc", date(2024, 1, 1), date(2025, 1, 1)), job("desc-b", "desc", date(2024, 1, 1), date(2025, 1, 1))]
+    res = solve(data(jobs, []), crew_counts={"desc": {"2024": 1}}, max_slip_months=0, max_advance_months=0)
+    assert res["status"] == "infeasible" and "relaxing the slip limit" in res["problem"]
 
 
 def test_sentences():
-    assert sentence({"rule": "max_delay", "project": "Jasper", "needed_months": 4, "limit_months": 2}) == \
-        "Sharing would push Jasper 4 months past its in-service date; your limit is 2."
-    assert sentence({"rule": "max_delay", "project": "Jasper", "needed_months": 1, "limit_months": 0}).startswith("Sharing would push Jasper 1 month past")
+    assert plan.sentence({"rule": "max_slip", "project": "Jasper – Okatie", "needed_months": 4, "limit_months": 2}) == \
+        "Sharing would push Jasper – Okatie 4 months past in-service; limit is 2."
+    assert plan.sentence({"rule": "drive_time", "minutes": 72, "limit": 45}) == "The two sites are 72 minutes apart by road; the crew limit is 45."
+    assert "saving one mobilization" in plan.sentence({"rule": "shared_crew", "crew": "DESC crew 1", "first": "A", "then": "B", "gap_months": 1})
