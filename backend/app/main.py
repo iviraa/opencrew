@@ -435,7 +435,9 @@ def health():
         with connect() as conn:
             return {"ok": True, "jobs": conn.execute("SELECT count(*) AS n FROM job").fetchone()["n"]}
     except Exception as e:  # stay up and say what is wrong with the database, without the url
-        return {"ok": False, "database": f"{type(e).__name__}: {str(e)[:200]}"}
+        from urllib.parse import urlparse
+        host = urlparse(os.environ.get("DATABASE_URL", "")).hostname or "not set (using the local default)"
+        return {"ok": False, "database_host": host, "database": f"{type(e).__name__}: {str(e)[:200]}"}
 
 
 # ---------- storm response: pre-storm briefing and restoration crew plan ----------
