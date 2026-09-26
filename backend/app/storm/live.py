@@ -12,7 +12,9 @@ from app.storm import incidents, news, replay
 from app.storm.helene import DAMAGE, LANDFALL, REPLAY
 
 HEADERS = {"User-Agent": "opencrew/0.1 (hackathon)", "Accept": "application/geo+json"}  # NWS requires a User-Agent
-ALERTS = "https://api.weather.gov/alerts/active?area=GA,SC"
+ALERTS = "https://api.weather.gov/alerts/active"  # ?area= is the states our utilities work in, from the org table
+DEFAULT_STATES = ("GA", "SC")
+ALERT_CAP = 2000  # features kept per poll across pages
 SPC_TODAY = "https://www.spc.noaa.gov/climo/reports/today_filtered_{kind}.csv"
 LSR = "https://mesonet.agron.iastate.edu/geojson/lsr.geojson"
 POINTS = "https://api.weather.gov/points/{lat:.4f},{lon:.4f}"
@@ -46,12 +48,28 @@ def parse_alerts(data, zone_geometry=lambda url: None, max_zones=40):
     return rows
 
 
-def parse_spc(text, kind, now):
+def utility_states(conn):
+    """Every state a utility on crewly works in; the two demo states when the table is empty."""
+    rows = conn.execute("SELECT DISTINCT state FROM org WHERE kind = 'utility' AND state IS NOT NULL ORDER BY state").fetchall()
+    return tuple(r["state"] for r in rows) or DEFAULT_STATES
+
+
+def fetch_alerts(states):
+    """Active NWS alerts for these states, following the feed's pagination up to a cap."""
+    feats, url, params = [], ALERTS, {"area": ",".join(states)}
+    while url and len(feats) < ALERT_CAP:
+        data = get(url, params=params).json()
+        feats += data.get("features", [])
+        url, params = data.get("pagination", {}).get("next"), None
+    return {"features": feats[:ALERT_CAP]}
+
+
+def parse_spc(text, kind, now, states=DEFAULT_STATES):
     """SPC today file: times are UTC HHMM within the 12Z-to-12Z convective day."""
     day0 = (now - timedelta(hours=12)).replace(hour=12, minute=0, second=0, microsecond=0)
     rows = []
     for r in csv.DictReader(io.StringIO(text)):
-        if r.get("State") not in ("GA", "SC") or not r.get("Time", "").isdigit():
+        if r.get("State") not in states or not r.get("Time", "").isdigit():
             continue
         hhmm = int(r["Time"])
         ts = day0 + timedelta(days=1 if hhmm < 1200 else 0, hours=hhmm // 100 - 12, minutes=hhmm % 100)
@@ -102,17 +120,18 @@ def store(conn, rows, kind, since=None):
 def poll(conn):
     """One live refresh: official feeds, latest news, incidents, and phase wind risks. Failures skip a source, never the poll."""
     now, out = datetime.now(timezone.utc), {}
+    states = utility_states(conn)
     try:
-        out["alerts"] = store(conn, parse_alerts(get(ALERTS).json(), zone_outline), "nws_alert")
+        out["alerts"] = store(conn, parse_alerts(fetch_alerts(states), zone_outline), "nws_alert")
     except httpx.HTTPError as e:
         out["alerts_error"] = str(e)[:120]
     try:
-        spc = [row for kind in ("wind", "torn") for row in parse_spc(get(SPC_TODAY.format(kind=kind)).text, kind, now)]
+        spc = [row for kind in ("wind", "torn") for row in parse_spc(get(SPC_TODAY.format(kind=kind)).text, kind, now, states)]
         out["spc_reports"] = store(conn, spc, "spc_report", since=now - timedelta(hours=24))
     except httpx.HTTPError as e:
         out["spc_error"] = str(e)[:120]
     try:
-        lsr = get(LSR, params={"sts": f"{now - timedelta(hours=24):%Y-%m-%dT%H:%MZ}", "ets": f"{now:%Y-%m-%dT%H:%MZ}", "states": "GA,SC"}).json()
+        lsr = get(LSR, params={"sts": f"{now - timedelta(hours=24):%Y-%m-%dT%H:%MZ}", "ets": f"{now:%Y-%m-%dT%H:%MZ}", "states": ",".join(states)}).json()
         out["lsr_reports"] = store(conn, parse_lsr(lsr), "lsr", since=now - timedelta(hours=24))
     except httpx.HTTPError as e:
         out["lsr_error"] = str(e)[:120]
