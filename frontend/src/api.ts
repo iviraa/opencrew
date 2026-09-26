@@ -129,7 +129,7 @@ export type Headline = {
 
 export type PlanHeadline = Headline & {
   crews: Record<string, Record<string, number>>; free_projects?: number;
-  solver?: { separate: string; coordinated: string; coordinated_gap_k: number };
+  solver?: { separate: string; coordinated: string; coordinated_gap_k: number; separate_gap_k?: number };
   joint_contracting: (Headline & { contractor_pairs: number; pairs: string[][]; assumption: string }) | null;
 };
 

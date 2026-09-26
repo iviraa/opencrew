@@ -71,7 +71,7 @@ def test_projects(conn):
     assert call(conn, "search_projects", query="thomson second transformer")[0]["matches"][0]["job_id"] == "gpc-14222"
     r, ui = call(conn, "project_details", query="Thomson Primary second transformer")
     assert r["job_id"] == "gpc-14222" and any("2031" in h["window"] for h in r["plan_history"]) and ui[0]["type"] == "fly"
-    assert call(conn, "project_details", query="Kathleen Area Improvements")[0]["placed"] is False
+    assert call(conn, "project_details", query="Goose Creek Reservoir")[0]["placed"] is False
     assert "error" in call(conn, "project_details", query="nonexistent zzz project")[0]
     r, _ = call(conn, "compare_projects", a="Jasper Okatie", b="Goshen McIntosh")
     assert r["center_to_center_mi"] == 7.55 and r["tier"] == "site" and r["opportunity_id"]

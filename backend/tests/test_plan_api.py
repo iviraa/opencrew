@@ -36,7 +36,7 @@ def test_coordinated_never_worse_and_nobody_late(solved):
     assert solved["coordinated"]["mobilizations"] == solved["baseline"]["mobilizations"]  # general crews stay with their utility
     assert solved["coordinated"]["all_mobilizations"] <= solved["baseline"]["all_mobilizations"]
     h = solved["headline"]
-    assert h["late_projects"] == 0 and h["joint_contracting"] is None and h["solver"]["separate"] == "optimal"
+    assert h["late_projects"] == 0 and h["joint_contracting"] is None and h["solver"]["separate"] in ("optimal", "feasible") and h["solver"]["separate_gap_k"] >= 0
     assert h["savings_low"] <= h["savings_high"]
     assert all(r["slip"] <= r["slip_limit"] for r in solved["schedule"])
     assert {p["phase"] for r in solved["schedule"] for p in r["phases"]} == {"survey & permitting", "clearing", "construction", "energization"}

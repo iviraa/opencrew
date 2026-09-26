@@ -92,7 +92,8 @@ export default function JointPlan({ plan, solving, onSolve, pending, onDiscardPe
 
           {solver && (
             <p className="mt-3 text-[13px] text-muted">
-              {solver.separate === "optimal" ? "The separate plans are proven best, so the comparison is fair. " : "The separate plans are the best found in time. "}
+              {solver.separate === "optimal" ? "The separate plans are proven best, so the comparison is fair. "
+                : `The separate plans are the best found in time (a perfect solo plan could be at most $${(solver.separate_gap_k ?? 0).toLocaleString()}k cheaper). `}
               {solver.coordinated === "optimal" ? "The joint plan is proven best too."
                 : `The joint plan is the best found in the time limit; a perfect plan could save at most $${solver.coordinated_gap_k.toLocaleString()}k more.`}
             </p>

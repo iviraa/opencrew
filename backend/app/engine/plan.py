@@ -11,7 +11,7 @@ from ortools.sat.python import cp_model
 from app.config import ASSUMPTIONS, PHASES, mob_share
 from app.ingest.classify import endpoints
 
-MODEL = 3  # bump when the model changes so stored plans get re-solved
+MODEL = 4  # bump when the model changes so stored plans get re-solved
 WPM = 4  # model weeks per month; burst dates are measured from their phase start so the rounding stays inside a phase
 BURSTS = {  # durations and windows are editable assumptions; costs are shares of MISO's per-project mobilization (config.MOB_SHARE)
     "heavy_haul": {"label": "heavy haul", "resource": "heavy-haul rig", "phase": "construction", "window": [0.0, 0.35], "weeks": 2,
@@ -704,15 +704,16 @@ def describe(d, c):
 def solve_all(data, c):
     origin, tasks, near = prepare(data, c)
     crews = default_crews(tasks, origin)
-    base_sched, problems, base_status = {}, [], "optimal"
+    base_sched, problems, base_status, base_gap = {}, [], "optimal", 0
     for org in sorted({t["org"] for t in tasks.values()}):  # each utility alone
         sub = {j: t for j, t in tasks.items() if t["org"] == org}
         model, v, _ = build(sub, near, data, c, origin, crews, coordinated=False)
-        s, status = solve(model, c, c["time_limit_s"] * 3)  # the baseline must be proven optimal for the savings to be fair
+        s, status = solve(model, c, c["time_limit_s"] * 3)  # more time for the baseline so the comparison stays fair
         if status not in ("OPTIMAL", "FEASIBLE"):
             problems.append(org)
             continue
         base_status = base_status if status == "OPTIMAL" else "feasible"
+        base_gap += max(0, int(round(s.ObjectiveValue() - s.BestObjectiveBound())))  # how much better a solo plan could still be
         base_sched.update(extract(s, v, sub))
     if problems:
         return {"status": "infeasible", "problem": diagnose(data, c, problems)}, origin, tasks, near, crews
@@ -730,7 +731,7 @@ def solve_all(data, c):
     sched = crew_ids(extract(s, v, tasks), tasks, c)
     coord = metrics(sched, tasks, c, coordinated=True)
     res = {"status": status.lower(), "baseline": base, "coordinated": coord, "headline": {**headline(base, coord, c), "free_projects": len(free)},
-           "sched": sched, "base_sched": base_sched, "base_status": base_status, "gap_k": gap_k}
+           "sched": sched, "base_sched": base_sched, "base_status": base_status, "gap_k": gap_k, "base_gap_k": base_gap}
     if c["joint_contracting"]:  # optional assumption, solved on top of the strict plan so it can only add
         model, v, cost = build(tasks, near, data, c, origin, crews, coordinated=True, jc=True,
                                fixed={j: r for j, r in sched.items() if j not in free})
@@ -826,7 +827,7 @@ def run(conn, constraints=None):
     rows = schedule_rows(sched, tasks, origin, data["sites"], res["base_sched"], c)
     crew_table = {org: {str(y): capacity(org, y, crews, c["crew_counts"]) for y in years} for org, years in crews.items()}
     head = {**res["headline"], "crews": crew_table, "joint_contracting": jc["headline"] if jc else None}
-    head["solver"] = {"separate": res["base_status"], "coordinated": res["status"], "coordinated_gap_k": res["gap_k"]}
+    head["solver"] = {"separate": res["base_status"], "coordinated": res["status"], "coordinated_gap_k": res["gap_k"], "separate_gap_k": res["base_gap_k"]}
     out = {"status": res["status"], "baseline": res["baseline"], "coordinated": res["coordinated"], "headline": head}
     row = conn.execute("""INSERT INTO joint_plan (constraints, job_ids, status, baseline, coordinated, headline, schedule, decisions, fingerprint)
                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id, run_at""",
