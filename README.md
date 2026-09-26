@@ -1,6 +1,6 @@
 # Crewly
 
-Crewly is the agent that finds, manages, and creates collaboration opportunities for electric utilities. It helps teams coordinate planned work, estimate shared savings, and respond to active weather and storm conditions. It combines utility filing data, geographic and grid layers, restoration plans, live feeds, and an operations interface for reviewing opportunities and preparing outreach.
+Crewly is an agentic operations platform for discovering, evaluating, and coordinating high-value collaboration opportunities across organizations. It turns fragmented plans, operational data, geographic context, and live conditions into actionable recommendations, shared work plans, and stakeholder outreach. The current application brings together utility filings, grid and geographic layers, restoration plans, weather and storm feeds, and the workflows needed to review and act on each opportunity.
 
 ## Stack
 
