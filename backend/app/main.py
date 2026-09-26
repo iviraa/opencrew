@@ -11,6 +11,7 @@ from app.crewly import agent, brief
 from app.db import ROOT, get_conn
 from app.engine.cost import savings
 from app.engine.overlap import recompute
+from app.engine.phases import build_phases
 from app.queries import JOB_SQL, OPP_SQL, shareable
 from app.storm import replay
 
@@ -177,7 +178,32 @@ def storm_frame(at: datetime, conn=Depends(get_conn)):
 
 @api.get("/review")
 def review(conn=Depends(get_conn)):
-    return conn.execute("SELECT id, org_id, reason, source_page, raw->>'name' AS name FROM job_review ORDER BY id").fetchall()
+    return conn.execute("""SELECT id, org_id, reason, source_page, raw->>'name' AS name, raw->>'in_service' AS in_service,
+                                  raw->'endpoints' AS endpoints FROM job_review ORDER BY org_id, raw->>'in_service'""").fetchall()
+
+
+class Place(BaseModel):
+    lon: float
+    lat: float
+    placed_by: str = "planner"
+
+
+@api.post("/review/{review_id}/place")
+def place(review_id: int, body: Place, conn=Depends(get_conn)):
+    r = conn.execute("SELECT * FROM job_review WHERE id = %s", (review_id,)).fetchone()
+    if not r or "id" not in r["raw"]:
+        raise HTTPException(404, "review item not found or not a parsed project")
+    j = r["raw"]
+    conn.execute("""
+        INSERT INTO job (id, org_id, name, ref, description, horizon, job_type, voltage_kv, endpoints, geom, geom_quality, work_window,
+                         window_basis, in_service, cost_usd, source_doc_id, source_page, extraction, confidence, resources)
+        VALUES (%(id)s, %(org_id)s, %(name)s, %(ref)s, %(description)s, 'long', %(job_type)s, %(voltage_kv)s, %(endpoints)s,
+                ST_SetSRID(ST_MakePoint(%(lon)s, %(lat)s), 4326)::geography, 'manual', tstzrange(%(start)s::date, %(in_service)s::date),
+                %(window_basis)s, %(in_service)s::date, %(cost_usd)s, %(doc)s, %(page)s, 'manual', 0.6, ARRAY['crews', 'row', 'staging'])""",
+                 {**j, "lon": body.lon, "lat": body.lat, "doc": r["source_doc_id"], "page": r["source_page"]})
+    conn.execute("DELETE FROM job_review WHERE id = %s", (review_id,))
+    build_phases(conn)
+    return {"job_id": j["id"], "long": recompute(conn, "long"), "near": recompute(conn, "near")}
 
 
 class Chat(BaseModel):

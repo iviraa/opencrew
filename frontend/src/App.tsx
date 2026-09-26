@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { api, type Assumption, type CrewlyAction, type StormFrame, type JobCollection, type Opportunity, type OpportunityDetail, type Tier } from "./api";
+import { api, type Assumption, type CrewlyAction, type ReviewItem, type StormFrame, type JobCollection, type Opportunity, type OpportunityDetail, type Tier } from "./api";
 import Crewly from "./components/Crewly";
 import DetailPanel from "./components/DetailPanel";
 import MapView from "./components/MapView";
 import OpportunityList from "./components/OpportunityList";
+import ReviewPanel from "./components/ReviewPanel";
 import StormReplay from "./components/StormReplay";
 import Timeline from "./components/Timeline";
 
@@ -28,7 +29,10 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [crewlyOpen, setCrewlyOpen] = useState(false);
   const [crewlyIds, setCrewlyIds] = useState<number[] | null>(null);
-  const [review, setReview] = useState(0);
+  const [review, setReview] = useState<ReviewItem[]>([]);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [placingId, setPlacingId] = useState<number | null>(null);
+  const [reload, setReload] = useState(0);
   const [stormAt, setStormAt] = useState(LANDFALL - 12 * 3600e3);
   const [storm, setStorm] = useState<StormFrame | null>(null);
   const [fly, setFly] = useState<{ bbox: [number, number, number, number]; at: number } | null>(null);
@@ -37,7 +41,7 @@ export default function App() {
     Promise.all([api.jobs(horizon), api.opportunities(horizon), api.assumptions()])
       .then(([j, o, a]) => { setJobs(j); setOpps(o); setAssumptions(a); })
       .catch((e) => setError(String(e)));
-  }, [horizon]);
+  }, [horizon, reload]);
 
   useEffect(() => {
     if (horizon !== "emergency") { setStorm(null); return; }
@@ -45,7 +49,12 @@ export default function App() {
     return () => clearTimeout(id);
   }, [horizon, stormAt]);
 
-  useEffect(() => { api.review().then((r) => setReview(r.length)).catch(() => {}); }, []);
+  useEffect(() => { api.review().then(setReview).catch(() => {}); }, [reload]);
+
+  const placeAt = (lon: number, lat: number) => {
+    if (placingId == null) return;
+    api.place(placingId, lon, lat).then(() => { setPlacingId(null); setReload((n) => n + 1); }).catch((e) => setError(String(e)));
+  };
 
   useEffect(() => {
     if (selectedId == null) { setDetail(null); return; }
@@ -103,7 +112,10 @@ export default function App() {
         <div className="ml-auto flex items-center gap-4 text-xs text-slate-500">
           {[...counts].map(([org, n]) => <span key={org}>{org}: <b className="text-slate-800">{n}</b> {horizon === "near" ? "phases" : horizon === "emergency" ? "restoration jobs" : "projects"}</span>)}
           <span>Opportunities: <b className="text-slate-800">{opps.length}</b></span>
-          {review > 0 && <span className="rounded bg-amber-100 px-2 py-0.5 text-amber-800" title="Projects parsed from filings but not yet placed on the map">{review} need location review</span>}
+          {review.length > 0 && (
+            <button onClick={() => setReviewOpen((o) => !o)} className="rounded bg-amber-100 px-2 py-0.5 text-amber-800 hover:bg-amber-200"
+              title="Projects parsed from filings but not yet placed on the map">{review.length} need location review</button>
+          )}
           <button onClick={() => setCrewlyOpen((o) => !o)}
             className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${crewlyOpen ? "bg-slate-900 text-white" : "bg-blue-600 text-white hover:bg-blue-700"}`}>
             Ask Crewly
@@ -113,12 +125,14 @@ export default function App() {
       {error && <div className="bg-red-50 px-5 py-2 text-sm text-red-700">{error}</div>}
       <main className="flex min-h-0 flex-1">
         <aside className="w-[380px] shrink-0 border-r border-slate-200 bg-white">
-          <OpportunityList items={opps} shown={shown} selectedId={selectedId} tier={tier} onTier={setTier} onSelect={setSelectedId}
-            crewlyFiltered={crewlyIds !== null} onClearCrewly={() => setCrewlyIds(null)} />
+          {reviewOpen
+            ? <ReviewPanel items={review} placingId={placingId} onPlace={setPlacingId} onClose={() => { setReviewOpen(false); setPlacingId(null); }} />
+            : <OpportunityList items={opps} shown={shown} selectedId={selectedId} tier={tier} onTier={setTier} onSelect={setSelectedId}
+            crewlyFiltered={crewlyIds !== null} onClearCrewly={() => setCrewlyIds(null)} />}
         </aside>
         <section className="flex min-w-0 flex-1 flex-col">
           <div className="relative min-h-0 flex-1">
-            <MapView jobs={visibleJobs} opportunities={shown} selected={selected} onSelect={setSelectedId} fly={fly} storm={storm} />
+            <MapView jobs={visibleJobs} opportunities={shown} selected={selected} onSelect={setSelectedId} fly={fly} storm={storm} onMapClick={placingId != null ? placeAt : null} />
             {crewlyOpen && (
               <div className="absolute bottom-3 right-3 top-3 z-20 w-[360px]">
                 <Crewly onActions={applyActions} onClose={() => setCrewlyOpen(false)} />

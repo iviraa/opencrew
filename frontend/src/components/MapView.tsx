@@ -12,6 +12,7 @@ type Props = {
   onSelect: (id: number) => void;
   fly: { bbox: [number, number, number, number]; at: number } | null;
   storm: StormFrame | null;
+  onMapClick?: ((lon: number, lat: number) => void) | null;
 };
 
 maplibregl.setWorkerUrl(workerUrl); // v6 needs an explicit worker once bundled
@@ -47,7 +48,7 @@ function coordsOf(g: GeoJSON.Geometry): number[][] {
   return [];
 }
 
-export default function MapView({ jobs, opportunities, selected, onSelect, fly, storm }: Props) {
+export default function MapView({ jobs, opportunities, selected, onSelect, fly, storm, onMapClick }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -55,6 +56,8 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
   const tractsLoaded = useRef(false);
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
+  const clickRef = useRef(onMapClick);
+  clickRef.current = onMapClick;
 
   useEffect(() => {
     const m = new maplibregl.Map({ container: box.current!, style: STYLE, center: [-81.6, 32.9], zoom: 6.3 });
@@ -109,7 +112,8 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
       m.addLayer({ id: "opp-selected", type: "circle", source: "opps", filter: ["all", ["has", "marker"], ["==", ["get", "id"], -1]],
         paint: { "circle-radius": 18, "circle-color": "transparent", "circle-stroke-color": "#0f172a", "circle-stroke-width": 3 } });
 
-      m.on("click", "opp-markers", (e) => onSelectRef.current(Number(e.features![0].properties.id)));
+      m.on("click", (e) => clickRef.current?.(e.lngLat.lng, e.lngLat.lat));
+      m.on("click", "opp-markers", (e) => { if (!clickRef.current) onSelectRef.current(Number(e.features![0].properties.id)); });
       for (const layer of ["job-lines", "job-lines-approx", "job-points"]) {
         m.on("click", layer, (e) => {
           const p = e.features![0].properties;
@@ -169,6 +173,10 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
       (m.getSource(key) as GeoJSONSource).setData(storm ? storm[key] : EMPTY);
     }
   }, [storm, loaded]);
+
+  useEffect(() => {
+    if (map.current) map.current.getCanvas().style.cursor = onMapClick ? "crosshair" : "";
+  }, [onMapClick]);
 
   useEffect(() => {
     if (!fly || !map.current) return;

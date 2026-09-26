@@ -42,6 +42,8 @@ export type StormFrame = {
   reports: GeoJSON.FeatureCollection; staging: GeoJSON.FeatureCollection; exposure: Record<string, number>;
 };
 
+export type ReviewItem = { id: number; org_id: string; reason: string; source_page: number; name: string; in_service: string; endpoints: string[] | null };
+
 export type JobCollection = GeoJSON.FeatureCollection<GeoJSON.Geometry, Job>;
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
@@ -65,7 +67,8 @@ export const api = {
   brief: (id: number) => call<{ markdown: string; summary_source: string }>(`/opportunities/${id}/brief`, { method: "POST" }),
   tracts: () => call<GeoJSON.FeatureCollection>("/layers/tracts"),
   storm: (at: number) => call<StormFrame>(`/storm/frame?at=${new Date(at).toISOString()}`),
-  review: () => call<{ id: number; org_id: string; reason: string; name: string }[]>("/review"),
+  review: () => call<ReviewItem[]>("/review"),
+  place: (id: number, lon: number, lat: number) => call<unknown>(`/review/${id}/place`, { method: "POST", body: JSON.stringify({ lon, lat }) }),
   contacts: (id: number) => call<Contact[]>(`/opportunities/${id}/contacts`),
   outreach: (id: number) => call<OutreachItem[]>(`/opportunities/${id}/outreach`),
   draftOutreach: (opportunity_id: number, contact_id: number) =>
