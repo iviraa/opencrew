@@ -38,6 +38,8 @@ export default function App() {
   const [stormAt, setStormAt] = useState(LANDFALL - 12 * 3600e3);
   const [storm, setStorm] = useState<StormFrame | null>(null);
   const [fly, setFly] = useState<{ bbox: [number, number, number, number]; at: number } | null>(null);
+  const [zone, setZone] = useState<GeoJSON.Feature | null>(null);
+  const [roadOnly, setRoadOnly] = useState(false);
   const [hover, setHover] = useState<{ key: string; from: "map" | "timeline" } | null>(null);
   const [loading, setLoading] = useState(true);
   const [stormLoading, setStormLoading] = useState(false);
@@ -69,6 +71,12 @@ export default function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [ingestOpen, placingId, crewlyOpen, selectedId, reviewOpen]);
+
+  useEffect(() => {
+    setZone(null);
+    if (selectedId == null || horizon === "emergency") return;
+    api.driveZone(selectedId).then(setZone).catch(() => {});  // 45 min drive zone around the first site
+  }, [selectedId, horizon]);
 
   useEffect(() => { api.review().then(setReview).catch(() => {}); }, [reload]);
 
@@ -120,8 +128,9 @@ export default function App() {
 
   const selected = opps.find((o) => o.id === selectedId) ?? null;
   const live = (iso: string) => horizon !== "emergency" || Date.parse(iso) <= stormAt;  // storm replay only shows what has happened by now
-  const shown = useMemo(() => opps.filter((o) => (!tier || o.tier === tier) && (!crewlyIds || crewlyIds.includes(o.id)) && live(o.a_start) && live(o.b_start)),
-    [opps, tier, crewlyIds, horizon, stormAt]);  // stable arrays so hover renders don't re-upload map data
+  const shown = useMemo(() => opps.filter((o) => (!tier || o.tier === tier) && (!crewlyIds || crewlyIds.includes(o.id)) && live(o.a_start) && live(o.b_start)
+    && (!roadOnly || o.drive_min == null || o.drive_min <= 45)),
+    [opps, tier, crewlyIds, horizon, stormAt, roadOnly]);  // stable arrays so hover renders don't re-upload map data
   const visibleJobs = useMemo(() => (jobs && horizon === "emergency" ? { ...jobs, features: jobs.features.filter((f) => live(f.properties.start_at)) } : jobs),
     [jobs, horizon, stormAt]);
 
@@ -165,12 +174,12 @@ export default function App() {
           {reviewOpen
             ? <ReviewPanel items={review} placingId={placingId} onPlace={setPlacingId} onClose={() => { setReviewOpen(false); setPlacingId(null); }} />
             : <OpportunityList items={opps} shown={shown} selectedId={selectedId} tier={tier} onTier={setTier} onSelect={setSelectedId}
-            crewlyFiltered={crewlyIds !== null} onClearCrewly={() => setCrewlyIds(null)} loading={loading}
+            crewlyFiltered={crewlyIds !== null} onClearCrewly={() => setCrewlyIds(null)} loading={loading} roadOnly={roadOnly} onRoadOnly={setRoadOnly}
             emptyText={horizon === "emergency" ? "No cross-utility restoration overlaps yet at this time. Scrub the replay forward." : "No opportunities match these filters."} />}
         </aside>
         <section className="flex min-w-0 flex-1 flex-col">
           <div className="relative min-h-0 flex-1">
-            <MapView jobs={visibleJobs} opportunities={shown} selected={selected} onSelect={setSelectedId} fly={fly} storm={storm} onMapClick={placingId != null ? placeAt : null}
+            <MapView jobs={visibleJobs} opportunities={shown} selected={selected} onSelect={setSelectedId} fly={fly} storm={storm} zone={zone} onMapClick={placingId != null ? placeAt : null}
               hoverKey={hover?.key ?? null} onHover={(key) => setHover(key ? { key, from: "map" } : null)} />
             {crewlyOpen && (
               <div className="absolute bottom-3 right-3 top-3 z-20 w-[360px]">

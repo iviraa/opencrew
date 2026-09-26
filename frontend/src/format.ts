@@ -16,6 +16,7 @@ export const QUALITY_LABEL: Record<string, string> = {
 };
 
 export const FLAG_LABEL: Record<string, string> = {
+  over_45_min_drive: "Over 45 min by road",
   hurricane_season_high_risk: "Hurricane season, high risk",
   tie_line: "Interstate tie line",
   shared_endpoint: "Shared substation",

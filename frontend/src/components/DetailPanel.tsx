@@ -56,6 +56,10 @@ export default function DetailPanel({ detail, assumptions, onClose, onStatus, on
         <section className="grid grid-cols-2 gap-2">
           <Metric label="Closest distance" value={miles(detail.distance_m)} />
           <Metric label="Center to center" value={miles(detail.center_distance_m)} />
+          <Metric label="Drive time by road" warn={detail.drive_min != null && detail.drive_min > 45}
+            value={detail.drive_min == null ? "unknown" : `${Math.round(detail.drive_min)} min · ${Math.round(detail.drive_km ?? 0)} km`} />
+          <Metric label="Crew and yard sharing" warn={detail.drive_min != null && detail.drive_min > 45}
+            value={detail.drive_min == null ? "not checked" : detail.drive_min > 45 ? "too far (over 45 min)" : "within 45 min"} />
           <Metric label="Build window overlap" value={pct(detail.time_overlap)} />
           <Metric label="In-service gap" value={detail.time_gap_days == null ? "n/a" : `${detail.time_gap_days} days`} />
           <Metric label="Hurricane risk (FEMA NRI)" value={`${Math.round(detail.risk * 100)} / 100`} />
@@ -73,6 +77,7 @@ export default function DetailPanel({ detail, assumptions, onClose, onStatus, on
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">What they could share</h3>
           <div className="flex flex-wrap gap-1.5">
             {detail.shareable.map((s) => <span key={s} className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-700">{s}</span>)}
+            {detail.shareable.length === 0 && <span className="text-xs text-slate-500">Nothing: the sites are more than a 45 minute drive apart.</span>}
           </div>
         </section>
 
@@ -134,11 +139,11 @@ export default function DetailPanel({ detail, assumptions, onClose, onStatus, on
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function Metric({ label, value, warn = false }: { label: string; value: string; warn?: boolean }) {
   return (
     <div className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
       <div className="text-[11px] text-slate-500">{label}</div>
-      <div className="text-sm font-semibold">{value}</div>
+      <div className={`text-sm font-semibold ${warn ? "text-rose-600" : ""}`}>{value}</div>
     </div>
   );
 }

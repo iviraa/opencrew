@@ -15,6 +15,7 @@ type Props = {
   onMapClick?: ((lon: number, lat: number) => void) | null;
   hoverKey: string | null;
   onHover: (key: string | null) => void;
+  zone?: GeoJSON.Feature | null;
 };
 
 maplibregl.setWorkerUrl(workerUrl); // v6 needs an explicit worker once bundled
@@ -73,7 +74,7 @@ function coordsOf(g: GeoJSON.Geometry): number[][] {
   return [];
 }
 
-export default function MapView({ jobs, opportunities, selected, onSelect, fly, storm, onMapClick, hoverKey, onHover }: Props) {
+export default function MapView({ jobs, opportunities, selected, onSelect, fly, storm, onMapClick, hoverKey, onHover, zone }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -96,6 +97,9 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
         m.addLayer({ id: `tract-${key}`, type: "fill", source: "tracts", layout: { visibility: "none" },
           paint: { "fill-color": color, "fill-opacity": ["interpolate", ["linear"], ["coalesce", ["get", key], 0], 0, 0, 1, 0.45] } });
       }
+      m.addSource("zone", { type: "geojson", data: EMPTY });
+      m.addLayer({ id: "zone-fill", type: "fill", source: "zone", paint: { "fill-color": "#16a34a", "fill-opacity": 0.08 } });
+      m.addLayer({ id: "zone-line", type: "line", source: "zone", paint: { "line-color": "#16a34a", "line-width": 1.5, "line-dasharray": [3, 2] } });
       m.addSource("grid", { type: "geojson", data: EMPTY });
       m.addLayer({ id: "grid", type: "line", source: "grid", layout: { visibility: "none" },
         paint: { "line-color": "#94a3b8", "line-opacity": 0.7,
@@ -235,6 +239,12 @@ export default function MapView({ jobs, opportunities, selected, onSelect, fly, 
     m.setFilter("job-hover-line", ["==", ROW_KEY, hoverKey ?? ""]);
     m.setFilter("job-hover-point", ["all", ["==", ["geometry-type"], "Point"], ["==", ROW_KEY, hoverKey ?? ""]]);
   }, [hoverKey, loaded]);
+
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !loaded) return;
+    (m.getSource("zone") as GeoJSONSource).setData(zone ?? EMPTY);
+  }, [zone, loaded]);
 
   useEffect(() => {
     if (!fly || !map.current) return;

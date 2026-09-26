@@ -14,6 +14,8 @@ type Props = {
   onSelect: (id: number) => void;
   loading: boolean;
   emptyText: string;
+  roadOnly: boolean;
+  onRoadOnly: (v: boolean) => void;
 };
 
 export function TierChip({ tier }: { tier: Tier }) {
@@ -24,7 +26,7 @@ export function TierChip({ tier }: { tier: Tier }) {
   );
 }
 
-export default function OpportunityList({ items, shown, crewlyFiltered, onClearCrewly, selectedId, tier, onTier, onSelect, loading, emptyText }: Props) {
+export default function OpportunityList({ items, shown, crewlyFiltered, onClearCrewly, selectedId, tier, onTier, onSelect, loading, emptyText, roadOnly, onRoadOnly }: Props) {
   const [tab, setTab] = useState<"overlaps" | "equipment">("overlaps");
   const tabs = (
     <div className="mb-2 flex gap-4 text-sm">
@@ -60,6 +62,10 @@ export default function OpportunityList({ items, shown, crewlyFiltered, onClearC
               {TIER_LABEL[t]} · {items.filter((o) => o.tier === t).length}
             </button>
           ))}
+          <button onClick={() => onRoadOnly(!roadOnly)} title="Crews and yards can only be shared when the sites are within a 45 minute drive"
+            className={`rounded-full px-2.5 py-1 text-xs font-medium ${roadOnly ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
+            Within 45 min drive · {items.filter((o) => o.drive_min == null || o.drive_min <= 45).length}
+          </button>
         </div>
       </div>
       <ol className="flex-1 overflow-y-auto">
@@ -77,6 +83,7 @@ export default function OpportunityList({ items, shown, crewlyFiltered, onClearC
                   <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600">
                     <TierChip tier={o.tier} />
                     <span>{miles(o.distance_m)}</span>
+                    {o.drive_min != null && <span className={o.drive_min > 45 ? "font-medium text-rose-600" : ""}>{Math.round(o.drive_min)} min drive</span>}
                     <span>{pct(o.time_overlap)} time overlap</span>
                     <span className="font-medium text-emerald-700">{usd(o.savings_low)}–{usd(o.savings_high)}</span>
                   </div>
