@@ -53,8 +53,14 @@ def run(conn, messages, system=SYSTEM, tools=TOOLS):
         return run_local(conn, messages, system, tools) if which == "local" else run_gemini(conn, messages, system, tools)
     except Exception as e:  # model outages become a reply, not a 500
         conn.rollback()
-        return {"reply": f"Crewly could not reach the model right now ({str(e)[:160]}). Please try again in a minute.",
-                "ui_actions": [], "tool_calls": [], "unsourced": []}
+        return {"reply": offline_reply(e), "ui_actions": [], "tool_calls": [], "unsourced": [], "offline": True}
+
+
+def offline_reply(e):
+    text = str(e)
+    if "RESOURCE_EXHAUSTED" in text or "quota" in text.lower():  # free tier daily limits
+        return "I've used up my thinking time for today (the Gemini quota ran out), so I can't answer right now. The map, overlaps and requests all still work."
+    return "I couldn't reach my brain just now. Please try again in a minute."
 
 
 def run_local(conn, messages, system=SYSTEM, tools=TOOLS):

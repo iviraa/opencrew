@@ -31,7 +31,7 @@ export type ChatAction = {  // what the chat asks the screen to do
   type: string; ids?: number[]; id?: number; opportunity_id?: number; opportunity_ids?: number[]; bbox?: [number, number, number, number];
 };
 
-export type ChatReply = { reply: string; ui_actions: ChatAction[]; unsourced: string[] };
+export type ChatReply = { reply: string; ui_actions: ChatAction[]; unsourced: string[]; offline?: boolean };
 
 let session: Session | null = null;
 supabase.auth.getSession().then(({ data }) => { session = data.session; });

@@ -1,11 +1,11 @@
 import DOMPurify from "dompurify";
 import { marked } from "marked";
-import { ArrowUp, X } from "lucide-react";
+import { ArrowUp, CloudOff, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { CollabRequest, Me, Overlap } from "./data";
 import { OverlapCard, latestFor } from "./panels";
 
-export type ChatMsg = { role: "user" | "model"; text: string; ids?: number[] };
+export type ChatMsg = { role: "user" | "model"; text: string; ids?: number[]; offline?: boolean };
 
 const html = (s: string) => DOMPurify.sanitize(marked.parse(s, { async: false }) as string);
 
@@ -53,9 +53,14 @@ export default function Chat({ me, msgs, busy, overlaps, requests, onSend, onOpe
           <p key={i} className="pop-in max-w-[88%] self-end rounded-2xl rounded-tr-sm bg-grape px-3 py-2 text-sm text-white">{m.text}</p>
         ) : (
           <div key={i} className="pop-in flex flex-col gap-1.5">
-            <div className="crewly max-w-[95%] rounded-2xl rounded-tl-sm bg-soft px-3 py-2 text-sm" dangerouslySetInnerHTML={{ __html: html(m.text) }} />
+            {m.offline ? (
+              <p className="flex max-w-[95%] gap-2 rounded-2xl rounded-tl-sm bg-warn-soft px-3 py-2 text-sm text-ink"><CloudOff size={16} className="mt-0.5 shrink-0 text-warn" />{m.text}</p>
+            ) : (
+              <div className="crewly max-w-[95%] rounded-2xl rounded-tl-sm bg-soft px-3 py-2 text-sm" dangerouslySetInnerHTML={{ __html: html(m.text) }} />
+            )}
             {m.ids && m.ids.length > 0 && (
               <div className="flex flex-col gap-1 rounded-2xl border-2 border-line p-1">
+                <div className="px-2 pt-1 text-xs font-semibold text-faint">{m.ids.length} on the map · tap one for details</div>
                 {m.ids.map((id) => byId.get(id)).filter((o): o is Overlap => !!o).map((o) => (
                   <OverlapCard key={o.id} me={me} o={o} req={latestFor(requests, o.id)} onClick={() => onOpen(o.id)} />
                 ))}

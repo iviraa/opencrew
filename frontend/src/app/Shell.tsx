@@ -140,24 +140,19 @@ export default function Shell() {
     setChat(next); setChatBusy(true); beaver("thinking");
     try {
       const r = await api.chat(next.map(({ role, text }) => ({ role, text })));
-      const shows = r.ui_actions.filter((a) => a.type === "show_overlaps" || a.type === "filter");
-      const last = shows[shows.length - 1];
-      const ids = last ? (last.ids ?? last.opportunity_ids) : undefined;
-      setChat([...next, { role: "model", text: r.reply || "Done.", ids }]);
-      beaver("talking"); setTimeout(() => beaver("idle"), Math.min(4000, 800 + r.reply.length * 25));
-      if (ids?.length) await showIds(ids);
+      const lists = r.ui_actions.map((a) => a.ids ?? a.opportunity_ids).filter((x): x is number[] => !!x?.length);  // last non-empty list wins
       const open = r.ui_actions.filter((a) => a.type === "open_overlap" || a.type === "select").pop();
-      if (open) {
-        const id = (open.id ?? open.opportunity_id)!;
-        const data = ov ?? await loadOverlaps(false);
-        setTab("overlaps"); setMode("overlaps"); setSelected(id);
-        const o = data.overlaps.find((x) => x.id === id);
-        if (o) { const b = bboxOf([{ type: "FeatureCollection", features: [{ type: "Feature", geometry: o.link, properties: {} }] }]); if (b) setFit({ bbox: b, key: `c${Date.now()}`, maxZoom: 11 }); }
-      }
+      const openId = open ? (open.id ?? open.opportunity_id) : undefined;
+      const ids = lists.pop() ?? (openId != null ? [openId] : undefined);
+      setChat([...next, { role: "model", text: r.reply || "Done.", ids, offline: r.offline }]);
+      if (r.offline) beaver("sad");
+      else { beaver("talking"); setTimeout(() => beaver("idle"), Math.min(4000, 800 + r.reply.length * 25)); }
+      if (ids?.length) await showIds(ids);
+      if (openId != null) setSelected(openId);
       const fly = r.ui_actions.filter((a) => a.type === "fly").pop();
-      if (fly?.bbox && !ids?.length && !open) setFit({ bbox: fly.bbox, key: `y${Date.now()}`, maxZoom: 10 });
-    } catch (e) {
-      setChat([...next, { role: "model", text: `Sorry, I couldn't answer that (${e instanceof Error ? e.message : e}).` }]);
+      if (fly?.bbox && !ids?.length) setFit({ bbox: fly.bbox, key: `y${Date.now()}`, maxZoom: 10 });
+    } catch {
+      setChat([...next, { role: "model", text: "Sorry, I couldn't reach the server just now. Please try again.", offline: true }]);
       beaver("sad");
     } finally { setChatBusy(false); }
   };
