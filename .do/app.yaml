@@ -31,6 +31,8 @@ services:
         scope: BUILD_TIME
       - key: VITE_SUPABASE_PUBLISHABLE_KEY
         scope: BUILD_TIME
+      - key: CORS_ORIGINS
+        scope: RUN_TIME
       - key: HAZARDS_REFRESH_MINUTES
         scope: RUN_TIME
         value: "180"

@@ -1,3 +1,4 @@
+import { API_BASE } from "./apiBase";
 export type Tier = "crossing" | "land" | "site" | "crew";
 
 export type Job = {
@@ -144,7 +145,7 @@ export type PlanCheck = { constraints: PlanConstraints; notes: string[]; errors:
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const json = typeof init?.body === "string";  // FormData sets its own multipart header
-  const res = await fetch(`/api${path}`, { ...init, headers: json ? { "Content-Type": "application/json" } : undefined });
+  const res = await fetch(`${API_BASE}/api${path}`, { ...init, headers: json ? { "Content-Type": "application/json" } : undefined });
   if (!res.ok) {
     const text = await res.text();
     let detail = text;

@@ -1,3 +1,4 @@
+import { API_BASE } from "../apiBase";
 import { createClient, type Session } from "@supabase/supabase-js";
 import type { Job, Opportunity, OpportunityDetail } from "../api";
 
@@ -66,7 +67,7 @@ supabase.auth.onAuthStateChange((_e, s) => { session = s; });
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const token = session?.access_token ?? (await supabase.auth.getSession()).data.session?.access_token;
-  const res = await fetch(path, { ...init, headers: { ...init?.headers, Authorization: `Bearer ${token}`, "Content-Type": "application/json" } });
+  const res = await fetch(API_BASE + path, { ...init, headers: { ...init?.headers, Authorization: `Bearer ${token}`, "Content-Type": "application/json" } });
   if (res.status === 401) await supabase.auth.signOut();  // stale login: back to the login page
   if (!res.ok) throw new Error((await res.json().catch(() => null))?.detail ?? res.statusText);
   return res.json();
@@ -87,7 +88,7 @@ export const api = {
 // weather and news reuse the planner's public endpoints
 export const publicApi = {
   get: async <T,>(path: string) => {
-    const res = await fetch(path);
+    const res = await fetch(API_BASE + path);
     if (!res.ok) throw new Error(res.statusText);
     return res.json() as Promise<T>;
   },

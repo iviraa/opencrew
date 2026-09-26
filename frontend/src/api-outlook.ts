@@ -1,3 +1,4 @@
+import { API_BASE } from "./apiBase";
 export type OutlookProduct = "spc" | "spc48" | "wpc_ero" | "nhc_gtwo" | "nhc_wsp";
 
 export type OutlookProps = {
@@ -22,7 +23,7 @@ export type JobHazard = {
 };
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`/api${path}`, init);
+  const res = await fetch(`${API_BASE}/api${path}`, init);
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }

@@ -81,6 +81,10 @@ async def lifespan(_app):
 
 
 app = FastAPI(title="OpenCrew", lifespan=lifespan)
+if os.environ.get("CORS_ORIGINS"):  # the frontend is hosted on another domain, e.g. vercel
+    from fastapi.middleware.cors import CORSMiddleware
+    app.add_middleware(CORSMiddleware, allow_origins=[o.strip() for o in os.environ["CORS_ORIGINS"].split(",") if o.strip()],
+                       allow_methods=["*"], allow_headers=["*"])
 api = APIRouter(prefix="/api")
 
 

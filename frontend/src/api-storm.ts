@@ -1,3 +1,4 @@
+import { API_BASE } from "./apiBase";
 export type Scenario = "helene" | "none";
 
 export type LikelyHit = {
@@ -49,7 +50,7 @@ export type RestorationPlan = {
 
 async function get<T>(path: string, params: Record<string, string | number | boolean | undefined>): Promise<T> {
   const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]));
-  const res = await fetch(`/api${path}?${q}`);
+  const res = await fetch(`${API_BASE}/api${path}?${q}`);
   if (!res.ok) {
     const text = await res.text();
     let detail = text;
