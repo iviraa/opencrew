@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { api, type Assumption, type JobCollection, type Opportunity, type OpportunityDetail, type Tier } from "./api";
+import { api, type Assumption, type CrewlyAction, type JobCollection, type Opportunity, type OpportunityDetail, type Tier } from "./api";
+import Crewly from "./components/Crewly";
 import DetailPanel from "./components/DetailPanel";
 import MapView from "./components/MapView";
 import OpportunityList from "./components/OpportunityList";
@@ -20,9 +21,11 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<OpportunityDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [crewlyOpen, setCrewlyOpen] = useState(false);
+  const [crewlyIds, setCrewlyIds] = useState<number[] | null>(null);
+  const [fly, setFly] = useState<{ bbox: [number, number, number, number]; at: number } | null>(null);
 
   useEffect(() => {
-    setSelectedId(null);
     Promise.all([api.jobs(horizon), api.opportunities(horizon), api.assumptions()])
       .then(([j, o, a]) => { setJobs(j); setOpps(o); setAssumptions(a); })
       .catch((e) => setError(String(e)));
@@ -42,8 +45,18 @@ export default function App() {
 
   const counts = new Map<string, number>();
   jobs?.features.forEach((f) => counts.set(f.properties.org_name, (counts.get(f.properties.org_name) ?? 0) + 1));
+  const switchHorizon = (h: string) => { setHorizon(h); setSelectedId(null); setCrewlyIds(null); };
+
+  const applyActions = (actions: CrewlyAction[]) => {
+    for (const a of actions) {
+      if (a.type === "filter") { setHorizon(a.horizon); setTier(a.tier); setCrewlyIds(a.opportunity_ids); }
+      if (a.type === "select") { setHorizon(a.horizon); setSelectedId(a.opportunity_id); }
+      if (a.type === "fly") setFly({ bbox: a.bbox, at: Date.now() });
+    }
+  };
+
   const selected = opps.find((o) => o.id === selectedId) ?? null;
-  const shown = tier ? opps.filter((o) => o.tier === tier) : opps;
+  const shown = opps.filter((o) => (!tier || o.tier === tier) && (!crewlyIds || crewlyIds.includes(o.id)));
 
   return (
     <div className="flex h-full flex-col">
@@ -51,7 +64,7 @@ export default function App() {
         <div className="text-lg font-bold tracking-tight">Open<span className="text-blue-600">Crew</span></div>
         <nav className="flex rounded-lg bg-slate-100 p-0.5">
           {HORIZONS.map((h) => (
-            <button key={h.id} disabled={!h.ready} onClick={() => setHorizon(h.id)}
+            <button key={h.id} disabled={!h.ready} onClick={() => switchHorizon(h.id)}
               className={`rounded-md px-3 py-1 text-sm font-medium ${horizon === h.id ? "bg-white shadow-sm" : "text-slate-500"} disabled:cursor-not-allowed disabled:opacity-50`}>
               {h.label}
             </button>
@@ -60,16 +73,26 @@ export default function App() {
         <div className="ml-auto flex items-center gap-4 text-xs text-slate-500">
           {[...counts].map(([org, n]) => <span key={org}>{org}: <b className="text-slate-800">{n}</b> {horizon === "near" ? "phases" : "projects"}</span>)}
           <span>Opportunities: <b className="text-slate-800">{opps.length}</b></span>
+          <button onClick={() => setCrewlyOpen((o) => !o)}
+            className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${crewlyOpen ? "bg-slate-900 text-white" : "bg-blue-600 text-white hover:bg-blue-700"}`}>
+            Ask Crewly
+          </button>
         </div>
       </header>
       {error && <div className="bg-red-50 px-5 py-2 text-sm text-red-700">{error}</div>}
       <main className="flex min-h-0 flex-1">
         <aside className="w-[380px] shrink-0 border-r border-slate-200 bg-white">
-          <OpportunityList items={opps} selectedId={selectedId} tier={tier} onTier={setTier} onSelect={setSelectedId} />
+          <OpportunityList items={opps} shown={shown} selectedId={selectedId} tier={tier} onTier={setTier} onSelect={setSelectedId}
+            crewlyFiltered={crewlyIds !== null} onClearCrewly={() => setCrewlyIds(null)} />
         </aside>
         <section className="flex min-w-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1">
-            <MapView jobs={jobs} opportunities={shown} selected={selected} onSelect={setSelectedId} />
+          <div className="relative min-h-0 flex-1">
+            <MapView jobs={jobs} opportunities={shown} selected={selected} onSelect={setSelectedId} fly={fly} />
+            {crewlyOpen && (
+              <div className="absolute bottom-3 right-3 top-3 z-20 w-[360px]">
+                <Crewly onActions={applyActions} onClose={() => setCrewlyOpen(false)} />
+              </div>
+            )}
           </div>
           <div className="h-[210px] shrink-0 border-t border-slate-200">
             <Timeline jobs={jobs} opportunities={shown} selected={selected} onSelect={setSelectedId} />

@@ -21,6 +21,13 @@ export type OpportunityDetail = Opportunity & { a: Job; b: Job; shareable: strin
 
 export type Assumption = { low: number; high: number; unit: string; label: string; source: string; verified: boolean };
 
+export type CrewlyAction =
+  | { type: "filter"; horizon: string; tier: Tier | null; opportunity_ids: number[] }
+  | { type: "select"; horizon: string; opportunity_id: number }
+  | { type: "fly"; bbox: [number, number, number, number] };
+
+export type CrewlyReply = { reply: string; ui_actions: CrewlyAction[]; tool_calls: { name: string; args: Record<string, unknown> }[]; unsourced: string[] };
+
 export type JobCollection = GeoJSON.FeatureCollection<GeoJSON.Geometry, Job>;
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
@@ -36,6 +43,7 @@ export const api = {
   assumptions: () => call<Record<string, Assumption>>("/assumptions"),
   savings: (id: number, assumptions: Record<string, { low: number; high: number }>) =>
     call<Savings>(`/opportunities/${id}/savings`, { method: "POST", body: JSON.stringify({ assumptions }) }),
+  crewly: (messages: { role: string; text: string }[]) => call<CrewlyReply>("/crewly", { method: "POST", body: JSON.stringify({ messages }) }),
   setStatus: (id: number, status: string) =>
     call<{ id: number; status: string }>(`/opportunities/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
 };

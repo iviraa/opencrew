@@ -10,6 +10,7 @@ type Props = {
   opportunities: Opportunity[];
   selected: Opportunity | null;
   onSelect: (id: number) => void;
+  fly: { bbox: [number, number, number, number]; at: number } | null;
 };
 
 maplibregl.setWorkerUrl(workerUrl); // v6 needs an explicit worker once bundled
@@ -45,7 +46,7 @@ function coordsOf(g: GeoJSON.Geometry): number[][] {
   return [];
 }
 
-export default function MapView({ jobs, opportunities, selected, onSelect }: Props) {
+export default function MapView({ jobs, opportunities, selected, onSelect, fly }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -122,6 +123,12 @@ export default function MapView({ jobs, opportunities, selected, onSelect }: Pro
     const coords = jobs.features.filter((f) => ids.includes(String(f.id))).flatMap((f) => coordsOf(f.geometry));
     if (coords.length) m.fitBounds(bounds(coords), { padding: 120, maxZoom: 11, duration: 900 });
   }, [selected, jobs, loaded]);
+
+  useEffect(() => {
+    if (!fly || !map.current) return;
+    const [x0, y0, x1, y1] = fly.bbox;
+    map.current.fitBounds([[x0, y0], [x1, y1]], { padding: 40, duration: 900 });
+  }, [fly]);
 
   return (
     <div className="relative h-full w-full">

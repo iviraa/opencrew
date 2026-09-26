@@ -3,6 +3,9 @@ import { TIER_COLOR, TIER_LABEL, miles, pct, title, usd } from "../format";
 
 type Props = {
   items: Opportunity[];
+  shown: Opportunity[];
+  crewlyFiltered: boolean;
+  onClearCrewly: () => void;
   selectedId: number | null;
   tier: Tier | null;
   onTier: (t: Tier | null) => void;
@@ -17,13 +20,17 @@ export function TierChip({ tier }: { tier: Tier }) {
   );
 }
 
-export default function OpportunityList({ items, selectedId, tier, onTier, onSelect }: Props) {
-  const shown = tier ? items.filter((o) => o.tier === tier) : items;
+export default function OpportunityList({ items, shown, crewlyFiltered, onClearCrewly, selectedId, tier, onTier, onSelect }: Props) {
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-slate-200 px-4 pb-3 pt-4">
         <h2 className="text-sm font-semibold text-slate-900">Coordination opportunities</h2>
         <p className="mt-0.5 text-xs text-slate-500">{shown.length} cross-utility pairs within 25 mi, ranked by score</p>
+        {crewlyFiltered && (
+          <button onClick={onClearCrewly} className="mt-2 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 ring-1 ring-blue-200 hover:bg-blue-100">
+            Filtered by Crewly · clear
+          </button>
+        )}
         <div className="mt-3 flex flex-wrap gap-1.5">
           <button onClick={() => onTier(null)}
             className={`rounded-full px-2.5 py-1 text-xs font-medium ${tier === null ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
