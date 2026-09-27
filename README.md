@@ -9,10 +9,7 @@
 **Utilities build right next to each other without knowing it. Crewly finds every overlap, puts a sourced price
 on it, and helps both sides act on it end-to-end.**
 
-![ShellHacks 2026](https://img.shields.io/badge/ShellHacks-2026-5b2bb5?style=flat-square)
-![Sperry Tech GridLock Challenge](https://img.shields.io/badge/Sperry_Tech-GridLock_Challenge-1b2447?style=flat-square)
-![Solana](https://img.shields.io/badge/Solana-devnet-9945FF?style=flat-square&logo=solana&logoColor=white)
-![Gemini](https://img.shields.io/badge/Agent-Gemini-2f6bff?style=flat-square)
+
 
 ### [**→ Open the live app: crewly.miami**](https://crewly.miami/)
 
