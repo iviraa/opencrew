@@ -131,10 +131,7 @@ def sec_hazards(conn, company, ident, sections):
 
 
 def sec_plan(conn, company, horizon, sections):
-    from app.planner import build, store
-    row = store.latest(conn, company, horizon if horizon in build.HORIZONS else "quarter")
-    if not row:
-        raise ValueError("no plan yet")
+    row = plan_context(conn, company, horizon)
     t, items = row["totals"], row["items"]
     out = [f"<h2>Coordination plan, {esc(row['horizon'])} (v{row['version']})</h2>"]
     if "totals" in sections:
@@ -221,12 +218,11 @@ def window(j):
     return f"{j['start_at']:%b %Y} to {j['end_at']:%b %Y}"
 
 
-def plan_context(conn, company, horizon):
-    from app.planner import build, store
-    row = store.latest(conn, company, horizon if horizon in build.HORIZONS else "quarter")
-    if not row:
-        raise ValueError("no plan yet; ask me to build one first")
-    return row
+def plan_context(conn, company, horizon=None):
+    """The plan a document is about: the named horizon, else the one the person saw last; built quietly when there is none."""
+    from app.planner import api, build, store
+    row = store.latest(conn, company, horizon) if horizon in build.HORIZONS else store.newest(conn, company)
+    return row or api.rebuild(conn, company, horizon if horizon in build.HORIZONS else "quarter")
 
 
 def sec_agenda(conn, company, ref, sections, options):
@@ -259,7 +255,7 @@ def sec_agenda(conn, company, ref, sections, options):
             qs = [cond for f in ((c["feas"] or {}).get("factors") or []) for cond in f.get("conditions", [])][:6]
             out.append("<h2>Open questions</h2><ul>" + "".join(f"<li>{esc(q)}</li>" for q in qs or ["Are both schedules still as filed?", "Which resources can each side commit?"]) + "</ul>")
     else:
-        row = plan_context(conn, company, ref or "quarter")
+        row = plan_context(conn, company, ref or None)
         items = [i for i in row["items"] if i.get("state") != "skipped"]
         title = f"Coordination call: our {row['horizon']} plan (v{row['version']})"
         t = row["totals"]
@@ -333,7 +329,7 @@ def sec_memo(conn, company, ref, sections, options):
                 "Confirm both schedules with each utility's engineering team", "Agree the target months and what is shared first",
                 "Record the split principle and who tracks actual costs", "Revisit after the next planner list update"]) + "</ol>")
     else:
-        row = plan_context(conn, company, ref or "quarter")
+        row = plan_context(conn, company, ref or None)
         items = [i for i in row["items"] if i.get("state") != "skipped"]
         t = row["totals"]
         title = f"Cost-sharing memo: our {row['horizon']} plan (v{row['version']})"
@@ -366,7 +362,7 @@ def build(conn, company, kind, ref_id=None, sections=None, options=None):
     ref = str(ref_id or "").lstrip("#")
     who = name(company)
     if kind == "plan":
-        body, title = sec_plan(conn, company, ref or "quarter", sections), f"{label}: {who}"
+        body, title = sec_plan(conn, company, ref or None, sections), f"{label}: {who}"
     elif kind == "finding":
         body, title = sec_finding(conn, company, ref, sections)
     elif kind == "agenda":

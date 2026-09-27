@@ -28,6 +28,13 @@ def latest(conn, company, horizon):
                         (company, horizon)).fetchone()
 
 
+def newest(conn, company):
+    """The plan the person saw last, whatever its horizon."""
+    ensure(conn)
+    return conn.execute("SELECT * FROM coordination_plan WHERE company_id = %s AND status = 'active' ORDER BY updated_at DESC, id DESC LIMIT 1",
+                        (company,)).fetchone()
+
+
 def get(conn, plan_id, company):
     ensure(conn)
     return conn.execute("SELECT * FROM coordination_plan WHERE id = %s AND company_id = %s", (int(plan_id), company)).fetchone()

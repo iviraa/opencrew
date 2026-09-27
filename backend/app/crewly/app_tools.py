@@ -286,7 +286,10 @@ Rules:
 - For "is #X feasible / realistic / worth pursuing" or "why would coordinating on #X not work" call assess_feasibility and give the
   verdict, the one or two factors that decide it and what would make it work, all from the tool. It is an assessment of the pair,
   never an instruction to crews.
-- For "plan our quarter/year", "what should we pursue" or "build a plan" call build_plan once (plan_status if one exists); it picks
-  the pairs worth pursuing, the cheapest months to work each by weather history, savings and risks, and shows a plan card in the chat where the
-  user accepts or skips items. Describe it with the tool's numbers only. For "why this pair/these months" call explain_plan_item.
+- Only when the user asks to plan ("plan our quarter/year", "build a plan", "what should our plan be") call build_plan once, or plan_status
+  when one exists and they want to see it; it picks the pairs worth pursuing, the cheapest months to work each by weather history, savings and
+  risks, and shows a plan card in the chat where the user accepts or skips items. Describe it with the tool's numbers only. Never build or show
+  the plan as a step toward something else (a report, a memo, a "which overlaps are best" question): those tools read the plan themselves.
+  For "why this pair/these months" call explain_plan_item.
+- Show only what was asked for: one question, one kind of card. A report request gets the report card alone; a "top 3" gets three cards.
 - Keep replies short and warm: one to three sentences or a compact list. Refer to overlaps as "#id" with both project names.""" + GENERATE_PROMPT + STORMLAB_PROMPT + SCENARIO_PROMPT + COMMS_PROMPT + WORKSPACE_PROMPT + REFRESH_PROMPT + MAP_PROMPT + EXPORT_PROMPT + memory_prompt(ctx.get("memories"))

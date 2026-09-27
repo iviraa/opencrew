@@ -9,6 +9,7 @@ from app.companies import companies, partner, short
 from app.crewly import agent
 from app.crewly import proactive
 from app.crewly.app_tools import app_system, app_tools, mine_sql
+from app.crewly.generate_tools import settle
 from app.crewly.memory_tools import load_memories
 from app.db import get_conn
 from app.queries import JOB_SQL
@@ -81,7 +82,7 @@ class Chat(BaseModel):
 @router.post("/chat")
 def chat(body: Chat, user=Depends(current_user), conn=Depends(get_conn)):
     user = {**user, "memories": load_memories(user)}  # the company's saved notes, read once per message
-    return agent.run(conn, body.messages[-20:], app_system(user), app_tools(user))
+    return settle(conn, user["company"], agent.run(conn, body.messages[-20:], app_system(user), app_tools(user)))
 
 
 @router.post("/proactive/run")
