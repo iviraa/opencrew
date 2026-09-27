@@ -17,6 +17,7 @@ import HazardsTab, { type HazardFocus } from "./hazards/HazardsTab";
 import PlanPanel from "./plan/PlanItems";
 import PlanTimeline from "./plan/PlanTimeline";
 import type { Chart, Report, Table } from "./generate/types";
+import type { Draft } from "./comms/types";
 import { planLine, type Horizon } from "./plan/types";
 import { usePlans } from "./plan/usePlans";
 import { changesOf } from "./findings/changes";
@@ -233,12 +234,13 @@ export default function Shell() {
       const report = r.ui_actions.filter((a) => a.type === "report").pop()?.report as Report | undefined;
       const finding = r.ui_actions.filter((a) => a.type === "finding").pop()?.finding as Finding | undefined;
       const compare = r.ui_actions.filter((a) => a.type === "compare").pop()?.compare as Comparison | undefined;
+      const draft = r.ui_actions.filter((a) => a.type === "draft").pop()?.draft as Draft | undefined;
       const confirm = r.ui_actions.filter((a) => a.type === "confirm"), goal = r.ui_actions.filter((a) => a.type === "goal").pop()?.id;
       const remembered = r.ui_actions.some((a) => a.type === "memory");
       const planned = r.ui_actions.filter((a) => a.type === "plan" && a.id != null).pop();
       const plan = planned ? { id: planned.id!, horizon: planned.horizon, item: planned.item } : undefined;
       setChat([...next, { role: "model", text: r.reply || "Done.", ids, ...(title && { title }), offline: r.offline, ...(confirm.length && { confirm }), ...(goal != null && { goal }), ...(plan && { plan }),
-        ...(chart && { chart }), ...(table && { table }), ...(report && { report }), ...(finding && { finding }), ...(compare && { compare }) }]);
+        ...(chart && { chart }), ...(table && { table }), ...(report && { report }), ...(finding && { finding }), ...(compare && { compare }), ...(draft && { draft }) }]);
       if (finding) setOverlay(finding);
       if (remembered) setMemoryTick((t) => t + 1);  // crewly saved or dropped a note
       if (r.offline) say("I'm out of energy for today, sorry!", "sad");
@@ -248,6 +250,7 @@ export default function Shell() {
       else if (remembered) say("Got it, I'll keep that in mind.", "nod");
       else if (finding) say(`Finding: ${headline(finding)}.`, "talking");
       else if (compare) say("Here are the two side by side.", "nod");
+      else if (draft) say("Draft ready. Edit it, then copy or send.", "nod");
       else if (report) say("Your report is ready. Open it to print or save.", "happy");
       else if (chart) say("Here's your chart.", "nod");
       else if (table) say(`Here are ${table.count} rows, with a CSV download.`, "nod");

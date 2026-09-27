@@ -17,10 +17,12 @@ import FindingCard from "./findings/FindingCard";
 import type { PickPlace } from "./findings/Knobs";
 import type { Comparison, Finding } from "./findings/types";
 import type { PlanStore } from "./plan/usePlans";
+import DraftCard from "./comms/DraftCard";
+import type { Draft } from "./comms/types";
 
 export type ChatMsg = {
   role: "user" | "model"; text: string; ids?: number[]; title?: string; offline?: boolean; confirm?: ChatAction[]; goal?: number;
-  plan?: { id: number; horizon?: string; item?: string }; chart?: Chart; table?: Table; report?: Report; finding?: Finding; compare?: Comparison;
+  plan?: { id: number; horizon?: string; item?: string }; chart?: Chart; table?: Table; report?: Report; finding?: Finding; compare?: Comparison; draft?: Draft;
 };
 
 const html = (s: string) => DOMPurify.sanitize(marked.parse(s, { async: false }) as string);
@@ -101,6 +103,7 @@ export default function Chat({ me, msgs, busy, overlaps, requests, plans, onSend
             {m.report && <ReportCard report={m.report} />}
             {m.finding && <FindingCard finding={m.finding} partners={partners} onOpen={onOpen} onOverlay={onOverlay} onPickPlace={onPickPlace} picking={picking} onCompare={onCompare} />}
             {m.compare && <CompareCard comparison={m.compare} />}
+            {m.draft && <DraftCard draft={m.draft} />}
             {m.ids && m.ids.length > 0 && m.goal == null && !m.plan && (
               <div className="flex flex-col gap-1 rounded-2xl border-2 border-line p-1">
                 <div className="px-2 pt-1 text-xs font-semibold text-faint">{m.title ?? `${m.ids.length} on the map`} · tap one for details</div>
