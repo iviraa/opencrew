@@ -491,7 +491,9 @@ export default function Shell() {
       {/* the beaver and the bottom bar */}
       <Suspense fallback={null}><Beaver className="absolute bottom-[1vh] left-[1vw] z-20 h-[24vh] min-h-[170px] w-[22vh] min-w-[155px]" /></Suspense>
       <div className="font-logo pointer-events-none absolute bottom-[5.5vh] left-[calc(1vw+max(22vh,155px)+8px)] text-[5vh] font-semibold leading-none text-white">crewly</div>
-      <Speech className="absolute bottom-[calc(10.5vh+12px)] left-[calc(1vw+max(22vh,155px)+2px)] z-30" />
+      {/* the beaver fills about four fifths of his canvas, so the last fifth is empty and reads as a gap
+          in front of his snout; the bubble tucks back over half of it to sit closer to him */}
+      <Speech className="absolute bottom-[calc(10.5vh+12px)] left-[calc(1vw+max(22vh,155px)*0.9+1px)] z-30" />
 
       <div className="absolute bottom-[4vh] right-[5vw] z-30 flex items-center gap-7" onClick={(e) => e.stopPropagation()}>
         <button onClick={() => { setStack((s) => [...s.filter((p) => p.kind !== "history"), { kind: "history" }]); setPop(null); say(reqs.length ? `Here are all ${reqs.length} of our requests.` : "No requests yet. Open an overlap to send one.", "nod"); }} aria-label="Request history"
