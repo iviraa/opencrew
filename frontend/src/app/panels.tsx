@@ -48,6 +48,7 @@ export function StatusChip({ status }: { status: CollabRequest["status"] }) {
 export const pct = (x: number) => `${Math.round(x * 100)}%`;
 export const count = (n: number) => n.toLocaleString("en-US");
 
+export const sentence = (t: string) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t);  // "land tier: ..." reads as "Land tier: ..."
 export type Tone = "neutral" | "good" | "warn" | "bad" | "info";
 const TONE: Record<Tone, ChipTone> = { neutral: "neutral", good: "good", warn: "amber", bad: "danger", info: "info" };  // panel tones on the chat's chip
 
@@ -321,6 +322,7 @@ function FactorCard({ f }: { f: FeasibilityFactor }) {
   const [open, setOpen] = useState(false);
   const Icon = FACTOR_ICON[f.factor] ?? Telescope;
   const more = f.conditions.length > 0 || f.evidence.length > 2;
+  const line = (t: string) => sentence(t) + (/[.!?]$/.test(t) ? "" : ".");  // evidence comes as lowercase fragments
   return (
     <div className="card-still px-2.5 py-2">
       <button onClick={() => more && setOpen(!open)} aria-expanded={more ? open : undefined} className="flex w-full items-center gap-2 text-left">
@@ -329,11 +331,11 @@ function FactorCard({ f }: { f: FeasibilityFactor }) {
         <VerdictChip verdict={f.verdict} />
         {more && <ChevronDown size={14} className={`text-faint transition ${open ? "rotate-180" : ""}`} />}
       </button>
-      <ul className="mt-1 flex flex-col gap-0.5 text-xs leading-snug text-muted">{(open ? f.evidence : f.evidence.slice(0, 2)).map((e, i) => <li key={i}>{e}</li>)}</ul>
+      <ul className="mt-1 flex flex-col gap-0.5 text-xs leading-snug text-muted">{(open ? f.evidence : f.evidence.slice(0, 2)).map((e, i) => <li key={i}>{line(e)}</li>)}</ul>
       {open && f.conditions.length > 0 && (
         <div className="mt-1.5 rounded-lg bg-soft px-2 py-1.5 text-xs">
           <div className="font-semibold text-muted">What would make it work</div>
-          <ul className="mt-0.5 list-disc pl-4">{f.conditions.map((c, i) => <li key={i}>{c}</li>)}</ul>
+          <ul className="mt-0.5 list-disc pl-4">{f.conditions.map((c, i) => <li key={i}>{line(c)}</li>)}</ul>
         </div>
       )}
     </div>
@@ -347,7 +349,7 @@ function ShiftStrip({ f }: { f: FeasibilityFactor }) {
     <div className="flex flex-wrap gap-1.5">
       {opts.map((o) => (
         <span key={o.months} className="rounded-full bg-soft px-2 py-0.5 text-xs" title="If our build window moved">
-          shift ours {o.months > 0 ? "+" : ""}{o.months} mo: {Math.round(o.overlap * 100)}% overlap
+          Shift ours {o.months > 0 ? "+" : ""}{o.months} mo: {Math.round(o.overlap * 100)}% overlap
           {o.weather_cost_delta && o.weather_cost_delta.high !== 0 && `, weather ${o.weather_cost_delta.high < 0 ? "-" : "+"}${usd(Math.abs(o.weather_cost_delta.high))}`}
         </span>
       ))}
