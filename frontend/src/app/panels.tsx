@@ -6,6 +6,7 @@ import {
   type CollabRequest, type Feasibility, type FeasibilityFactor, type Jobs, type Me, type Overlap, type OverlapDetail, type Verdict,
 } from "./data";
 import { say } from "./mascot";
+import { NotesBlock } from "./workspace/Cards";
 
 export function PanelHeader({ title, sub, onBack, right }: { title: string; sub?: React.ReactNode; onBack?: () => void; right?: React.ReactNode }) {
   return (
@@ -434,6 +435,8 @@ export function OverlapDetailPanel({ me, id, requests, onBack, onSent, onOpenReq
         )}
 
         <FeasibilitySection id={d.id} partner={them.name} />
+
+        <NotesBlock kind="overlap" id={String(d.id)} />
 
         <section className="rounded-2xl border-2 border-pen px-3 py-3">
           <h3 className="mb-1 flex items-center gap-1.5 font-logo text-base font-semibold"><Handshake size={17} /> Collaborate</h3>

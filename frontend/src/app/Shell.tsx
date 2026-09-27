@@ -23,6 +23,7 @@ import { usePlans } from "./plan/usePlans";
 import { changesOf } from "./findings/changes";
 import { FindingPanel, NotebookPanel } from "./findings/Notebook";
 import { headline, type Comparison, type Finding } from "./findings/types";
+import { cardOf, viewsApi, type ViewState } from "./workspace/types";
 
 const Beaver = lazy(() => import("./Beaver"));
 
@@ -237,10 +238,16 @@ export default function Shell() {
       const draft = r.ui_actions.filter((a) => a.type === "draft").pop()?.draft as Draft | undefined;
       const confirm = r.ui_actions.filter((a) => a.type === "confirm"), goal = r.ui_actions.filter((a) => a.type === "goal").pop()?.id;
       const remembered = r.ui_actions.some((a) => a.type === "memory");
+      const acts = r.ui_actions as unknown as ({ type: string } & Record<string, unknown>)[];
+      const workspace = acts.map(cardOf).filter((c) => c != null).pop() ?? undefined;  // notes, reminders, pipeline, profile, brief, history, views
+      const view = acts.find((a) => a.type === "view"), saveAs = acts.find((a) => a.type === "save_view");
+      if (view?.state) applyView(view.state as ViewState);
+      if (typeof saveAs?.name === "string") viewsApi.save(saveAs.name, currentView()).then(() => say(`Saved this view as ${saveAs.name}.`, "nod")).catch(() => say("I couldn't save that view.", "sad"));
       const planned = r.ui_actions.filter((a) => a.type === "plan" && a.id != null).pop();
       const plan = planned ? { id: planned.id!, horizon: planned.horizon, item: planned.item } : undefined;
       setChat([...next, { role: "model", text: r.reply || "Done.", ids, ...(title && { title }), offline: r.offline, ...(confirm.length && { confirm }), ...(goal != null && { goal }), ...(plan && { plan }),
         ...(chart && { chart }), ...(table && { table }), ...(report && { report }), ...(finding && { finding }), ...(compare && { compare }), ...(draft && { draft }) }]);
+        ...(chart && { chart }), ...(table && { table }), ...(report && { report }), ...(finding && { finding }), ...(compare && { compare }), ...(workspace && { workspace }) }]);
       if (finding) setOverlay(finding);
       if (remembered) setMemoryTick((t) => t + 1);  // crewly saved or dropped a note
       if (r.offline) say("I'm out of energy for today, sorry!", "sad");
@@ -251,6 +258,7 @@ export default function Shell() {
       else if (finding) say(`Finding: ${headline(finding)}.`, "talking");
       else if (compare) say("Here are the two side by side.", "nod");
       else if (draft) say("Draft ready. Edit it, then copy or send.", "nod");
+      else if (workspace) say(workspace.kind === "brief" ? "Here is your week at a glance." : workspace.kind === "reminder" ? "Noted. It will pop up in the bell when due." : "Here you go.", "nod");
       else if (report) say("Your report is ready. Open it to print or save.", "happy");
       else if (chart) say("Here's your chart.", "nod");
       else if (table) say(`Here are ${table.count} rows, with a CSV download.`, "nod");
@@ -284,6 +292,19 @@ export default function Shell() {
   };
 
   const gotRequest = (r: CollabRequest) => setReqs((xs) => [r, ...xs.filter((x) => x.id !== r.id)]);
+
+  // saved views: what is on screen, and putting it back
+  const currentView = (): ViewState => ({ tab, partner, focus, selected, bbox: fit?.bbox ?? null });
+  const applyView = (v: ViewState) => {
+    if (v.tab === "overlaps" || v.tab === "weather" || v.tab === "news") setTab(v.tab);
+    if (v.tab === "overlaps" || !v.tab) { if (!ov) loadOverlaps(false).catch(() => {}); setMode("overlaps"); }
+    setPartner(v.partner ?? null); setFocus(v.focus ?? null); setSelected(v.selected ?? null);
+    if (v.bbox) setFit({ bbox: v.bbox, key: `v${Date.now()}` });
+  };
+  const openView = async (name: string) => {
+    const { data } = await supabase.from("saved_view").select("state").eq("name", name).maybeSingle();
+    if (data?.state) { applyView(data.state as ViewState); say(`Back to your ${name} view.`, "nod"); } else say(`I don't have a view called ${name}.`, "sad");
+  };
   const unread = notes.filter((n) => !n.read_at).length;
 
   // ---------- overlaps map ----------
@@ -358,7 +379,7 @@ export default function Shell() {
     <Chat me={me} msgs={chat} busy={chatBusy} overlaps={ov?.overlaps ?? null} requests={reqs} plans={plans} onSend={sendChat} onOpen={openOverlap}
       onDone={gotRequest} onOpenRequest={openRequest} onOpenGoal={(id) => push({ kind: "goal", id })} onOpenPlan={(id, item) => { setTab("overlaps"); push({ kind: "plan", id, item }); }}
       onClose={() => setStack((s) => s.filter((p) => p.kind !== "chat"))} onClear={clearChat} memoryTick={memoryTick}
-      partners={partnerIds} onOverlay={setOverlay} onPickPlace={pickPlace} picking={picking} onCompare={(f) => push({ kind: "notebook", preselect: f.id })} onNotebook={() => push({ kind: "notebook" })} />
+      partners={partnerIds} onOverlay={setOverlay} onPickPlace={pickPlace} picking={picking} onCompare={(f) => push({ kind: "notebook", preselect: f.id })} onNotebook={() => push({ kind: "notebook" })} onOpenView={openView} />
   ) : top.kind === "notebook" ? (
     <NotebookPanel onBack={back} preselect={top.preselect} onOpen={(f) => push({ kind: "finding", id: f.id, f })} onCombined={(f) => { setOverlay(f); push({ kind: "finding", id: f.id, f }); }} />
   ) : top.kind === "finding" ? (

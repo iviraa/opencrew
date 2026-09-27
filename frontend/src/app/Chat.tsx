@@ -23,17 +23,23 @@ import type { Draft } from "./comms/types";
 export type ChatMsg = {
   role: "user" | "model"; text: string; ids?: number[]; title?: string; offline?: boolean; confirm?: ChatAction[]; goal?: number;
   plan?: { id: number; horizon?: string; item?: string }; chart?: Chart; table?: Table; report?: Report; finding?: Finding; compare?: Comparison; draft?: Draft;
+import WorkspaceCardView, { type WorkspaceCard } from "./workspace/Cards";
+
+export type ChatMsg = {
+  role: "user" | "model"; text: string; ids?: number[]; title?: string; offline?: boolean; confirm?: ChatAction[]; goal?: number;
+  plan?: { id: number; horizon?: string; item?: string }; chart?: Chart; table?: Table; report?: Report; finding?: Finding; compare?: Comparison;
+  workspace?: WorkspaceCard;
 };
 
 const html = (s: string) => DOMPurify.sanitize(marked.parse(s, { async: false }) as string);
 
 export default function Chat({ me, msgs, busy, overlaps, requests, plans, onSend, onOpen, onClose, onDone, onOpenRequest, onOpenGoal, onOpenPlan, onClear, memoryTick = 0,
-  partners = [], onOverlay, onPickPlace, picking, onCompare, onNotebook }: {
+  partners = [], onOverlay, onPickPlace, picking, onCompare, onNotebook, onOpenView }: {
   me: Me; msgs: ChatMsg[]; busy: boolean; overlaps: Overlap[] | null; requests: CollabRequest[]; plans: PlanStore;
   onSend: (text: string) => void; onOpen: (id: number) => void; onClose: () => void;
   onDone: (r: CollabRequest) => void; onOpenRequest: (id: number) => void; onOpenGoal: (id: number) => void; onOpenPlan: (id: number, item?: string) => void;
   onClear?: () => void; memoryTick?: number;
-  partners?: string[]; onOverlay?: (f: Finding | null) => void; onPickPlace?: PickPlace; picking?: boolean; onCompare?: (f: Finding) => void; onNotebook?: () => void;
+  partners?: string[]; onOverlay?: (f: Finding | null) => void; onPickPlace?: PickPlace; picking?: boolean; onCompare?: (f: Finding) => void; onNotebook?: () => void; onOpenView?: (name: string) => void;
 }) {
   const [text, setText] = useState("");
   const [showMemory, setShowMemory] = useState(false);
@@ -104,6 +110,7 @@ export default function Chat({ me, msgs, busy, overlaps, requests, plans, onSend
             {m.finding && <FindingCard finding={m.finding} partners={partners} onOpen={onOpen} onOverlay={onOverlay} onPickPlace={onPickPlace} picking={picking} onCompare={onCompare} />}
             {m.compare && <CompareCard comparison={m.compare} />}
             {m.draft && <DraftCard draft={m.draft} />}
+            {m.workspace && <WorkspaceCardView card={m.workspace} onOpen={onOpen} onOpenRequest={onOpenRequest} onOpenPlan={(id) => onOpenPlan(id)} onNotebook={onNotebook} onAsk={send} onOpenView={onOpenView} />}
             {m.ids && m.ids.length > 0 && m.goal == null && !m.plan && (
               <div className="flex flex-col gap-1 rounded-2xl border-2 border-line p-1">
                 <div className="px-2 pt-1 text-xs font-semibold text-faint">{m.title ?? `${m.ids.length} on the map`} · tap one for details</div>
