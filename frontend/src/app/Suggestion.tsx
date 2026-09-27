@@ -1,5 +1,6 @@
 import { Sparkles, X } from "lucide-react";
 import { ago, type Notice, type SuggestionAction } from "./data";
+import { Pill } from "./ui";
 
 const LABEL: Record<SuggestionAction["type"], string> = { open_request: "Open request", open_overlap: "Open overlap", weather: "See weather", chat: "Ask Crewly", plan: "See plan" };
 
@@ -10,12 +11,10 @@ export default function Suggestion({ n, onAct, onDismiss }: { n: Notice; onAct: 
       <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-grape text-white"><Sparkles size={14} /></span>
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-semibold leading-snug">{n.title}</span>
-        {n.body && <span className="mt-0.5 line-clamp-3 block text-xs text-muted">{n.body}</span>}
+        {n.body && <span className="mt-0.5 line-clamp-3 block text-xs leading-snug text-muted">{n.body}</span>}
         <span className="mt-1.5 flex items-center gap-2">
-          {n.action && (
-            <button onClick={onAct} className="rounded-full bg-grape px-2.5 py-0.5 text-xs font-semibold text-white hover:bg-grape-deep">{LABEL[n.action.type] ?? "Open"}</button>
-          )}
-          <span className="text-xs text-faint">Crewly · {ago(n.created_at)}</span>
+          {n.action && <Pill primary onClick={onAct}>{LABEL[n.action.type] ?? "Open"}</Pill>}
+          <span className="text-[11px] text-faint">Crewly · {ago(n.created_at)}</span>
         </span>
       </span>
       <button onClick={onDismiss} aria-label="Dismiss suggestion" className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-faint hover:bg-soft hover:text-ink"><X size={13} /></button>

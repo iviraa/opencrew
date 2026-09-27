@@ -15,7 +15,7 @@ export default function MemoryList({ tick }: { tick: number }) {
 
   return (
     <div className="pop-in mb-2 rounded-2xl bg-grape-soft/60 px-3 py-2.5">
-      <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-grape">Crewly remembers</div>
+      <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-grape">Crewly remembers{rows?.length ? ` · ${rows.length}` : ""}</div>
       {rows === null ? <p className="text-xs text-muted"><span className="dots">Loading</span></p> : rows.length ? (
         <div className="flex flex-wrap gap-1.5">
           {rows.map((m) => (
@@ -26,7 +26,7 @@ export default function MemoryList({ tick }: { tick: number }) {
           ))}
         </div>
       ) : (
-        <p className="text-xs text-muted">Nothing yet. Tell Crewly something like "remember that we never share crews in hurricane season".</p>
+        <p className="text-[11px] leading-snug text-muted">Nothing yet. Say something like "remember that we never share crews in hurricane season".</p>
       )}
     </div>
   );
