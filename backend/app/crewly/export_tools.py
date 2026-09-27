@@ -159,6 +159,8 @@ def build_file(conn, ctx, kind, fmt, filters):
     if fmt not in FORMATS:
         raise ValueError(f"format must be one of {', '.join(FORMATS)}")
     rows = _rows(conn, ctx, kind, filters or {})
+    if not rows:
+        raise ValueError(f"nothing to export: no {kind} rows match" + (" the filter" if filters else ""))
     stamp = date.today().isoformat()
     base = f"crewly-{kind}-{stamp}"
     media, ext = FORMATS[fmt]
@@ -233,9 +235,19 @@ def _num(v):
 
 
 def run_query(rows, group_by=None, aggregate=None, sort=None, limit=200):
-    """Deterministic group / aggregate / sort over dict rows; returns (rows, columns)."""
+    """Deterministic group / aggregate / sort over dict rows; returns (rows, columns). Unknown fields or functions raise ValueError."""
     group_by = [g for g in (group_by or []) if g]
-    aggregate = {k: v for k, v in (aggregate or {}).items() if v in AGGS}
+    aggregate = dict(aggregate or {})
+    cols = set(rows[0].keys()) if rows else set()
+    bad = [f"{f}: {fn}" for f, fn in aggregate.items() if fn not in AGGS]
+    if bad:
+        raise ValueError(f"aggregate must be one of {', '.join(AGGS)}; got {', '.join(bad)}")
+    missing = [f for f in [*group_by, *aggregate] if rows and f not in cols]
+    if missing:
+        raise ValueError(f"no column called {', '.join(missing)}; columns are {', '.join(sorted(cols))}")
+    text = [f for f, fn in aggregate.items() if fn != "count" and rows and all(_num(r.get(f)) is None for r in rows)]
+    if text:
+        raise ValueError(f"{', '.join(text)} is not numeric; only count works on it")
     if group_by:
         buckets = {}
         for r in rows:
@@ -267,9 +279,9 @@ def run_query(rows, group_by=None, aggregate=None, sort=None, limit=200):
 def query_data(ctx, conn, dataset, filters=None, group_by=None, aggregate=None, sort=None, limit=200):
     try:
         base = charts.table(conn, ctx["company"], dataset, filters or {}, ctx)
+        rows, cols = run_query(base["rows"], group_by, aggregate, sort, limit)
     except ValueError as e:
         return {"error": str(e)}, []
-    rows, cols = run_query(base["rows"], group_by, aggregate, sort, limit)
     table = {"dataset": dataset, "filters": {**base["filters"], **({"group_by": group_by} if group_by else {}), **({"aggregate": ", ".join(f"{fn} {f}" for f, fn in aggregate.items())} if aggregate else {})},  # chips read as text
              "columns": cols, "rows": rows, "count": len(rows)}
     actions = [{"type": "table", "table": table}]
