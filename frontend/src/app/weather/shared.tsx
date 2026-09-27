@@ -1,22 +1,11 @@
 import type { Jobs } from "../data";
 
-export type Scenario = "now" | "helene";
-
+// the map and the side column: the column takes about a third of the board, never less than a card's worth
 export function Split({ map, side }: { map: React.ReactNode; side: React.ReactNode }) {
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,3fr)_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] gap-5">
+    <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_clamp(340px,31%,540px)] grid-rows-[minmax(0,1fr)] gap-5">
       <div className="min-h-0">{map}</div>
       <aside className="slide-in flex min-h-0 min-w-0 flex-col">{side}</aside>
-    </div>
-  );
-}
-
-export function ScenarioSwitch({ value, onChange }: { value: Scenario; onChange: (s: Scenario) => void }) {
-  return (
-    <div className="mb-3 flex gap-1 rounded-full bg-soft p-1 text-xs font-semibold">
-      {([["now", "Right now"], ["helene", "Helene 2024 replay"]] as const).map(([k, label]) => (
-        <button key={k} onClick={() => onChange(k)} className={`flex-1 rounded-full py-1 ${value === k ? "bg-white shadow-sm" : "text-muted"}`}>{label}</button>
-      ))}
     </div>
   );
 }
@@ -62,6 +51,3 @@ export function nearestProject(projects: Jobs | null, lon: number, lat: number) 
   }
   return best;
 }
-
-export const when = (s: string, replay: boolean, ago: (s: string) => string) =>
-  replay ? new Date(s).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : ago(s);
