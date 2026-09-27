@@ -47,7 +47,7 @@ export default function Login() {
       <div className="board pop-in flex w-full max-w-[880px] items-stretch gap-2 p-8 md:p-10">
         <div className="board-frame" />
         <div className="relative hidden w-[300px] shrink-0 md:block">
-          <div className="absolute left-4 top-4 z-10" aria-live="polite">
+          <div className="absolute bottom-[318px] left-[104px] z-10 w-[220px]" aria-live="polite">
             <div key={line} className="speech speech-down speech-in">{LINES[line]}</div>
           </div>
           <Suspense fallback={null}><Beaver className="absolute -bottom-6 -left-6 h-[360px] w-[330px]" /></Suspense>
