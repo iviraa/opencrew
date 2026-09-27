@@ -51,6 +51,10 @@ services:
       - key: RESEND_API_KEY
         scope: RUN_TIME
         type: SECRET
+      - key: RESEND_FROM
+        scope: RUN_TIME
+      - key: COMMS_ALLOWED_DOMAINS
+        scope: RUN_TIME
       - key: GOOGLE_PLACES_KEY
         scope: RUN_TIME
         type: SECRET

@@ -7,6 +7,7 @@ import httpx
 
 from app.companies import companies, name, partner
 from app.crewly.act_tools import act_tools
+from app.crewly.comms_tools import PROMPT as COMMS_PROMPT, comms_tools
 from app.crewly.generate_tools import PROMPT as GENERATE_PROMPT, generate_tools
 from app.stormlab.tools import PROMPT as STORMLAB_PROMPT, stormlab_tools
 from app.crewly.incident_tools import INCIDENT_TOOLS
@@ -215,6 +216,7 @@ def app_tools(ctx):
     tools.update(generate_tools(ctx))
     tools.update(stormlab_tools(ctx))
     tools.update(scenario_tools(ctx))
+    tools.update(comms_tools(ctx))
     return tools
 
 
@@ -279,4 +281,4 @@ Rules:
 - For "plan our quarter/year", "what should we pursue" or "build a plan" call build_plan once (plan_status if one exists); it picks
   the pairs worth pursuing, the cheapest months to work each by weather history, savings and risks, and opens the Plan tab where the
   user accepts or skips items. Describe it with the tool's numbers only. For "why this pair/these months" call explain_plan_item.
-- Keep replies short and warm: one to three sentences or a compact list. Refer to overlaps as "#id" with both project names.""" + GENERATE_PROMPT + STORMLAB_PROMPT + SCENARIO_PROMPT + memory_prompt(ctx.get("memories"))
+- Keep replies short and warm: one to three sentences or a compact list. Refer to overlaps as "#id" with both project names.""" + GENERATE_PROMPT + STORMLAB_PROMPT + SCENARIO_PROMPT + COMMS_PROMPT + memory_prompt(ctx.get("memories"))
