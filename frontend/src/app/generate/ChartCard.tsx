@@ -8,11 +8,11 @@ const W = 320, H = 190, PAD = { l: 44, r: 8, t: 8, b: 34 };
 const KINDS: ChartKind[] = ["bar", "line", "stacked"];
 
 // a small inline chart: bars, lines or stacked bars, no library; findings reuse it
-export function ChartSvg({ chart, onHover }: { chart: Chart; onHover: (t: string | null) => void }) {
+export function ChartSvg({ chart, onHover, max: shared }: { chart: Chart; onHover: (t: string | null) => void; max?: number }) {
   const n = chart.x.length, series = chart.series;
   const stacked = chart.kind === "stacked";
   const tops = Array.from({ length: n }, (_, i) => stacked ? series.reduce((s, sr) => s + (sr.values[i] ?? 0), 0) : Math.max(...series.map((sr) => sr.values[i] ?? 0)));
-  const max = Math.max(1, ...tops);
+  const max = shared ?? Math.max(1, ...tops);  // a pair can share one scale
   const iw = W - PAD.l - PAD.r, ih = H - PAD.t - PAD.b;
   const x = (i: number) => PAD.l + (iw * i) / Math.max(n, 1);
   const y = (v: number) => PAD.t + ih - (ih * v) / max;

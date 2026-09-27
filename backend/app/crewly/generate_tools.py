@@ -42,11 +42,18 @@ def show_overlaps(ctx, conn, ids, title=None):
     return {"shown": kept, "not_ours": [i for i in want if i not in ours]}, [{"type": "show_overlaps", "ids": kept, **({"title": title} if title else {})}]
 
 
-def make_chart(ctx, conn, dataset, options=None):
-    chart, rows = charts.make(conn, ctx["company"], dataset, options or {})
-    summary = {"title": chart["title"], "kind": chart["kind"], "unit": chart["unit"], "x": chart["x"][:24],
-               "series": [{"name": s["name"], "values": s["values"][:24]} for s in chart["series"]], "source": chart["source"]}
-    return summary, [{"type": "chart", "chart": chart}]
+def _brief(chart):
+    return {"title": chart["title"], "kind": chart["kind"], "unit": chart["unit"], "x": chart["x"][:24],
+            "series": [{"name": s["name"], "values": s["values"][:24]} for s in chart["series"]], "source": chart["source"]}
+
+
+def make_chart(ctx, conn, dataset, options=None, compare=None):
+    """One chart, or two side by side when compare names the second (same dataset by default, other options)."""
+    chart, _ = charts.make(conn, ctx["company"], dataset, options or {})
+    if not compare:
+        return _brief(chart), [{"type": "chart", "chart": chart}]
+    other, _ = charts.make(conn, ctx["company"], compare.get("dataset") or dataset, compare.get("options") or {})
+    return {"left": _brief(chart), "right": _brief(other), "shown": "side by side"}, [{"type": "chart", "chart": chart, "compare": other}]
 
 
 def get_data(ctx, conn, dataset, filters=None):
@@ -75,7 +82,10 @@ def generate_tools(ctx):
                 "kind": {"type": "string", "enum": list(charts.KINDS)}, "years": {"type": "array", "items": {"type": "integer"}},
                 "partner": {"type": "string"}, "id": {"type": "string"}, "ids": {"type": "array", "items": {"type": "string"}, "description": "several overlaps or sites to compare in one chart"},
                 "hazards": {"type": "array", "items": {"type": "string"}},
-                "top": {"type": "integer"}, "days": {"type": "integer"}, "horizon": {"type": "string"}}}}, ["dataset"]),
+                "top": {"type": "integer"}, "days": {"type": "integer"}, "horizon": {"type": "string"}}},
+            "compare": {"type": "object", "description": "a second chart shown side by side: {dataset (defaults to the same), options}; use it for "
+                        "'side by side', 'compare this with', or two views of one question", "properties": {
+                "dataset": {"type": "string", "enum": list(charts.DATASETS)}, "options": {"type": "object"}}}}, ["dataset"]),
         "get_data": (_bind(ctx, get_data), "Hand over data as a table card with a CSV download. Tables: " + tables + "; or any chart dataset's rows. "
                      "filters: years [from, to], partner, tier, verdict, state, status, id (site or overlap), period, month, days, impact, direction, top.", {
             "dataset": {"type": "string", "enum": [*charts.TABLES, "requests", *charts.DATASETS]},
@@ -86,8 +96,9 @@ def generate_tools(ctx):
                 "direction": {"type": "string"}, "top": {"type": "integer"}}}}, ["dataset"]),
         "make_report": (_bind(ctx, make_report), "Write a printable report (opens as a page with Print / Save as PDF): feasibility, cost_analysis or "
                         "hazard_exposure for an overlap (#id) or site, plan for the plan the user last saw (no id needed; id = horizon picks another), "
-                        "or pack (brief + feasibility + cost + hazards for one overlap). Optional sections to include. Never build a plan first.", {
-            "kind": {"type": "string", "enum": list(reports.KINDS)}, "id": {"type": "string", "description": "overlap #id, site id, or a plan horizon"},
+                        "pack (brief + feasibility + cost + hazards for one overlap), or comparison (two to six overlaps side by side with a ranking; id = the ids "
+                        "joined by commas, e.g. '13,14,15'). Optional sections to include. Never build a plan first.", {
+            "kind": {"type": "string", "enum": list(reports.KINDS)}, "id": {"type": "string", "description": "overlap #id, site id, a plan horizon, or comma-joined overlap ids for a comparison"},
             "sections": {"type": "array", "items": {"type": "string"}}}, ["kind"]),
     }
 
@@ -97,6 +108,7 @@ PROMPT = """
   (limit=N) or get_data, then call show_overlaps last with exactly the ids you named, in that order, so the cards match your words. Never let
   a card show more than you named, and never build a plan to answer a "which/best/top" question.
 - For "chart", "graph", "plot", "trend" or "visualize" call make_chart once with the dataset that fits and options from the user's words (years,
-  top N, partner, kind; ids to put several overlaps in one chart, never one chart per overlap); for "give me the data", "export", "list every", "as a table" call get_data; for "report", "printout", "document",
-  "PDF" or "write up" call make_report on its own: it reads the latest plan, finding or overlap itself, so do not build a plan or list
+  top N, partner, kind; ids to put several overlaps in one chart, never one chart per overlap; compare for two charts side by side,
+  e.g. savings by partner next to overlaps by month, or one overlap's months next to another's); for "give me the data", "export", "list every", "as a table" call get_data; for "report", "printout", "document",
+  "PDF" or "write up" call make_report on its own (kind comparison when the user names or means several overlaps): it reads the latest plan, finding or overlap itself, so do not build a plan or list
   overlaps first. Then describe the result in one sentence; the card carries the numbers, so do not restate them."""

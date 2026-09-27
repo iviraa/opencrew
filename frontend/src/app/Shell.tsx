@@ -252,7 +252,9 @@ export default function Shell() {
       const openId = open ? (open.id ?? open.opportunity_id) : undefined;
       const ids = explicit?.title != null || (explicit && !lists.length) ? (explicit.ids ?? []) : lists.pop() ?? (openId != null ? [openId] : undefined);
       const title = explicit?.title;
-      const chart = r.ui_actions.filter((a) => a.type === "chart").pop()?.chart as Chart | undefined;
+      const chartActs = r.ui_actions.filter((a) => a.type === "chart");
+      const chart = chartActs[0]?.chart as Chart | undefined;
+      const chart2 = (chartActs[0]?.compare ?? chartActs[1]?.chart) as Chart | undefined;  // a compare, or a second chart in the same turn, goes side by side
       const table = r.ui_actions.filter((a) => a.type === "table").pop()?.table as Table | undefined;
       const report = r.ui_actions.filter((a) => a.type === "report").pop()?.report as Report | undefined;
       const finding = r.ui_actions.filter((a) => a.type === "finding").pop()?.finding as Finding | undefined;
@@ -271,7 +273,7 @@ export default function Shell() {
       const plan = planned ? { id: planned.id!, horizon: planned.horizon, item: planned.item } : undefined;
       const cards = mt.cardsOf(r.ui_actions);
       setChat([...next, { role: "model", text: r.reply || "Done.", ids, ...(title && { title }), offline: r.offline, ...(confirm.length && { confirm }), ...(goal != null && { goal }), ...(plan && { plan }),
-        ...(chart && { chart }), ...(table && { table }), ...(report && { report }), ...(finding && { finding }), ...(compare && { compare }), ...(draft && { draft }),
+        ...(chart && { chart }), ...(chart2 && { chart2 }), ...(table && { table }), ...(report && { report }), ...(finding && { finding }), ...(compare && { compare }), ...(draft && { draft }),
         ...(workspace && { workspace }), ...(refresh && { refresh }), ...(cards.length && { cards }) }]);
       if (finding) setOverlay(finding);
       if (remembered) setMemoryTick((t) => t + 1);  // crewly saved or dropped a note
@@ -287,7 +289,7 @@ export default function Shell() {
       else if (workspace) say(workspace.kind === "brief" ? "Here is your week at a glance." : workspace.kind === "reminder" ? "Noted. It will pop up in the bell when due." : "Here you go.", "nod");
       else if (cards.length) say(mt.line(cards) ?? "Here you go.", "nod");
       else if (report) say("Your report is ready. Open it to print or save.", "happy");
-      else if (chart) say("Here's your chart.", "nod");
+      else if (chart) say(chart2 ? "Here they are side by side." : "Here's your chart.", "nod");
       else if (table) say(`Here are ${table.count} rows, with a CSV download.`, "nod");
       else say(ids && ids.length > 1 ? `I put ${ids.length} overlaps on the map.` : openId != null ? `Here's overlap #${openId}.` : "Here's what I found!");
       if (ids?.length) await showIds(ids);

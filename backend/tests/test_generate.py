@@ -54,7 +54,7 @@ def test_report_page_escapes_and_prints():
 
 
 def test_report_kinds_and_default_sections():
-    assert set(reports.KINDS) == {"feasibility", "cost_analysis", "hazard_exposure", "plan", "pack", "finding", "agenda", "memo"}
+    assert set(reports.KINDS) == {"feasibility", "cost_analysis", "hazard_exposure", "plan", "pack", "finding", "agenda", "memo", "comparison"}
     with pytest.raises(ValueError):
         reports.build(None, "gpc", "nope")
 
@@ -215,3 +215,14 @@ def test_report_table_right_aligns_numbers_and_memo_head():
     assert "$5k to $28k" and reports.NUM_RE.match("$5k to $28k") and reports.NUM_RE.match("-8% (-17%)") and not reports.NUM_RE.match("Nov")
     assert reports.describe_change("shift_window", {"opportunity_id": 18, "months": -1}) == "Move our build window on overlap #18 earlier by 1 month."
     assert "<dt>Re</dt>" in reports.memo_head("Leadership", "Planning", "Sharing costs")
+
+
+@needs_db
+def test_comparison_report_ranks_and_draws(conn):
+    from app.crewly.app_tools import mine_sql
+    ids = [r["id"] for r in conn.execute(mine_sql("desc") + " AND op.savings_high > 0 ORDER BY op.savings_high DESC LIMIT 3").fetchall()]
+    r = reports.build(conn, "desc", "comparison", ",".join(map(str, ids)))
+    assert r["html"].count("<svg") >= 3 and "Ranking" in r["html"] and "None" not in r["html"]
+    assert any(f["label"] == "Ranks first" for f in r["figures"])
+    with pytest.raises(ValueError):
+        reports.build(conn, "desc", "comparison", str(ids[0]))  # one overlap is not a comparison
