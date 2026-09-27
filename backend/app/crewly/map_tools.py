@@ -41,27 +41,37 @@ def find_company(q):
     return _find(q)
 
 
+def mine_sql_for(company):
+    from app.crewly.app_tools import mine_sql
+    return mine_sql(company)
+
+
 def project_filter_sql(f, alias="j"):
     """WHERE clauses for a project filter dict; values are bound, never pasted."""
     f = f or {}
     clauses, params = [], {}
-    if f.get("kv") is not None:
-        kv = [_int(x) for x in (f["kv"] if isinstance(f["kv"], list) else [f["kv"]])]
-        kv = [x for x in kv if x]
-        if kv:
-            clauses.append(f"{alias}.voltage_kv = ANY(%(kv)s)"); params["kv"] = kv
+    if f.get("kv") not in (None, "", []):
+        kv = [x for x in (_int(x) for x in (f["kv"] if isinstance(f["kv"], list) else [f["kv"]])) if x]
+        if not kv:
+            raise ValueError(f"kv must be a voltage in kV like 230, got {f['kv']!r}")
+        clauses.append(f"{alias}.voltage_kv = ANY(%(kv)s)"); params["kv"] = kv
     if f.get("type"):
         clauses.append(f"{alias}.job_type = %(type)s"); params["type"] = str(f["type"])
     if f.get("status"):
         clauses.append(f"{alias}.status ILIKE %(status)s"); params["status"] = f"%{f['status']}%"
     if f.get("state"):
-        clauses.append(f"{alias}.state = %(state)s"); params["state"] = str(f["state"]).upper()[:2]
+        st = str(f["state"]).strip().upper()
+        if not re.fullmatch(r"[A-Z]{2}", st):
+            raise ValueError(f"state must be a two-letter code like GA, got {f['state']!r}")
+        clauses.append(f"{alias}.state = %(state)s"); params["state"] = st
     if f.get("county"):
         clauses.append(f"EXISTS (SELECT 1 FROM unnest(coalesce({alias}.counties, '{{}}')) c WHERE c ILIKE %(county)s)"); params["county"] = f"%{f['county']}%"
     if f.get("name"):
         clauses.append(f"{alias}.name ILIKE %(name)s"); params["name"] = f"%{f['name']}%"
     years = f.get("years") or []
     lo, hi = (_int(years[0]) if years else None), (_int(years[1]) if len(years) > 1 else (_int(years[0]) if years else None))
+    if years and not (lo and hi):
+        raise ValueError(f"years must be numbers like [2026, 2028], got {years!r}")
     if lo and hi:
         lo, hi = min(lo, hi), max(lo, hi)
         clauses.append(f"{alias}.work_window && tstzrange(%(ylo)s::timestamptz, %(yhi)s::timestamptz)"); params["ylo"], params["yhi"] = f"{lo}-01-01", f"{hi}-12-31"
@@ -96,7 +106,9 @@ def map_view(ctx, conn, tab="overlaps", period=None, month=None, hazards=None, f
         if period:
             action["period"] = period; said.append(f"period {period}")
         m = _int(month)
-        if m and 1 <= m <= 12:
+        if month not in (None, "") and not (m and 1 <= m <= 12):
+            return {"error": f"month must be 1 to 12, got {month!r}"}, []
+        if m:
             action["month"] = m; action.setdefault("period", "month"); said.append(f"month {m}")
         hz = [h for h in (hazards or []) if h in HAZARDS]
         if hazards and not hz:
@@ -116,8 +128,13 @@ def map_view(ctx, conn, tab="overlaps", period=None, month=None, hazards=None, f
         said.append(f"{len(ids)} overlaps match the filter")
     if fit:
         if isinstance(fit, list) and len(fit) == 4 and all(isinstance(x, (int, float)) for x in fit):
+            w, s, e, n = fit
+            if not (-180 <= w < e <= 180 and -90 <= s < n <= 90):
+                return {"error": "the bbox must be [west, south, east, north] in degrees, west < east and south < north"}, []
             action["fit"] = {"bbox": fit}
         elif isinstance(fit, str) and (fit in ("ours", "overlaps") or re.fullmatch(r"overlap:#?\d+", fit)):
+            if fit.startswith("overlap:") and not conn.execute(mine_sql_for(ctx["company"]) + " AND op.id = %s", (int(fit.split(":")[1].lstrip("#")),)).fetchone():
+                return {"error": f"#{fit.split(':')[1].lstrip('#')} is not one of our overlaps"}, []
             action["fit"] = {"to": fit.replace("#", "")}
         else:
             return {"error": "fit must be 'ours', 'overlaps', 'overlap:18' or a bbox [west, south, east, north]"}, []
@@ -145,7 +162,10 @@ def _row(r):
 
 
 def filter_projects(ctx, conn, filters=None, limit=200):
-    rows = [_row(r) for r in _project_rows(conn, ctx["company"], filters or {}, limit)]
+    try:
+        rows = [_row(r) for r in _project_rows(conn, ctx["company"], filters or {}, limit)]
+    except ValueError as e:
+        return {"error": str(e)}, []
     f = {k: v for k, v in (filters or {}).items() if v not in (None, "", [])}
     title = "Our projects" + (": " + ", ".join(f"{k} {v}" for k, v in f.items()) if f else "")
     return ({"count": len(rows), "filters": f, "projects": [{k: v for k, v in r.items() if k != "center"} for r in rows[:15]],
@@ -154,6 +174,8 @@ def filter_projects(ctx, conn, filters=None, limit=200):
 
 
 def timeline(ctx, conn, years=None, filters=None, partner=None):
+    if years and not all(_int(y) for y in years):
+        return {"error": f"years must be numbers like [2026, 2028], got {years!r}"}, []
     lo = _int((years or [None])[0], datetime.now().year)
     hi = _int((years or [None, None])[1] if len(years or []) > 1 else None, lo + 2)
     lo, hi = min(lo, hi), max(lo, hi)
@@ -165,9 +187,12 @@ def timeline(ctx, conn, years=None, filters=None, partner=None):
             return {"error": f"no utility called {partner!r}", "utilities": sorted(c["name"] for c in companies().values())}, []
         orgs.append(who)
     rows = []
-    for org in orgs:
-        for r in _project_rows(conn, org, f, 200):
-            rows.append({**_row(r), "org": org, "org_short": short(org), "mine": org == ctx["company"]})
+    try:
+        for org in orgs:
+            for r in _project_rows(conn, org, f, 200):
+                rows.append({**_row(r), "org": org, "org_short": short(org), "mine": org == ctx["company"]})
+    except ValueError as e:
+        return {"error": str(e)}, []
     rows.sort(key=lambda r: (not r["mine"], r["start"]))
     tl = {"title": f"Projects on the calendar, {lo} to {hi}" + (f", ours and {name(orgs[1])}'s" if len(orgs) > 1 else ""), "years": [lo, hi],
           "rows": [{k: v for k, v in r.items() if k != "center"} for r in rows]}
@@ -186,6 +211,8 @@ def haversine_km(a, b):
 def resolve_point(conn, company, ref):
     """A (lon, lat, label) for a project id, an overlap (#18, '#18 ours', '#18 theirs'), a region name or 'lon,lat'."""
     s = str(ref or "").strip()
+    if not s:
+        raise ValueError("give a project id, an overlap like #18 (ours/theirs), a region or lon,lat")
     m = re.fullmatch(r"#?(\d+)(?:\s*(ours|theirs|mine|partner))?", s, re.I)
     if m:
         op = conn.execute("""SELECT op.id, op.job_a, op.job_b, op.meet_lon, op.meet_lat, ja.org_id AS a_org, ja.name AS a_name, jb.name AS b_name,
@@ -213,6 +240,8 @@ def resolve_point(conn, company, ref):
     if m:
         a, b = float(m.group(1)), float(m.group(2))
         lon, lat = (a, b) if abs(a) > 90 or abs(b) <= 90 and a < 0 else (b, a)  # "lon,lat" or "lat,lon", whichever is plausible
+        if not (-180 <= lon <= 180 and -90 <= lat <= 90):
+            raise ValueError(f"{s!r} is not a place on the globe: longitude -180 to 180, latitude -90 to 90")
         return lon, lat, f"{lat:.3f}, {lon:.3f}"
     j = conn.execute("SELECT id, name, org_id, ST_AsGeoJSON(ST_Centroid(geom::geometry), 5)::json AS c FROM job WHERE id = %s", (s,)).fetchone()
     if j:

@@ -1,4 +1,6 @@
 """Endpoints for the Crewly app: everything is seen from the logged-in company's side."""
+import math
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -48,6 +50,8 @@ def context_projects(bbox: str = "", user=Depends(current_user), conn=Depends(ge
     """Other utilities' placed long-horizon projects inside a bbox, simplified: the quiet context layer under our map."""
     try:
         w, s, e, n = [float(x) for x in bbox.split(",")]
+        if not all(math.isfinite(v) for v in (w, s, e, n)):
+            raise ValueError
     except ValueError:
         raise HTTPException(400, "bbox must be west,south,east,north")
     w, s, e, n = max(-180.0, min(w, e)), max(-90.0, min(s, n)), min(180.0, max(w, e)), min(90.0, max(s, n))

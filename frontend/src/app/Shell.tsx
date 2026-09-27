@@ -580,7 +580,7 @@ export default function Shell() {
                 <span className="flex-1 font-logo text-lg font-semibold">Notifications</span>
                 {unread > 0 && <button onClick={() => noticesApi.markRead(notes.filter((n) => !n.read_at).map((n) => n.id)).then(reload)} className="text-xs font-semibold text-grape">Mark all read</button>}
               </div>
-              <div className="thin-scroll flex max-h-[46vh] flex-col gap-0.5 overflow-y-auto">
+              <div className="thin-scroll flex max-h-[46vh] flex-col gap-1.5 overflow-y-auto px-0.5 py-0.5">
                 {notes.map((n) => {
                   if (n.kind === "suggestion") {
                     return <Suggestion key={n.id} n={n} onAct={() => { setPop(null); actOn(n); }}
@@ -589,7 +589,7 @@ export default function Shell() {
                   const r = reqs.find((x) => x.id === n.request_id);
                   const who = r ? company(n.kind === "request" ? r.from_company : r.to_company).name : "A neighboring utility";
                   return (
-                    <button key={n.id} onClick={() => { openRequest(n.request_id!); setPop(null); }} className="flex gap-2.5 rounded-2xl px-2 py-2 text-left hover:bg-soft">
+                    <button key={n.id} onClick={() => { openRequest(n.request_id!); setPop(null); }} className="card-lift flex w-full gap-2.5 px-3 py-2 text-left">
                       <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.read_at ? "bg-transparent" : "bg-[#ff1f3d]"}`} />
                       <span className="min-w-0">
                         <span className="block text-sm leading-snug">

@@ -94,6 +94,8 @@ def compose(conn, ctx, to, about, tone="short", attach=None):
     company = ctx["company"]
     about = str(about or "").strip()
     m = re.fullmatch(r"#?(\d+)", about)
+    if not m and not re.fullmatch(r"(request\s*#?\d+|plan(\s+(quarter|year|window))?)?", about.lower()):
+        raise ValueError(f"I can write about an overlap (#18), a request (request 12) or the plan, not {about!r}")
     f = overlap_facts(conn, company, int(m.group(1))) if m else None
     if m and not f:
         raise ValueError(f"#{m.group(1)} is not one of our overlaps")
@@ -147,7 +149,10 @@ def compose(conn, ctx, to, about, tone="short", attach=None):
         ref = {"plan": p["horizon"], "version": p["version"]}
     if attach and str(attach).startswith("report:"):
         from app.crewly import reports
-        row = reports.get(conn, int(str(attach).split(":", 1)[1] or 0), company)
+        rid = str(attach).split(":", 1)[1].strip().lstrip("#")
+        if not rid.isdigit():
+            raise ValueError(f"attach wants a report id like report:12, got {attach!r}")
+        row = reports.get(conn, int(rid), company)
         if row:
             attachments.append({"name": f"report-{row['id']}.html", "content_type": "text/html", "content": row["html"]})
     greeting = f"Hello {who['name']} transmission planning team," if who["company_id"] else f"Hello {who['name']},"

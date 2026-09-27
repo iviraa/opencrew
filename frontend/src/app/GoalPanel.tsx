@@ -5,7 +5,7 @@ import {
   type AgentTask, type CollabRequest, type GoalStep, type Me, type Overlap,
 } from "./data";
 import { say } from "./mascot";
-import { PanelHeader, StatusChip, VerdictChip } from "./panels";
+import { ListRow, PanelHeader, StatusChip, VerdictChip } from "./panels";
 
 type State = "draft" | "skipped" | CollabRequest["status"];
 
@@ -184,18 +184,13 @@ export function GoalsList({ requests, onBack, onOpen }: { requests: CollabReques
   return (
     <>
       <PanelHeader title="Goals" sub="Multi-step plans Crewly drafted for you" onBack={onBack} />
-      <div className="thin-scroll -mr-2 flex flex-1 flex-col gap-1 overflow-y-auto pr-2">
+      <div className="thin-scroll -mr-2 flex flex-1 flex-col gap-2 overflow-y-auto px-0.5 pb-1 pr-2">
         {list?.map((t) => {
           const states = t.steps.map((s) => stepState(s, requests));
           const sent = states.filter((s) => s !== "draft" && s !== "skipped").length;
           return (
-            <button key={t.id} onClick={() => onOpen(t.id)} className="flex gap-2.5 rounded-2xl px-2 py-2 text-left hover:bg-soft">
-              <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-grape-soft text-grape"><Flag size={14} /></span>
-              <span className="min-w-0 flex-1">
-                <span className="line-clamp-2 text-sm font-semibold leading-snug">{t.goal}</span>
-                <span className="text-xs text-muted">{sent} of {t.steps.length} sent · {t.status === "active" ? ago(t.created_at) : t.status}</span>
-              </span>
-            </button>
+            <ListRow key={t.id} onClick={() => onOpen(t.id)} lead={<span className="grid h-7 w-7 place-items-center rounded-full bg-grape-soft text-grape"><Flag size={14} /></span>}
+              title={t.goal} sub={`${sent} of ${t.steps.length} sent · ${t.status === "active" ? ago(t.created_at) : t.status}`} />
           );
         })}
         {list && !list.length && <p className="px-2 py-6 text-center text-sm text-muted">No goals yet. Ask Crewly to "line up our top 5 overlaps".</p>}
