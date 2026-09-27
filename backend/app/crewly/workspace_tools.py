@@ -140,7 +140,7 @@ def set_reminder(ctx, conn, text, due_at=None, in_days=None, target_kind=None, t
     kind, ident = _target(target_kind, target_id, REMINDER_TARGETS, conn, ctx) if target_kind and target_id else (None, None)
     due = _due(due_at, in_days)
     if due.date() < _now().date():
-        return {"error": f"{due.date()} is in the past; give a date from today on"}, []
+        return {"error": f"{due.date()} is in the past. Do not pick another date yourself: ask the user when they want the reminder."}, []
     row = rest(ctx, "POST", "reminder", json={"text": text, "due_at": due.isoformat(), "target_kind": kind, "target_id": ident},
                headers={"Prefer": "return=representation"})[0]
     out = {"saved": True, "reminder": _reminder_row(row), "delivery": "it lands in the bell when due", **_reminders(ctx)}

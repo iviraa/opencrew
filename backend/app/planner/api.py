@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 from app.auth import current_user
 from app.db import get_conn
-from app.planner import build, execute, store
+from app.planner import build, edits, execute, store
 
 router = APIRouter(prefix="/api/app/plan")
 
@@ -56,11 +56,22 @@ def one(plan_id: int, user=Depends(current_user), conn=Depends(get_conn)):
 @router.patch("/{plan_id}/items/{item_id}")
 def patch_item(plan_id: int, item_id: str, body: ItemPatch, user=Depends(current_user), conn=Depends(get_conn)):
     plan = owned(conn, plan_id, user)
-    row = store.update_item(conn, plan, item_id, body.model_dump(exclude_none=True))
-    if not row:
+    patch = body.model_dump(exclude_none=True)
+    if not any(i["id"] == item_id for i in plan["items"]):
         raise HTTPException(404, "item not found")
-    row["totals"] = build.totals_for(row["items"], row["totals"].get("considered", 0), row["totals"].get("skipped", {}),
-                                     tuple(row["totals"]["period"]) if row["totals"].get("period") else None, row["totals"].get("note", ""))
+    changes = []
+    if patch.get("target_start") and patch.get("target_end"):
+        changes.append({"action": "move", "item_id": item_id, "start": patch["target_start"], "end": patch["target_end"]})
+    if patch.get("state") in ("accepted", "skipped", "proposed"):
+        changes.append({"action": {"accepted": "accept", "skipped": "skip", "proposed": "propose"}[patch["state"]], "item_id": item_id})
+    row = plan
+    try:
+        if changes:
+            row, _ = edits.apply(conn, plan, changes)  # re-prices moved months and saves the totals
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    if "note" in patch:
+        row = store.update_item(conn, row, item_id, {"note": patch["note"]})
     return as_json(row)
 
 

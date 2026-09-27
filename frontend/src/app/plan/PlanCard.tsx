@@ -25,6 +25,12 @@ function PlanItem({ it, plan, onOpenPlan, onOpenGoal, onOpenOverlap, patch }: {
 }
 
 // crewly's plan inside the chat: the totals and the first pairs, the rest in a drawer, then timeline and execute
+const signed = (r: { low: number; high: number }) => {  // "+$12k to +$40k", "no change"
+  if (Math.abs(r.low) < 50 && Math.abs(r.high) < 50) return "no change";
+  const f = (v: number) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${money({ low: Math.abs(v), high: Math.abs(v) }).split(" to ")[0]}`;
+  return Math.round(r.low / 100) === Math.round(r.high / 100) ? f(r.low) : `${f(r.low)} to ${f(r.high)}`;
+};
+
 export default function PlanCard({ store, id, horizon, item, onOpenPlan, onOpenGoal, onOpenOverlap }: {
   store: PlanStore; id: number; horizon?: string; item?: string; onOpenPlan: (id: number, item?: string) => void; onOpenGoal: (id: number) => void; onOpenOverlap?: (id: number) => void;
 }) {
@@ -50,6 +56,19 @@ export default function PlanCard({ store, id, horizon, item, onOpenPlan, onOpenG
         { label: "Weather avoided", value: money(t.weather_avoided), tone: t.weather_avoided.high > 0 ? "good" : "flat" },
         { label: "Accepted", value: `${n} of ${plan.items.length}`, note: t.conflicts > 0 ? plural(t.conflicts, "conflict") : undefined, tone: n ? "info" : "flat" },
       ]} />}
+      {t.edits && t.edits.length > 0 && t.built && (
+        <Drawer title={`Changed since built · ${plural(t.edits.length, "edit")}`}
+          summary={`Weather cost ${money(t.built.weather_cost)} → ${money(t.weather_cost ?? t.built.weather_cost)} · savings ${money(t.built.savings)} → ${money(t.savings)}`}>
+          <ol className="flex flex-col gap-1">
+            {t.edits.map((e, i) => (
+              <li key={i} className="rounded-xl bg-soft px-2.5 py-1.5 text-xs leading-snug">
+                <span className="block">{e.summary}</span>
+                <span className="text-muted">Savings {signed(e.effect.savings)} · weather cost {signed(e.effect.weather_cost)}</span>
+              </li>
+            ))}
+          </ol>
+        </Drawer>
+      )}
       {verdicts.length > 0 && <Row>{verdicts.map((v) => <Chip key={v} style={{ background: VERDICT[v].bg, color: VERDICT[v].color }}>{t.verdicts[v]} {VERDICT[v].label.toLowerCase()}</Chip>)}</Row>}
       {t.note && <Note>{t.note}</Note>}
       {err && <Note tone="warn">{err}</Note>}

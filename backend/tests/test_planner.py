@@ -168,6 +168,12 @@ def test_routes_build_edit_and_explain(monkeypatch):
         plan["items"][0].update({k: v for k, v in patch.items() if k in ("state", "note")})
         return plan
     monkeypatch.setattr(plan_api.store, "update_item", update)
+
+    def apply(conn, plan, changes):  # the edit path without a database: state changes only
+        for ch in changes:
+            plan["items"][0]["state"] = {"accept": "accepted", "skip": "skipped", "propose": "proposed"}.get(ch["action"], plan["items"][0]["state"])
+        return plan, []
+    monkeypatch.setattr(plan_api.edits, "apply", apply)
     app.dependency_overrides[current_user] = lambda: {"id": "u", "company": "gpc", "username": "georgia", "token": "t"}
     app.dependency_overrides[plan_api.get_conn] = lambda: None
     try:

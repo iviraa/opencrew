@@ -16,7 +16,7 @@ GROUPS = [
                                       "overlap_history"]),
     ("Weather, hazards and news", ["outlook", "weather_alerts", "site_hazards", "site_forecast", "hazard_exposure", "hazard_cost", "incidents_near",
                                    "news_for"]),
-    ("Planning", ["build_plan", "plan_status", "explain_plan_item", "plan_bulk"]),
+    ("Planning", ["build_plan", "plan_status", "edit_plan", "explain_plan_item", "plan_bulk"]),
     ("What-if, storms and math", ["run_experiment", "calculate", "compare_findings", "list_findings", "findings_bulk", "storm_scenario",
                                   "history_replay", "sensitivity"]),
     ("Charts, tables, reports and exports", ["make_chart", "get_data", "query_data", "make_report", "export", "share_link"]),

@@ -17,6 +17,8 @@ export type Item = {
 export type Totals = {
   savings: Range; weather_avoided: Range; verdicts: Record<Verdict, number>; selected: number; considered: number; skipped: Record<string, number>;
   period: [string, string] | null; conflicts: number; passed: number; actions: Record<string, number>; note: string;
+  weather_cost?: Range; built?: { savings: Range; weather_avoided: Range; weather_cost: Range };  // set once the plan has been edited
+  edits?: { at: string; summary: string; effect: { savings: Range; weather_cost: Range } }[];
 };
 export type Plan = { id: number; horizon: Horizon; version: number; items: Item[]; totals: Totals; status: string; created_at: string };
 export type Explain = {
