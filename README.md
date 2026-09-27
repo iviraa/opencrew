@@ -48,6 +48,7 @@ A utility logs in and sees its own planned projects **and its neighbors'**, pars
 Dominion Energy South Carolina's five-year budget filings, Georgia Power's ten-year transmission plan, and about
 20 regional planners from PJM and MISO to ERCOT, CAISO and SERTP. Crewly extracts each project's name, voltage,
 build window, cost and route, places it on the map, and keeps watching the sources for new editions.
+
 <img width="1468" height="803" alt="Screenshot 2026-09-27 at 1 56 17 AM" src="https://github.com/user-attachments/assets/2ea8a91a-4b01-49bb-aea9-fc990a7539ca" />
 
 
@@ -67,6 +68,7 @@ two utilities could share:
 Timeline overlap is the second signal. Crewly lines up each project's phases (survey, clearing, construction,
 energization) month by month to find when both are building at once, and checks the **real road drive time**
 between the sites, not just the straight-line distance.
+
 <img width="1466" height="796" alt="Screenshot 2026-09-27 at 1 57 38 AM" src="https://github.com/user-attachments/assets/1fe08d1f-7333-4f73-a953-5052ce646f25" />
 
 
@@ -79,6 +81,7 @@ cited with its page, and the quantities are calibrated against MISO's published 
 number comes from a language model.** The model can explain the arithmetic; it never supplies it.
 
 → [How Crewly estimates the savings](docs/cost-savings-model.md)
+
 <img width="1462" height="796" alt="Screenshot 2026-09-27 at 1 58 38 AM" src="https://github.com/user-attachments/assets/78d967d3-380c-4373-8f6f-6383021fd0a2" />
 
 
@@ -100,7 +103,9 @@ It ranks the overlaps, checks whether each is realistic (location, timing, weath
 record), builds a quarter plan, and drafts the collaboration requests, emails, call agendas and cost-sharing
 memos. Requests go to the other utility inside Crewly and arrive in real time. **Nothing leaves your company
 until a person taps Confirm**, and one utility never sees another's private data.
-<img width="1426" height="777" alt="Screenshot 2026-09-27 at 2 01 41 AM" src="https://github.com/user-attachments/assets/36dda0c1-6dce-4f82-bd44-90cd1d4f39e7" />
+
+<img width="2400" height="1296" alt="image" src="https://github.com/user-attachments/assets/fdb59451-05af-4eaa-baa5-cd7d91c99a6b" />
+
 
 
 ### 6. Bring in the public
