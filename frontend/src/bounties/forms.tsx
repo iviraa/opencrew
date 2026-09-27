@@ -1,7 +1,7 @@
 // the four things a visitor can do: post (sponsor), submit (contributor), review and approve (reviewer), refund (sponsor)
 import { getBase58Decoder } from "@solana/kit";
 import { useSignMessage } from "@solana/kit-plugin-wallet/react";
-import { CheckCircle2, FileText, Send, ShieldCheck, Undo2 } from "lucide-react";
+import { CheckCircle2, FileText, Flag, Send, ShieldCheck, Undo2 } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { bounties, reviewMessage, type Bounty, type ReviewAuth, type Submission } from "./api";
 import { approveInstruction, bountyAddress, createAndFundInstructions, refundInstruction } from "./program";
@@ -98,61 +98,101 @@ export function PostBounty({ onPosted }: { onPosted: (b: Bounty) => void }) {
   );
 }
 
-export function SubmitEvidence({ bounty, onSubmitted }: { bounty: Bounty; onSubmitted: () => void }) {
-  const wallet = useWallet();
-  const [addr, setAddr] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState<{ commitment: string; duplicate: boolean } | null>(null);
-  const [error, setError] = useState<string | null>(null);
+const claimedKey = (id: number) => `crewly-bounty-claimed-${id}`;
+const readClaim = (id: number) => { try { return localStorage.getItem(claimedKey(id)); } catch { return null; } };
+const writeClaim = (id: number, v: string) => { try { localStorage.setItem(claimedKey(id), v); } catch { /* private mode: state lives for this visit only */ } };
 
-  const submit = async (e: FormEvent<HTMLFormElement>) => {
+export function ClaimBounty({ bounty, onSubmitted }: { bounty: Bounty; onSubmitted: () => void }) {
+  const wallet = useWallet();
+  const [stage, setStage] = useState<"open" | "claimed" | "submitted">(() => (readClaim(bounty.id) as "claimed" | "submitted" | null) ?? "open");
+  const [addr, setAddr] = useState("");
+  const [email, setEmail] = useState("");
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const address = (addr || wallet || "").trim();
+
+  const claim = () => { setStage("claimed"); writeClaim(bounty.id, "claimed"); };
+
+  const review = (e: FormEvent) => {
     e.preventDefault();
-    const form = new FormData(e.currentTarget);
-    form.set("wallet", (addr || wallet || "").trim());
-    if (!(form.get("file") as File | null)?.size) form.delete("file");
+    setError(null);
+    setConfirming(true);
+  };
+
+  const confirm = async () => {
+    const form = new FormData();
+    form.set("wallet", address);
+    form.set("email", email.trim());
     setBusy(true); setError(null);
     try {
-      setDone(await bounties.submit(bounty.id, form));
+      await bounties.submit(bounty.id, form);
+      setConfirming(false);
+      setStage("submitted"); writeClaim(bounty.id, "submitted");
       onSubmitted();
     } catch (err) {
+      setConfirming(false);
       setError(explain(err));
     } finally {
       setBusy(false);
     }
   };
 
-  if (done) {
+  if (stage === "submitted") {
     return (
       <div className="pop-in rounded-2xl bg-save-soft p-5">
-        <div className="flex items-center gap-2 font-semibold text-save"><CheckCircle2 size={18} /> {done.duplicate ? "Already received" : "Evidence received"}</div>
-        <p className="mt-1 text-sm">
-          {done.duplicate ? "We already had this exact submission." : "Reviewers will check it."} If approved, the reward goes straight to your wallet. Your evidence fingerprint:
-        </p>
-        <p className="mt-2 break-all font-mono text-xs">{done.commitment}</p>
+        <div className="flex items-center gap-2 text-lg font-semibold text-save"><CheckCircle2 size={20} /> Submitted</div>
+        <p className="mt-1">You will receive updates by email. If your claim is approved, the {bounty.reward_sol} SOL reward is paid on-chain to your Solana address.</p>
       </div>
     );
   }
 
   return (
-    <form onSubmit={submit} className="pen-box flex flex-col gap-4 bg-soft p-5">
-      <div>
-        <h2 className="text-lg font-semibold">Submit evidence</h2>
-        <p className="text-sm text-muted">Only the reviewers see what you send. Just its fingerprint can go on-chain.</p>
+    <section className="pen-box flex flex-col gap-4 bg-soft p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold">Claim this bounty</h2>
+          <p className="text-sm text-muted">Claim it, then tell us where to send the reward and how to reach you.</p>
+        </div>
+        <button onClick={claim} disabled={stage !== "open"}
+          className="pen-btn flex items-center gap-2 bg-grape px-5 py-2.5 font-logo text-lg font-semibold text-white">
+          <Flag size={17} /> {stage === "open" ? "Claim" : "Claimed"}
+        </button>
       </div>
-      <Field label="Your Solana wallet address" hint="The reward is paid here if your evidence is approved.">
-        <input className={`${input} font-mono text-sm`} value={addr || wallet || ""} onChange={(e) => setAddr(e.target.value)} required minLength={32} maxLength={44} placeholder="Paste a devnet wallet address" />
-      </Field>
-      <Field label="What you saw"><textarea name="summary" className={input} rows={3} required minLength={10} maxLength={2000} /></Field>
-      <Field label="Where, as exactly as you can" hint="Private to reviewers."><input name="location" className={input} maxLength={300} placeholder="Street and cross street, or coordinates" /></Field>
-      <Field label="More detail (optional)"><textarea name="details" className={input} rows={2} maxLength={5000} /></Field>
-      <Field label="Photo or document (optional)" hint="JPEG, PNG, WebP, HEIC, PDF or text, up to 5 MB.">
-        <input name="file" type="file" accept="image/jpeg,image/png,image/webp,image/heic,application/pdf,text/plain" className="text-sm" />
-      </Field>
-      {error && <Note kind="error">{error}</Note>}
-      <button disabled={busy} className="pen-btn flex items-center justify-center gap-2 self-start bg-grape px-5 py-2.5 font-semibold text-white">
-        <Send size={16} /> {busy ? "Sending…" : "Submit evidence"}
-      </button>
-    </form>
+
+      <form onSubmit={review} className={`flex flex-col gap-4 ${stage === "open" ? "pointer-events-none opacity-50" : "pop-in"}`} aria-disabled={stage === "open"}>
+        <Field label="Your Solana address" hint="The reward is paid here.">
+          <input className={`${input} font-mono text-sm`} value={address} onChange={(e) => setAddr(e.target.value)} disabled={stage === "open"}
+            required minLength={32} maxLength={44} pattern="[1-9A-HJ-NP-Za-km-z]{32,44}" title="A Solana address (base58, 32 to 44 characters)" placeholder="Paste your Solana address" />
+        </Field>
+        <Field label="Email" hint="We send status updates here.">
+          <input className={input} type="email" value={email} onChange={(e) => setEmail(e.target.value)} disabled={stage === "open"}
+            required maxLength={254} placeholder="you@example.com" autoComplete="email" />
+        </Field>
+        {error && <Note kind="error">{error}</Note>}
+        <button disabled={stage === "open"} className="pen-btn flex items-center justify-center gap-2 self-start bg-grape px-5 py-2.5 font-semibold text-white">
+          <Send size={16} /> Submit
+        </button>
+      </form>
+
+      {confirming && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-ink/40 p-4" role="dialog" aria-modal="true" aria-labelledby="confirm-title"
+          onClick={() => !busy && setConfirming(false)}>
+          <div className="board pop-in w-full max-w-[460px] p-6" onClick={(e) => e.stopPropagation()}>
+            <h2 id="confirm-title" className="text-xl font-semibold">Confirm your details</h2>
+            <p className="mt-1 text-sm text-muted">Check these carefully. Rewards sent to a wrong address cannot be recovered.</p>
+            <dl className="mt-4 flex flex-col gap-3">
+              <div><dt className="text-xs font-semibold uppercase tracking-wider text-faint">Email</dt><dd className="break-all font-semibold">{email.trim()}</dd></div>
+              <div><dt className="text-xs font-semibold uppercase tracking-wider text-faint">Solana address</dt><dd className="break-all font-mono text-sm font-semibold">{address}</dd></div>
+            </dl>
+            <div className="mt-6 flex justify-end gap-3">
+              <button onClick={() => setConfirming(false)} disabled={busy} className="rounded-full border-2 border-line px-5 py-2 font-semibold hover:border-ink">Edit</button>
+              <button onClick={confirm} disabled={busy} className="pen-btn bg-grape px-5 py-2 font-semibold text-white">{busy ? "Submitting…" : "Confirm and submit"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -233,7 +273,8 @@ export function ReviewPanel({ bounty, onChange }: { bounty: Bounty; onChange: (b
                 <span>From <span className="font-mono font-semibold text-ink">{short(s.wallet)}</span> · {new Date(s.created_at).toLocaleString()}</span>
                 {s.approved && <span className="rounded-full bg-save-soft px-2 py-0.5 font-bold text-save">{bounty.status === "paid" ? "Paid" : "Approved"}</span>}
               </div>
-              <p className="mt-2 whitespace-pre-line">{s.summary}</p>
+              {s.email && <p className="mt-2"><b>Email:</b> <a className="underline" href={`mailto:${s.email}`}>{s.email}</a></p>}
+              {s.summary && <p className="mt-2 whitespace-pre-line">{s.summary}</p>}
               {s.location && <p className="mt-1 text-sm"><b>Location:</b> {s.location}</p>}
               {s.details && <p className="mt-1 whitespace-pre-line text-sm text-muted">{s.details}</p>}
               <div className="mt-3 flex flex-wrap items-center gap-2">

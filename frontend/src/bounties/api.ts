@@ -19,7 +19,7 @@ export type ChainArgs = {
 export type Tx = { signature: string; kind: "create" | "approve" | "refund"; created_at: string; explorer: string };
 
 export type Submission = {
-  id: number; wallet: string; summary: string; details: string | null; location: string | null; file_name: string | null;
+  id: number; wallet: string; email: string | null; summary: string; details: string | null; location: string | null; file_name: string | null;
   file_type: string | null; file_sha256: string | null; commitment: string; created_at: string; approved: boolean;
 };
 

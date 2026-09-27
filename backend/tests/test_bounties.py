@@ -157,7 +157,7 @@ def test_submission_is_private_and_deduplicated(world):
     c = world["client"]
     bid = new_bounty(world)["id"]
     _, contributor = keypair()
-    form = {"wallet": contributor, "summary": "Line down across Pine St after the storm.", "location": "33.5601, -81.7196"}
+    form = {"wallet": contributor, "email": "ground@example.com", "summary": "Line down across Pine St after the storm.", "location": "33.5601, -81.7196"}
     files = {"file": ("photo.png", b"\x89PNG fake", "image/png")}
 
     assert c.post(f"/api/bounties/{bid}/submissions", data=form).status_code == 400  # not funded yet
@@ -167,6 +167,7 @@ def test_submission_is_private_and_deduplicated(world):
     assert len(first["commitment"]) == 64 and not first["duplicate"]
     assert again == {**first, "duplicate": True}
     assert c.post(f"/api/bounties/{bid}/submissions", data={**form, "wallet": "bad"}).status_code == 400
+    assert c.post(f"/api/bounties/{bid}/submissions", data={**form, "email": "nope"}).status_code == 400
     html = {"file": ("x.html", b"<script>", "text/html")}
     assert c.post(f"/api/bounties/{bid}/submissions", data=form, files=html).status_code == 415
 
@@ -186,7 +187,7 @@ def test_submission_is_private_and_deduplicated(world):
     assert c.get(f"/api/bounties/{bid}/submissions", headers=forged).status_code == 401
 
     rows = c.get(f"/api/bounties/{bid}/submissions", headers=review_headers(bid, key, wallet)).json()
-    assert rows[0]["location"] == "33.5601, -81.7196" and rows[0]["commitment"] == first["commitment"]
+    assert rows[0]["email"] == "ground@example.com" and rows[0]["location"] == "33.5601, -81.7196" and rows[0]["commitment"] == first["commitment"]
     ev = c.get(f"/api/bounties/{bid}/submissions/{first['id']}/evidence", headers=review_headers(bid, key, wallet))
     assert ev.content == b"\x89PNG fake" and ev.headers["x-content-type-options"] == "nosniff"
 
@@ -196,7 +197,7 @@ def test_payout_state_comes_from_chain(world):
     bid = new_bounty(world, threshold=2)["id"]
     fund(world, bid)
     _, contributor = keypair()
-    sub = c.post(f"/api/bounties/{bid}/submissions", data={"wallet": contributor, "summary": "Transformer fire on 5th Ave."}).json()
+    sub = c.post(f"/api/bounties/{bid}/submissions", data={"wallet": contributor, "email": "ground@example.com"}).json()
 
     world["chain"][PDA] = account_bytes(world["sponsor"], bid, [r[1] for r in world["reviewers"]], approvals=0b11, status=2,
                                         contributor=contributor, submission=bytes.fromhex(sub["commitment"]))

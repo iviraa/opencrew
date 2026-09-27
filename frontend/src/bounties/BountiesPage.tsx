@@ -2,7 +2,7 @@
 import { ArrowLeft, Clock, ExternalLink, MapPin, Plus, ShieldCheck, TriangleAlert, Users } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { bounties, type Bounty, type Tx } from "./api";
-import { PostBounty, RefundButton, ReviewPanel, SubmitEvidence } from "./forms";
+import { ClaimBounty, PostBounty, RefundButton, ReviewPanel } from "./forms";
 import { explorerAddress, explorerTx, Providers, short, WalletButton } from "./solana";
 
 export default function BountiesPage() {
@@ -172,7 +172,7 @@ function BountyDetail({ id }: { id: number }) {
           <p className="mt-1 whitespace-pre-line leading-relaxed text-muted">{b.rules}</p>
         </section>
 
-        {open && <SubmitEvidence bounty={b} onSubmitted={load} />}
+        {open && <ClaimBounty bounty={b} onSubmitted={load} />}
         {b.status === "paid" && b.contributor && (
           <div className="rounded-2xl bg-save-soft p-5">
             <div className="flex items-center gap-2 font-semibold text-save"><ShieldCheck size={18} /> Verified and paid</div>

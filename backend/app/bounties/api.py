@@ -4,6 +4,7 @@ The chain is the source of truth for money and approvals; these tables hold what
 (text, evidence) and a cached copy of the account state that `/sync` refreshes after each transaction.
 """
 import hashlib
+import re
 import time
 from datetime import datetime, timezone
 
@@ -34,11 +35,13 @@ CREATE TABLE IF NOT EXISTS bounty.submission (
 CREATE TABLE IF NOT EXISTS bounty.tx (
   signature TEXT PRIMARY KEY, bounty_id BIGINT NOT NULL REFERENCES bounty.bounty(id), kind TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-)"""
+);
+ALTER TABLE bounty.submission ADD COLUMN IF NOT EXISTS email TEXT"""
 
 MAX_EVIDENCE_BYTES = 5 * 1024 * 1024
 EVIDENCE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic", "application/pdf", "text/plain"}
 REVIEW_TOKEN_TTL_S = 600
+EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 TX_KINDS = {"create", "approve", "refund"}
 PUBLIC_COLS = """id, title, description, region, rules, reward_lamports, deadline, sponsor, reviewers, threshold,
   rules_commitment, region_commitment, pda, status, approved_by, contributor, submission_commitment,
@@ -190,28 +193,31 @@ def transactions(bid: int, conn=Depends(get_conn)):
 
 
 @router.post("/{bid}/submissions")
-async def submit(bid: int, wallet: str = Form(...), summary: str = Form(..., min_length=10, max_length=2000),
+async def submit(bid: int, wallet: str = Form(...), email: str = Form(..., max_length=254), summary: str = Form("", max_length=2000),
                  details: str = Form("", max_length=5000), location: str = Form("", max_length=300),
                  file: UploadFile | None = File(None), conn=Depends(get_conn)):
-    """Evidence stays here; only its SHA-256 commitment may ever reach the chain."""
+    """A claim (payout address + email, optionally evidence). It stays here; only its SHA-256 commitment may reach the chain."""
+    wallet, email = wallet.strip(), email.strip().lower()
     ensure(conn)
     row = _load(conn, bid)
     if row["status"] != "funded" or row["deadline"] < datetime.now(timezone.utc):
         raise HTTPException(400, "bounty is not open for submissions")
     if not chain.is_wallet(wallet):
         raise HTTPException(400, "wallet must be a Solana address")
+    if not EMAIL.match(email):
+        raise HTTPException(400, "enter a valid email address")
     if file and file.filename and file.content_type not in EVIDENCE_TYPES:
         raise HTTPException(415, "evidence must be a photo (jpeg, png, webp, heic), pdf, or text file")
     blob = await file.read(MAX_EVIDENCE_BYTES + 1) if file and file.filename else None
     if blob is not None and len(blob) > MAX_EVIDENCE_BYTES:
         raise HTTPException(413, "evidence file is larger than 5 MB")
     file_sha = hashlib.sha256(blob).hexdigest() if blob is not None else None
-    c = chain.commitment({"bounty": bid, "wallet": wallet, "summary": summary, "details": details,
+    c = chain.commitment({"bounty": bid, "wallet": wallet, "email": email, "summary": summary, "details": details,
                           "location": location, "file_sha256": file_sha}).hex()
     got = conn.execute(
-        """INSERT INTO bounty.submission (bounty_id, wallet, summary, details, location, file_name, file_type, file_sha256, evidence, commitment)
-           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (bounty_id, commitment) DO NOTHING RETURNING id""",
-        (bid, wallet, summary, details or None, location or None, file.filename if blob is not None else None,
+        """INSERT INTO bounty.submission (bounty_id, wallet, email, summary, details, location, file_name, file_type, file_sha256, evidence, commitment)
+           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (bounty_id, commitment) DO NOTHING RETURNING id""",
+        (bid, wallet, email, summary, details or None, location or None, file.filename if blob is not None else None,
          file.content_type if blob is not None else None, file_sha, blob, c)).fetchone()
     if got:
         return {"id": got["id"], "commitment": c, "duplicate": False}
@@ -240,7 +246,7 @@ def reviewer(bid: int, conn=Depends(get_conn), x_bounty_wallet: str = Header("")
 @router.get("/{bid}/submissions")
 def submissions(bid: int, row=Depends(reviewer), conn=Depends(get_conn)):
     rows = conn.execute(
-        """SELECT id, wallet, summary, details, location, file_name, file_type, file_sha256, commitment, created_at
+        """SELECT id, wallet, email, summary, details, location, file_name, file_type, file_sha256, commitment, created_at
            FROM bounty.submission WHERE bounty_id = %s ORDER BY created_at""", (bid,)).fetchall()
     return [{**r, "approved": r["commitment"] == row["submission_commitment"]} for r in rows]
 
