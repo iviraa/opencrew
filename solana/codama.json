@@ -1,0 +1,11 @@
+{
+  "idl": "./target/idl/crewly_bounty.json",
+  "scripts": {
+    "js": [
+      {
+        "from": "@codama/renderers-js",
+        "args": ["../frontend", { "generatedFolder": "src/bounties/generated", "erasableSyntax": true, "kitImportStrategy": "rootOnly", "syncPackageJson": false }]
+      }
+    ]
+  }
+}

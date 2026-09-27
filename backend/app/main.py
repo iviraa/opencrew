@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -596,6 +596,8 @@ from app.comms import api as comms_api  # noqa: E402
 app.include_router(comms_api.router)
 from app import share as share_api  # noqa: E402  public share pages and export downloads, before the static mount
 app.include_router(share_api.router)
+from app.bounties.api import router as bounties_router  # noqa: E402  solana devnet bounties, self-contained
+app.include_router(bounties_router)
 
 @app.get("/config.js", include_in_schema=False)
 def web_config():
@@ -606,4 +608,9 @@ def web_config():
 
 STATIC = os.environ.get("STATIC_DIR") or str(ROOT / "frontend/dist")
 if os.path.isdir(STATIC):
+    @app.get("/bounties", include_in_schema=False)
+    def bounties_page():
+        """The bounty page is a client-side path; StaticFiles only knows real files."""
+        return FileResponse(os.path.join(STATIC, "index.html"))
+
     app.mount("/", StaticFiles(directory=STATIC, html=True), name="web")  # built react app

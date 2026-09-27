@@ -1,0 +1,7 @@
+target/
+node_modules/
+test-ledger/
+.surfpool/
+# keypairs never belong in git
+*-keypair.json
+id.json

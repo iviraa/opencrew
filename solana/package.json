@@ -1,0 +1,14 @@
+{
+  "name": "crewly-bounty-program",
+  "private": true,
+  "description": "Build tooling for the Solana bounty program: generates the typed TypeScript client the /bounties page uses",
+  "type": "module",
+  "scripts": {
+    "codama": "codama run js && sed -i.bak 's/process\\.env\\[\"NODE_ENV\"\\] !== \"production\"/import.meta.env.DEV/' ../frontend/src/bounties/generated/errors/*.ts && rm ../frontend/src/bounties/generated/errors/*.bak"
+  },
+  "devDependencies": {
+    "@codama/nodes-from-anchor": "1.5.6",
+    "@codama/renderers-js": "2.5.0",
+    "codama": "1.11.0"
+  }
+}
