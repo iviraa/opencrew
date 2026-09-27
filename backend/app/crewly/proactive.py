@@ -159,6 +159,6 @@ def scan(conn, company):
                 raise
     keep = ",".join(f'"{s["dedup_key"]}"' for s in found)
     stale = {"company_id": f"eq.{company}", "kind": "eq.suggestion", "dismissed_at": "is.null",
-             "and": f"(dedup_key.not.like.reminder:*{f',dedup_key.not.in.({keep})' if keep else ''})"}  # reminders stay until the person dismisses them
+             "and": f'(dedup_key.not.like."reminder:*"{f",dedup_key.not.in.({keep})" if keep else ""})'}  # reminders stay until the person dismisses them
     _rest("notification", "PATCH", params=stale, json={"dismissed_at": datetime.now(timezone.utc).isoformat()})  # answered, passed or recounted: retire it
     return {"company": company, "found": len(found), "created": len(created), "suggestions": created}

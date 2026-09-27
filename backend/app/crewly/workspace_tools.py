@@ -337,8 +337,8 @@ def overlap_history(ctx, conn, opportunity_id):
 
 # ---------- saved views ----------
 
-def save_view(ctx, conn, name_):
-    n = " ".join(str(name_ or "").split())[:80]
+def save_view(ctx, conn, name):  # noqa: A002  the tool argument is called name
+    n = " ".join(str(name or "").split())[:80]
     if not n:
         return {"error": "a view needs a name"}, []
     return {"saving": n, "next_step": "the app stores what is on screen under this name"}, [{"type": "save_view", "name": n}]
@@ -349,12 +349,12 @@ def _views(ctx):
     return [{"id": r["id"], "name": r["name"], "state": r["state"], "when": r["created_at"][:10]} for r in rows]
 
 
-def open_view(ctx, conn, name_):
-    n = " ".join(str(name_ or "").split()).lower()
+def open_view(ctx, conn, name):  # noqa: A002
+    n = " ".join(str(name or "").split()).lower()
     views = _views(ctx)
     hit = next((v for v in views if v["name"].lower() == n), None) or next((v for v in views if n and n in v["name"].lower()), None)
     if not hit:
-        return {"error": f"no saved view called {name_!r}", "views": [v["name"] for v in views]}, []
+        return {"error": f"no saved view called {name!r}", "views": [v["name"] for v in views]}, []
     return {"opened": hit["name"], "state": hit["state"]}, [{"type": "view", "name": hit["name"], "state": hit["state"]}]
 
 
