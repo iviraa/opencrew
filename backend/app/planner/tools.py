@@ -1,4 +1,4 @@
-"""Crewly's plan tools: build, report and explain; the person approves items in the Plan tab."""
+"""Crewly's plan tools: build, report and explain; the person accepts or skips items on the plan card in the chat."""
 from app.planner import build, store
 
 
@@ -16,7 +16,7 @@ def summary(row):
             "items": [{"item_id": i["id"], "overlap_id": i["opportunity_id"], "ours": i["ours"], "with": f"{i['theirs']} ({i['partner_name']})",
                        "verdict": i["verdict"], "months": f"{i['target_start'][:7]} to {i['target_end'][:7]}", "savings_usd": f"{_usd(i['savings']['low'])} to {_usd(i['savings']['high'])}",
                        "action": i["action"], "state": i["state"], "risks": i["risks"][:2]} for i in items],
-            "next_step": "the user accepts or skips items in the Plan tab, then executes the accepted ones as requests"}
+            "next_step": "the user accepts or skips items on the plan card in the chat, then executes the accepted ones as requests"}
 
 
 def build_plan(ctx, conn, horizon="quarter"):

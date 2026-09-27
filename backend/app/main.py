@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -115,6 +115,14 @@ async def lifespan(_app):
 
 
 app = FastAPI(title="OpenCrew", lifespan=lifespan)
+
+
+@app.exception_handler(Exception)
+async def unhandled(request, exc):  # a 500 says what broke (no secrets), so a deployed app can be fixed from its response
+    import traceback
+    print("".join(traceback.format_exception(exc))[-2000:], flush=True)
+    return JSONResponse(500, {"detail": f"{type(exc).__name__}: {str(exc)[:300]}"})
+
 if os.environ.get("CORS_ORIGINS"):  # the frontend is hosted on another domain, e.g. vercel
     from fastapi.middleware.cors import CORSMiddleware
     app.add_middleware(CORSMiddleware, allow_origins=[o.strip() for o in os.environ["CORS_ORIGINS"].split(",") if o.strip()],
