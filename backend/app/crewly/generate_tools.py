@@ -13,6 +13,9 @@ def settle(conn, company, out):
     ui, reply = list(out.get("ui_actions") or []), out.get("reply") or ""
     if any(a.get("type") in DOCUMENTS for a in ui):
         ui = [a for a in ui if a.get("type") != "plan"]  # the plan was only read to write the document
+    plans = [a for a in ui if a.get("type") == "plan"]
+    if len(plans) > 1:  # several plan steps in one turn show one card, the latest state
+        ui = [a for a in ui if a.get("type") != "plan" or a is plans[-1]]
     shows = [a for a in ui if a.get("type") == "show_overlaps"]
     cited = list(dict.fromkeys(int(m) for m in CITED.findall(reply)))
     if shows and cited:

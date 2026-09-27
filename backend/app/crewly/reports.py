@@ -10,7 +10,7 @@ KINDS = {
     "feasibility": ("Feasibility assessment", ["verdict", "factors", "conditions", "shifts"]),
     "cost_analysis": ("Cost analysis", ["savings", "weather", "coordination"]),
     "hazard_exposure": ("Hazard exposure", ["now7", "season", "month"]),
-    "plan": ("Coordination plan", ["totals", "items", "risks"]),
+    "plan": ("Coordination plan", ["totals", "changes", "items", "risks"]),
     "pack": ("Overlap pack", ["brief", "feasibility", "cost_analysis", "hazard_exposure"]),
     "finding": ("Experiment finding", ["stack", "metrics", "deltas", "notes", "evidence", "sources"]),
     "agenda": ("Coordination call agenda", ["context", "decisions", "data", "questions", "logistics"]),
@@ -459,6 +459,15 @@ def months_chart(conn, company, rows):
                      "Typical weather-affected days by month (ten years of county history, all hazards), the more exposed site of each overlap.")
 
 
+def srng(r):
+    """A signed change range: "+$12k to +$40k", "no change"."""
+    lo, hi = float(r.get("low") or 0), float(r.get("high") or 0)
+    if abs(lo) < 50 and abs(hi) < 50:
+        return "no change"
+    f = lambda v: ("+" if v > 0 else "-" if v < 0 else "") + usd(abs(v))  # noqa: E731
+    return f(lo) if round(lo, -2) == round(hi, -2) else f"{f(lo)} to {f(hi)}"
+
+
 def sec_plan(conn, company, horizon, sections, d):
     row = plan_context(conn, company, horizon)
     t, items = row["totals"], row["items"]
@@ -479,15 +488,40 @@ def sec_plan(conn, company, horizon, sections, d):
         d.fig("Conflicts", t["conflicts"], "pairs sharing a crew or month")
     acc = sum(1 for i in items if i.get("state") == "accepted")
     d.fig("Accepted", acc, "by the planner so far")
+    from app.planner import edits
+    ch = edits.describe(row)
+    ch = ch if ch and ch["edits"] else None  # an undone plan reads as built
+    if ch:
+        wc = ch["weather_cost"]
+        d.fig("Weather cost now", rng(wc["now"]), f"was {rng(wc['built'])} before {ch['edits']} edit{'s' if ch['edits'] != 1 else ''}")
+        dsv = {e: float(ch["savings"]["now"][e]) - float(ch["savings"]["built"][e]) for e in ("low", "high")}
+        dwc = {e: float(wc["now"][e]) - float(wc["built"][e]) for e in ("low", "high")}
+        moved = [f"expected savings by {srng(dsv)}" if srng(dsv) != "no change" else "", f"the weather cost of the chosen months by {srng(dwc)}" if srng(dwc) != "no change" else ""]
+        d.summary.append(f"Since the plan was built, {ch['edits']} edit{'s have' if ch['edits'] != 1 else ' has'} "
+                         + (f"changed {join([m for m in moved if m])}." if any(moved) else "left savings and weather cost where they were."))
+    if ch and "changes" in sections:
+        rows = [[e["at"][:16].replace("T", " "), e["summary"], srng(e["effect"]["savings"]), srng(e["effect"]["weather_cost"])] for e in ch["log"]]
+        before_after = table(["", "As built", "Now", "Change"], [
+            ["Expected savings", rng(ch["savings"]["built"]), rng(ch["savings"]["now"]), srng(dsv)],
+            ["Weather cost of the chosen months", rng(ch["weather_cost"]["built"]), rng(ch["weather_cost"]["now"]), srng(dwc)],
+            ["Weather cost avoided", rng(ch["weather_avoided"]["built"]), rng(ch["weather_avoided"]["now"]),
+             srng({e: float(ch["weather_avoided"]["now"][e]) - float(ch["weather_avoided"]["built"][e]) for e in ("low", "high")})]], num={1, 2, 3})
+        d.section("Changes since the plan was built", "Each edit in order with its effect; weather cost is re-priced from ten years of county history for the new months.",
+                  before_after + table(["When (UTC)", "Change", "Savings", "Weather cost"], rows, num={2, 3}))
     if "items" in sections:
         rows = [[f"#{i['id']}", i["ours"], f"{i['theirs']} ({i['partner_short']})", f"{mon(i['target_start'])} to {mon(i['target_end'])}", rng(i["savings"]),
                  chip(i["verdict"]), i["state"].replace("_", " ")] for i in items]
         d.section("Pairs", "Each pair with its partner, the target months chosen by weather history, and the expected savings.",
                   table(["Overlap", "Our project", "Partner project", "Target months", "Savings", "Verdict", "Status"], rows, num={4}))
     if "risks" in sections:
-        risks = [f"<b>#{esc(i['id'])}:</b> {esc(str(r)[0].upper() + str(r)[1:])}" for i in items for r in i.get("risks", [])[:2]]
+        grouped = {}  # the same flag on many pairs reads once, with the pairs it applies to
+        for i in items:
+            for r in i.get("risks", [])[:3]:
+                grouped.setdefault(str(r)[0].upper() + str(r)[1:], []).append(f"#{i['id']}")
+        risks = [f"<b>{esc(join(ids) if len(ids) <= 4 else ', '.join(ids[:4]) + f' and {len(ids) - 4} more')}:</b> {esc(r)}"
+                 for r, ids in sorted(grouped.items(), key=lambda kv: -len(kv[1]))]
         if risks:
-            d.section("Risks", "Flags raised per pair by the feasibility factors and recent news.", ul(risks[:24]))
+            d.section("Risks", "Flags raised by the feasibility factors and recent news, with the pairs each one applies to.", ul(risks[:16]))
     sk = t.get("skipped") or {}
     if isinstance(sk, dict) and sk:
         d.parts.append("<p class='note'>Not selected: " + join([f"{n} {k}" for k, n in sk.items()]) + ".</p>")

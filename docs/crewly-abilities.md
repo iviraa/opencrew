@@ -106,7 +106,7 @@ Every tool result that should be visible becomes a card. The card types and what
 
 <!-- catalogue:start -->
 
-68 tools, generated from `app_tools()` by `backend/scripts/tool_catalogue.py`. Bold inputs are required.
+69 tools, generated from `app_tools()` by `backend/scripts/tool_catalogue.py`. Bold inputs are required.
 
 ### Overlaps and projects
 
@@ -156,6 +156,7 @@ Every tool result that should be visible becomes a card. The card types and what
 |---|---|---|---|
 | `build_plan` | Build or rebuild our coordination plan for a horizon: which overlaps to pursue, the cheapest months to work each pair by weather history, expected savings, risks and conflicts. Shows the plan card in the chat. Nothing is sent. | horizon | plan card |
 | `plan_status` | The current plan for a horizon: pairs, months, savings, which items the user accepted or skipped. | horizon | plan card |
+| `edit_plan` | Change the saved plan and re-cost it: move a pair's months (start and end as YYYY-MM, or shift_months like 3 or -2), skip, accept or reopen pairs (by item_id = overlap id, item_ids, or partner = a utility's name), or undo the last edit. Each move is re-priced from ten years of weather history; totals update and every edit is logged with its effect on savings and weather cost. Changes apply in order. Nothing is sent to anyone. | **changes**, horizon | plan card |
 | `explain_plan_item` | Why a plan item was chosen and why those months: feasibility, savings, weather cost vs the naive window, risks, news. | **item_id**, horizon | plan card |
 | `plan_bulk` | Accept or skip many plan items at once, filtered by partner utility, verdict or ids. | **action**, horizon, filter | plan card |
 

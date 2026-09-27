@@ -50,8 +50,9 @@ def carry(items, previous):
         for k in CARRIED:
             if old.get(k) is not None:
                 it[k] = old[k]
-        if old.get("target_edited"):
+        if old.get("target_edited"):  # a moved pair keeps its months and the weather priced for them
             it["target_start"], it["target_end"] = old["target_start"], old["target_end"]
+            it["weather"], it["risks"] = old.get("weather", it.get("weather")), old.get("risks", it.get("risks"))
     return items
 
 
@@ -59,6 +60,10 @@ def save(conn, company, horizon, items, totals):
     ensure(conn)
     prev = latest(conn, company, horizon)
     items = carry(items, prev["items"] if prev else None)
+    if prev:  # carried skips and moves change the numbers, so the totals follow the items
+        from app.planner import build
+        totals = {**totals, **build.totals_for(items, totals.get("considered", 0), totals.get("skipped", {}),
+                                               tuple(totals["period"]) if totals.get("period") else None, totals.get("note", ""))}
     version = (prev["version"] + 1) if prev else 1
     conn.execute("UPDATE coordination_plan SET status = 'archived', updated_at = now() WHERE company_id = %s AND horizon = %s AND status = 'active'",
                  (company, horizon))
