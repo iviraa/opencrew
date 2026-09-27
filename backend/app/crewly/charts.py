@@ -91,23 +91,42 @@ def overlaps_by_month(conn, company, options):
     return chart, [{"month": lab, "overlaps": v} for lab, v in zip(labels, values)]
 
 
-def hazard_days_by_month(conn, company, options):
-    """Typical weather-affected days per month at a site or across an overlap's two sites, from ten years of county history."""
-    from app.hazards import cost, exposure
-    ident = str(options.get("id") or "").lstrip("#")
-    if not ident:
-        raise ValueError("this dataset needs a site id like gpc-123 or an overlap id like #18")
-    hazards = [h for h in (options.get("hazards") or []) if h in HAZARDS] or list(HAZARDS)
+def _zone_sites(conn, company, ident):
+    """The site ids behind a site id or an overlap #id, checked to be ours, with a label."""
+    from app.hazards import exposure
     if ident.isdigit():
         op = conn.execute(exposure.ZONE_SQL, {"id": int(ident)}).fetchone()
         if not op or company not in (op["a_org"], op["b_org"]):
             raise ValueError(f"#{ident} is not one of our overlaps")
-        sites, title = [op["job_a"], op["job_b"]], f"Weather-affected days by month, overlap #{ident}"
-    else:
-        r = conn.execute(exposure.SITE_SQL, {"id": ident}).fetchone()
-        if not r or r["org_id"] != company:
-            raise ValueError(f"{ident} is not one of our sites")
-        sites, title = [ident], f"Weather-affected days by month, {r['name']}"
+        return [op["job_a"], op["job_b"]], f"overlap #{ident}"
+    r = conn.execute(exposure.SITE_SQL, {"id": ident}).fetchone()
+    if not r or r["org_id"] != company:
+        raise ValueError(f"{ident} is not one of our sites")
+    return [ident], r["name"]
+
+
+def hazard_days_by_month(conn, company, options):
+    """Typical weather-affected days per month at a site or across an overlap's two sites, from ten years of county history.
+    With several ids the chart compares them: one series per overlap, all hazards added up."""
+    from app.hazards import cost
+    idents = [str(i).lstrip("#") for i in (options.get("ids") or []) if str(i).strip()] or [str(options.get("id") or "").lstrip("#")]
+    idents = list(dict.fromkeys(i for i in idents if i))[:6]
+    if not idents:
+        raise ValueError("this dataset needs a site id like gpc-123 or an overlap id like #18 (or ids to compare several)")
+    hazards = [h for h in (options.get("hazards") or []) if h in HAZARDS] or list(HAZARDS)
+    zones = [_zone_sites(conn, company, i) for i in idents]
+    if len(zones) > 1:
+        series = []
+        for (sites, label), ident in zip(zones, idents):
+            per_site = [cost.month_days(conn, s, hazards) for s in sites]
+            vals = [round(max(sum(d[m].get(h, {}).get("high", 0.0) for h in hazards) for d in per_site), 1) for m in range(1, 13)]
+            series.append({"name": f"#{ident}" if ident.isdigit() else label, "values": vals})
+        chart = {"title": "Weather-affected days by month, " + ", ".join(z[1] for z in zones), "x": MONTHS, "series": series, "unit": "days",
+                 "source": "NOAA Storm Events 2016-2025, counties under the works; all hazards added up"}
+        rows = [{"month": MONTHS[m - 1], **{s["name"]: s["values"][m - 1] for s in series}} for m in range(1, 13)]
+        return chart, rows
+    sites, label = zones[0]
+    title = f"Weather-affected days by month, {label}"
     per_site = [cost.month_days(conn, s, hazards) for s in sites]
     series = []
     for h in hazards:
@@ -199,7 +218,7 @@ def plan_totals(conn, company, options):
 
 DATASETS = {
     "overlaps_by_month": (overlaps_by_month, "our overlaps with both projects building, per month; options years [from, to], partner"),
-    "hazard_days_by_month": (hazard_days_by_month, "typical weather-affected days per month for a site or overlap; options id, hazards"),
+    "hazard_days_by_month": (hazard_days_by_month, "typical weather-affected days per month for a site or overlap; options id, hazards; or ids to compare several overlaps in one chart"),
     "savings_by_partner": (savings_by_partner, "estimated savings summed by neighboring utility; options top"),
     "projects_by_year": (projects_by_year, "our projects by in-service year, optionally a partner's too; options years, partner"),
     "cost_by_category": (cost_by_category, "one overlap's savings by cost type; options id"),

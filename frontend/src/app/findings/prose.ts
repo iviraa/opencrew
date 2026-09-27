@@ -43,7 +43,11 @@ const clause = (d: Delta) => {
 };
 
 // one or two sentences that say what the experiment found, from its own numbers only
+const NARRATED = new Set(["history_replay", "storm", "sensitivity"]);  // their notes already say what was found
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
 export function findingSentence(f: Finding, stack: Change[]): string {
+  if (NARRATED.has(f.kind) && f.notes?.length) return f.notes.slice(0, 2).map((n) => cap(n.trim().replace(/\.$/, ""))).join(". ") + ".";
   const subject = AND(stack.map(describeChange).map(lower));
   const top = movers(f.deltas).slice(0, 2);
   const flips = f.deltas.filter((d) => typeof d.delta !== "number" && d.base !== d.scenario).slice(0, 1);
