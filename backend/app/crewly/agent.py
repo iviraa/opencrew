@@ -5,7 +5,7 @@ from google.genai import types
 from app.crewly.tools import TOOLS
 from app.llm import gemini, local_chat, provider, unsourced
 
-MAX_STEPS = 6
+MAX_STEPS = 10
 
 SYSTEM = """You are Crewly, the coordination assistant inside OpenCrew. OpenCrew finds where Dominion Energy South Carolina (desc)
 and Georgia Power (gpc) planned transmission work overlaps in space and time so planners can share crews, land and equipment.
@@ -87,7 +87,9 @@ def run_local(conn, messages, system=SYSTEM, tools=TOOLS):
             tool_text += json.dumps(result, default=str) + json.dumps(args, default=str)
             calls_log.append({"name": name, "args": args})
             msgs.append({"role": "tool", "tool_call_id": call.get("id", name), "content": json.dumps(result, default=str)})
-    return {"reply": "I ran out of steps; try a narrower question.", "ui_actions": ui, "tool_calls": calls_log, "unsourced": []}
+    msgs.append({"role": "user", "content": "Stop calling tools. Answer now from what you have, in two sentences, and say what you could not finish."})
+    reply = (local_chat(msgs).get("content") or "").strip() or "I gathered part of this; ask for one piece at a time and I will finish it."
+    return {"reply": reply, "ui_actions": ui, "tool_calls": calls_log, "unsourced": unsourced(reply, tool_text)}
 
 
 def run_gemini(conn, messages, system=SYSTEM, tools=TOOLS):
@@ -111,4 +113,8 @@ def run_gemini(conn, messages, system=SYSTEM, tools=TOOLS):
             calls_log.append({"name": call.name, "args": call.args or {}})
             parts.append(types.Part.from_function_response(name=call.name, response={"result": json.loads(json.dumps(result, default=str))}))
         contents.append(types.Content(role="user", parts=parts))
-    return {"reply": "I ran out of steps; try a narrower question.", "ui_actions": ui, "tool_calls": calls_log, "unsourced": []}
+    contents.append(types.Content(role="user", parts=[types.Part.from_text(text="Stop calling tools. Answer now from what you have, in two sentences, and say what you could not finish.")]))
+    closing = types.GenerateContentConfig(system_instruction=system, temperature=0.2)  # no tools: the model has to write
+    resp = gemini(lambda client, model: client.models.generate_content(model=model, contents=contents, config=closing))
+    reply = (resp.text or "").strip() or "I gathered part of this; ask for one piece at a time and I will finish it."
+    return {"reply": reply, "ui_actions": ui, "tool_calls": calls_log, "unsourced": unsourced(reply, tool_text)}

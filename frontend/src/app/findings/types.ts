@@ -22,7 +22,7 @@ export const direction = (metric: string, delta: number | string): "good" | "bad
   return (delta > 0) === GOOD_UP.has(metric) ? "good" : "bad";
 };
 
-export const unitOf = (metric: string, unit?: string) => unit ?? (metric.includes("savings") || metric.includes("cost") ? "USD" : metric.includes("pct") ? "%" : undefined);
+export const unitOf = (metric: string, unit?: string) => (unit?.toLowerCase() === "usd" ? "USD" : unit) ?? (metric.includes("savings") || metric.includes("cost") ? "USD" : metric.includes("pct") ? "%" : undefined);
 export const show = (v: number | string | undefined, unit?: string) => (typeof v === "number" ? `${fmt(v, unit)}${unit === "%" ? "%" : unit && unit !== "USD" ? ` ${unit}` : ""}` : String(v ?? ""));
 export const range = (m: Metric | undefined) => (!m ? "" : m.low != null && m.high != null && m.low !== m.high ? `${show(m.low, m.unit)} to ${show(m.high, m.unit)}` : show(m.value, m.unit));
 export const signed = (d: number | string, unit?: string) => (typeof d === "number" ? `${d > 0 ? "+" : ""}${show(d, unit)}` : String(d));

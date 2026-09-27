@@ -73,7 +73,8 @@ def generate_tools(ctx):
             "dataset": {"type": "string", "enum": list(charts.DATASETS)},
             "options": {"type": "object", "properties": {
                 "kind": {"type": "string", "enum": list(charts.KINDS)}, "years": {"type": "array", "items": {"type": "integer"}},
-                "partner": {"type": "string"}, "id": {"type": "string"}, "hazards": {"type": "array", "items": {"type": "string"}},
+                "partner": {"type": "string"}, "id": {"type": "string"}, "ids": {"type": "array", "items": {"type": "string"}, "description": "several overlaps or sites to compare in one chart"},
+                "hazards": {"type": "array", "items": {"type": "string"}},
                 "top": {"type": "integer"}, "days": {"type": "integer"}, "horizon": {"type": "string"}}}}, ["dataset"]),
         "get_data": (_bind(ctx, get_data), "Hand over data as a table card with a CSV download. Tables: " + tables + "; or any chart dataset's rows. "
                      "filters: years [from, to], partner, tier, verdict, state, status, id (site or overlap), period, month, days, impact, direction, top.", {
@@ -95,7 +96,7 @@ PROMPT = """
 - When the user asks for a number of things ("top 2", "the 5 biggest") or which overlaps are best by some criteria, answer from my_overlaps
   (limit=N) or get_data, then call show_overlaps last with exactly the ids you named, in that order, so the cards match your words. Never let
   a card show more than you named, and never build a plan to answer a "which/best/top" question.
-- For "chart", "graph", "plot", "trend" or "visualize" call make_chart with the dataset that fits and options from the user's words (years,
-  top N, partner, kind); for "give me the data", "export", "list every", "as a table" call get_data; for "report", "printout", "document",
+- For "chart", "graph", "plot", "trend" or "visualize" call make_chart once with the dataset that fits and options from the user's words (years,
+  top N, partner, kind; ids to put several overlaps in one chart, never one chart per overlap); for "give me the data", "export", "list every", "as a table" call get_data; for "report", "printout", "document",
   "PDF" or "write up" call make_report on its own: it reads the latest plan, finding or overlap itself, so do not build a plan or list
   overlaps first. Then describe the result in one sentence; the card carries the numbers, so do not restate them."""

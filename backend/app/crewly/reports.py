@@ -290,7 +290,7 @@ def sec_hazards(conn, company, ident, sections, d):
                          else f"history suggests {t['low']:g} to {t['high']:g} affected days."))
         rows = [[h["label"], f"{h['affected_days'].get('forecast', 0):g}", f"{h['affected_days'].get('low', 0):g} to {h['affected_days'].get('high', 0):g}",
                  ", ".join(x["label"] for x in h.get("live", [])[:2]) or "none", h["why"]] for h in e["hazards"]]
-        d.section(f"{labels[p]}: {span(e['start'], e['end'])}", "Affected days by hazard; forecast days count active alerts and outlooks, history is the county record.",
+        d.section(f"{labels[p]}: {span(e['start'], e['end'])}", "Affected days by hazard; forecast days count active alerts and outlooks, history is the county record." if p == "now7" else "",
                   table(["Hazard", "Forecast days", "History", "Active now", "Work it affects"], rows, num={1, 2}))
         d.source(e.get("method"))
 
@@ -462,17 +462,73 @@ def sec_finding(conn, company, ref, sections, d):
     d.source(*(f.get("sources") or []))
 
 
+MD_LINK = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+DROP_SECTIONS = {"Savings estimate", "Cost assumptions and sources", "Data notes"}  # the cost section and the sources box carry these
+
+
+def md_inline(t):
+    t = esc(t)
+    t = re.sub(r"\*\*(.+?)\*\*", r"<b>\\1</b>", t)
+    return MD_LINK.sub(lambda m: f"<a href='{m.group(2)}'>{m.group(1)}</a>", t)
+
+
+def md_html(md, drop=DROP_SECTIONS):
+    """The little markdown the brief uses (headings, bullets, numbered items, pipe tables, bold, links) as tidy html."""
+    out, para, items, kind, rows, skip = [], [], [], None, [], False
+    def flush():
+        nonlocal para, items, kind, rows
+        if para:
+            out.append(f"<p>{md_inline(' '.join(para))}</p>"); para = []
+        if items:
+            out.append(f"<{kind}>" + "".join(f"<li>{md_inline(i)}</li>" for i in items) + f"</{kind}>"); items, kind = [], None
+        if rows:
+            head, body = rows[0], [r for r in rows[1:] if not re.fullmatch(r"[\s|:-]+", r)]
+            cells = lambda r: [c.strip() for c in r.strip().strip("|").split("|")]  # noqa: E731
+            out.append(table(cells(head), [[MD_LINK.sub(r"\1", c) for c in cells(r)] for r in body])); rows = []  # cells stay plain text
+    for ln in md.splitlines():
+        if ln.startswith("# "):
+            continue  # the report has its own title
+        if ln.startswith("## "):
+            flush(); skip = ln[3:].strip() in drop
+            if not skip:
+                out.append(f"<h3>{esc(ln[3:].strip())}</h3>")
+            continue
+        if skip:
+            continue
+        if ln.startswith("|"):
+            rows.append(ln); continue
+        m = re.match(r"^(-|\d+\.)\s+(.*)", ln)
+        if m:
+            want = "ol" if m.group(1) != "-" else "ul"
+            if kind != want:
+                flush(); kind = want
+            items.append(m.group(2)); continue
+        if not ln.strip():
+            flush(); continue
+        if rows or items:
+            flush()
+        para.append(ln.strip())
+    flush()
+    return "".join(out)
+
+
+def uniq_figures(figs, limit=5):
+    """At most five tiles, and never two that show the same value."""
+    out, seen = [], set()
+    for f in figs:
+        key = str(f.get("value") if isinstance(f, dict) else f[1]).strip().lower()
+        if key not in seen:
+            seen.add(key); out.append(f)
+    return out[:limit]
+
+
 def sec_brief(conn, company, opp, d):
     from app.crewly import brief
     b = brief.build(conn, opp)
     if not b:
         return
-    try:
-        from markdown import markdown  # optional; falls back to preformatted text
-        body = markdown(b["markdown"], extensions=["tables"])
-    except ImportError:
-        body = f"<pre style='white-space:pre-wrap'>{esc(b['markdown'])}</pre>"
-    d.section("Coordination brief", "", body)
+    md = "\n".join(ln for ln in b["markdown"].splitlines()[1:] if not ln.startswith("Opportunity #"))  # the title and the prepared line are the letterhead's job
+    d.section("Coordination brief", "What the pair is, why it is worth a call, and what the first call should cover.", md_html(md))
 
 
 # ---------- what people take into a call or to a commission ----------
@@ -749,18 +805,18 @@ def compose(conn, company, kind, ref_id=None, sections=None, options=None):
 def render(conn, company, kind, ref_id=None, sub=None):
     """The page for a kind and id without storing it (share links)."""
     d, _, summary, _ = compose(conn, company, kind, ref_id)
-    return page(d.title, sub or d.subtitle or f"{name(company)} · crewly", "".join(d.parts), summary, d.figures[:5], d.sources, d.head)
+    return page(d.title, sub or d.subtitle or f"{name(company)} · crewly", "".join(d.parts), summary, uniq_figures(d.figures), d.sources, d.head)
 
 
 def build(conn, company, kind, ref_id=None, sections=None, options=None):
     """Render one report and store it; returns the row plus the summary and key figures."""
     d, sections, summary, ref = compose(conn, company, kind, ref_id, sections, options)
-    doc = page(d.title, d.subtitle or f"{name(company)} · crewly", "".join(d.parts), summary, d.figures[:5], d.sources, d.head)
+    doc = page(d.title, d.subtitle or f"{name(company)} · crewly", "".join(d.parts), summary, uniq_figures(d.figures), d.sources, d.head)
     conn.execute(TABLE_SQL)
     row = conn.execute("INSERT INTO report (company_id, kind, ref_id, title, sections, html) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id, created_at",
                        (company, kind, ref or None, d.title, sections, doc)).fetchone()
     return {"id": row["id"], "kind": kind, "ref_id": ref or None, "title": d.title, "sections": sections, "all_sections": KINDS[kind][1],
-            "created_at": row["created_at"].isoformat(), "html": doc, "summary": summary, "figures": d.figures[:5]}
+            "created_at": row["created_at"].isoformat(), "html": doc, "summary": summary, "figures": uniq_figures(d.figures)}
 
 
 def get(conn, report_id, company):
