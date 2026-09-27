@@ -54,7 +54,7 @@ export type CrewlyBountyError =
   | typeof CREWLY_BOUNTY_ERROR__WRONG_CONTRIBUTOR;
 
 let crewlyBountyErrorMessages: Record<CrewlyBountyError, string> | undefined;
-if (process.env["NODE_ENV"] !== "production") {
+if (import.meta.env.DEV) {
   crewlyBountyErrorMessages = {
     [CREWLY_BOUNTY_ERROR__ALREADY_APPROVED]: `This reviewer already approved`,
     [CREWLY_BOUNTY_ERROR__ALREADY_FUNDED]: `Bounty is already funded`,
@@ -72,7 +72,7 @@ if (process.env["NODE_ENV"] !== "production") {
 }
 
 export function getCrewlyBountyErrorMessage(code: CrewlyBountyError): string {
-  if (process.env["NODE_ENV"] !== "production") {
+  if (import.meta.env.DEV) {
     return (crewlyBountyErrorMessages as Record<CrewlyBountyError, string>)[
       code
     ];
