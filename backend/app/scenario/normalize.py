@@ -77,6 +77,8 @@ def assumption_overrides(p):
         raise ValueError(f"{key!r} is not a cost assumption; the known ones are " + ", ".join(sorted(ASSUMPTIONS)))
     base = ASSUMPTIONS[key]
     if p.get("pct") is not None:
+        if not -90 <= float(p["pct"]) <= 500:
+            raise ValueError("percent changes are limited to -90% to +500%")
         f = 1 + float(p["pct"]) / 100
         return {key: {"low": round(float(base["low"]) * f, 4), "high": round(float(base["high"]) * f, 4)}}
     if p.get("value") is not None:

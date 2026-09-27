@@ -12,7 +12,8 @@ SAVINGS_KEYS = ["mobilization_usd", "land_usd_per_acre", "row_width_m"]  # the s
 WEATHER_KEYS = ["crew_day_usd", "crane_standby_usd_day", "bucket_truck_standby_usd_day", "digger_derrick_standby_usd_day",
                 "puller_tensioner_standby_usd_day", "demob_remob_usd", "storm_rate_multiplier"]
 SWING = 0.25  # each knob is tried 25% below and above its base
-OP_SQL = "SELECT id, job_a, job_b, tier, overlap_m, drive_min, time_overlap FROM opportunity WHERE id = %(id)s"
+OP_SQL = """SELECT op.id, op.job_a, op.job_b, op.tier, op.overlap_m, op.drive_min, op.time_overlap FROM opportunity op
+            JOIN job a ON a.id = op.job_a JOIN job b ON b.id = op.job_b WHERE op.id = %(id)s AND %(company)s IN (a.org_id, b.org_id)"""
 
 
 @contextmanager
@@ -48,7 +49,7 @@ def weather_metric(conn, op_id, month):
 
 
 def sensitivity(conn, company, opportunity_id, metric="savings", knobs=None, month=None):
-    op = conn.execute(OP_SQL, {"id": int(opportunity_id)}).fetchone()
+    op = conn.execute(OP_SQL, {"id": int(opportunity_id), "company": company}).fetchone()
     if not op:
         raise ValueError(f"no overlap #{opportunity_id}")
     metric = metric if metric in METRICS else "savings"

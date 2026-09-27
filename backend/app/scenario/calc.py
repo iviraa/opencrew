@@ -43,7 +43,11 @@ def _eval(node, values, steps):
     if isinstance(node, ast.Name):
         if node.id not in values:
             raise Unsafe(f"unknown value {node.id!r}; pass it in values")
-        return float(values[node.id])
+        v = values[node.id]
+        try:
+            return [float(x) for x in v] if isinstance(v, (list, tuple)) else float(v)  # a list value feeds sum/min/max/avg
+        except (TypeError, ValueError):
+            raise Unsafe(f"value {node.id!r} is not a number or a list of numbers")
     if isinstance(node, ast.List) or isinstance(node, ast.Tuple):
         return [_eval(e, values, steps) for e in node.elts]
     if isinstance(node, ast.UnaryOp) and type(node.op) in OPS:
@@ -59,7 +63,10 @@ def _eval(node, values, steps):
         return r
     if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in FUNCS and not node.keywords:
         args = [_eval(a, values, steps) for a in node.args]
-        r = FUNCS[node.func.id](*args)
+        try:
+            r = FUNCS[node.func.id](*args)
+        except (TypeError, ValueError, ZeroDivisionError, OverflowError) as e:
+            raise Unsafe(f"{node.func.id} failed: {e}")
         steps.append(f"{node.func.id}({', '.join(_fmt(a) for a in _flat(args))}) = {_fmt(r)}")
         return r
     raise Unsafe(f"not allowed: {type(node).__name__}")
@@ -83,7 +90,10 @@ def calculate(expression, values=None):
     for k, v in (values or {}).items():
         if not str(k).isidentifier():
             raise Unsafe(f"bad value name {k!r}")
-        vals[str(k)] = float(v)
+        try:
+            vals[str(k)] = [float(x) for x in v] if isinstance(v, (list, tuple)) else float(v)  # lists feed sum/min/max/avg
+        except (TypeError, ValueError):
+            raise Unsafe(f"value {k!r} is not a number or a list of numbers")
     try:
         tree = ast.parse(expr, mode="eval")
     except SyntaxError as e:

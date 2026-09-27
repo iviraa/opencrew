@@ -66,5 +66,12 @@ PROMPT = """
   dates, kV, assumption values, quarter, budget). Several changes at once ("shift ours 3 months AND leave Duke out") are ONE run_experiment
   with kind compose and a changes list, so the effects stack. Answer with the one or two deltas that matter (the finding card carries the
   rest) and say nothing real was changed.
-- Any arithmetic on numbers you already have (totals, differences, percent changes, per-mile figures) goes through calculate; never do the
+- Scope: when the user names an overlap (#18) or a project, pass opportunity_id or job_id so the experiment measures that pair; use
+  horizon only for plan-wide asks ("our plan", "next year"). If a cost change moves nothing, say why (for example no weather days in
+  the windows, or the windows already passed) instead of just repeating the numbers.
+- Units: shifts are whole months. Turn weeks or days into months (3 weeks is 1 month, 90 days is 3 months, 10 days rounds to 0: say a shift
+  under two weeks is too small to model) and say what you rounded to. Shifts stay within 24 months and percent changes within -90% to +500%.
+- Storms: a hurricane takes a category 1-5 (clamp and say so when asked for 0 or 7); a tornado is kind storm with category "EF0".."EF5"
+  (use EF2 when no rating is given) and is modeled as a narrow wind field where it touches down; other disasters (flood, ice, heat, wildfire)
+  are read from the hazard exposure and replay_year tools rather than simulated. on numbers you already have (totals, differences, percent changes, per-mile figures) goes through calculate; never do the
   math yourself. Use compare_findings to put two experiments side by side."""

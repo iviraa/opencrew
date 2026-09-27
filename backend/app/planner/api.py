@@ -29,7 +29,9 @@ def latest(horizon: str = "quarter", user=Depends(current_user), conn=Depends(ge
 
 @router.post("/build")
 def build_plan(horizon: str = "quarter", user=Depends(current_user), conn=Depends(get_conn)):
-    return as_json(rebuild(conn, user["company"], horizon if horizon in build.HORIZONS else "quarter"))
+    if horizon not in build.HORIZONS:
+        raise HTTPException(422, "horizon must be one of " + ", ".join(build.HORIZONS))
+    return as_json(rebuild(conn, user["company"], horizon))
 
 
 class ItemPatch(BaseModel):

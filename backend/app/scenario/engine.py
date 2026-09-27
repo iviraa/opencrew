@@ -93,7 +93,12 @@ def place_new_job(conn, spec, idx):
         for end in (spec.get("ends") or [])[:2]:
             hit = find_station(end, states)
             if not hit:
-                raise ValueError(f"no substation matched {end!r} in {', '.join(states)}; give coords instead")
+                from app.geo.nominatim import lookup
+                near = lookup(f"{end}, {states[0]}, USA")  # a town or county name places it approximately
+                if not near:
+                    raise ValueError(f"no substation or place matched {end!r} in {', '.join(states)}; give coords instead")
+                hit = {"lon": float(near["lon"]), "lat": float(near["lat"])}
+                spec.setdefault("approx", []).append(end)
             pts.append((hit["lon"], hit["lat"]))
     if not pts:
         raise ValueError("a new project needs ends (two station names) or coords")
