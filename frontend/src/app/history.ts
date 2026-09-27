@@ -2,7 +2,7 @@ import type { ChatMsg } from "./Chat";
 import { supabase } from "./data";
 
 // chat turns and saved notes live in supabase so they follow the company across reloads and devices
-const KEEP = 40;
+const KEEP = 200;
 
 type Row = { id: number; role: "user" | "model"; text: string; meta: Record<string, unknown> };
 export type Memory = { id: number; text: string; created_at: string };

@@ -45,6 +45,8 @@ services:
       - key: LIVE_POLL_MINUTES
         scope: RUN_TIME
         value: "30"
+      - key: CREWLY_MODEL_TIER
+        value: auto
       - key: GEMINI_API_KEY
         scope: RUN_TIME
         type: SECRET
