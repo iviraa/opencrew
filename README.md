@@ -16,7 +16,7 @@ on it, and helps both sides act on it, before the next storm hits.**
 
 ### [**→ Open the live app: crewly.miami**](https://crewly.miami/)
 
-[Bounty board](https://crewly.miami/bounties) · [Cost model](docs/cost-savings-model.md) · [Agent abilities](docs/crewly-abilities.md) · [Solana bounties](solana/bounty.md)
+[Agent abilities](docs/crewly-abilities.md) · [Cost model](docs/cost-savings-model.md) · [Solana bounties](solana/bounty.md)
 
 </div>
 
