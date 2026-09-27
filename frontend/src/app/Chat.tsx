@@ -71,7 +71,7 @@ export default function Chat({ me, msgs, busy, overlaps, requests, plans, onSend
           <h2 className="font-logo text-xl font-semibold leading-tight">Ask Crewly</h2>
           <div className="text-sm text-muted">Overlaps, plans, requests, weather</div>
         </div>
-        {onNotebook && <button onClick={onNotebook} aria-label="Saved findings" title="Saved findings" className="grid h-8 w-8 place-items-center rounded-full text-muted hover:bg-grape-soft"><NotebookPen size={16} /></button>}
+        {onNotebook && <button onClick={onNotebook} aria-label="Notebook: notes and findings" title="Notebook: notes and findings" className="grid h-8 w-8 place-items-center rounded-full text-muted hover:bg-grape-soft"><NotebookPen size={16} /></button>}
         <button onClick={() => setShowMemory(!showMemory)} aria-label="What Crewly remembers" aria-pressed={showMemory} title="What Crewly remembers"
           className={`grid h-8 w-8 place-items-center rounded-full hover:bg-grape-soft ${showMemory ? "bg-grape-soft text-grape" : "text-muted"}`}><Brain size={16} /></button>
         {onClear && msgs.length > 0 && (

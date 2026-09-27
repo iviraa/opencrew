@@ -10,7 +10,7 @@ from app.companies import companies, name, partner, short
 from app.config import STATUSES
 from app.crewly.act_tools import rest
 
-TARGETS = ("overlap", "project", "company", "plan_item")
+TARGETS = ("overlap", "project", "company", "plan_item", "general")
 REMINDER_TARGETS = ("overlap", "request", "plan", "company")
 WORKSPACE_ACTIONS = ("note", "reminder", "pipeline", "profile", "brief", "history", "view", "save_view", "views")  # ui_action types the chat renders
 BRIEF_DAYS = 7
@@ -46,6 +46,8 @@ def _target(kind, ident, allowed=TARGETS, conn=None, ctx=None):
     if kind not in allowed:
         raise ValueError(f"target_kind must be one of {', '.join(allowed)}")
     ident = str(ident or "").strip().lstrip("#")
+    if kind == "general":
+        return kind, "general"  # a free-standing notebook note
     if not ident:
         raise ValueError("target_id is required")
     if kind == "company":
@@ -67,7 +69,7 @@ def _target(kind, ident, allowed=TARGETS, conn=None, ctx=None):
 
 # ---------- notes ----------
 
-def add_note(ctx, conn, target_kind, target_id, text):
+def add_note(ctx, conn, target_kind, text, target_id=None):
     kind, ident = _target(target_kind, target_id, conn=conn, ctx=ctx)
     text = " ".join(str(text or "").split())[:2000]
     if not text:
@@ -453,9 +455,9 @@ def _bind(ctx, fn):
 def workspace_tools(ctx):
     tk = {"type": "string", "enum": list(TARGETS)}
     return {
-        "add_note": (_bind(ctx, add_note), "Save a note for our company on an overlap (#id), a project (id), a utility (name) or a plan item. Shared with "
-                     "everyone at our company, shown on the detail panel.", {"target_kind": tk, "target_id": {"type": "string"}, "text": {"type": "string"}},
-                     ["target_kind", "target_id", "text"]),
+        "add_note": (_bind(ctx, add_note), "Save a note for our company in the notebook: on an overlap (#id), a project (id), a utility (name), a plan "
+                     "item, or general (no target_id) for anything else. Shared with everyone at our company; overlap notes also show on the detail panel.",
+                     {"target_kind": tk, "target_id": {"type": "string", "description": "omit for general"}, "text": {"type": "string"}}, ["target_kind", "text"]),
         "list_notes": (_bind(ctx, list_notes), "Our notes, all of them or those on one target.", {"target_kind": tk, "target_id": {"type": "string"}}, []),
         "set_reminder": (_bind(ctx, set_reminder), "Remind us later: 'follow up with Duke in 7 days'. Lands in the bell when due. Give due_at (ISO date or "
                          "datetime) or in_days; optionally what it is about.", {
@@ -485,7 +487,7 @@ def workspace_tools(ctx):
 
 
 PROMPT = """
-- Workspace: "note that ..." on an overlap, project, utility or plan item calls add_note; "remind me ..." calls set_reminder (in_days or due_at; it lands
+- Workspace: "note that ..." or "save this in notes" calls add_note (target_kind general when it is not about one overlap, project, utility or plan item; the note lands in the notebook); "remind me ..." calls set_reminder (in_days or due_at; it lands
   in the bell when due, never earlier); "mark #N as sent/agreed" calls set_status; "where are we with everyone" or "pipeline" calls pipeline;
   "tell me about <utility>" calls company_profile; "brief me" / "what happened this week" calls weekly_brief; "history of #N" calls
   overlap_history; "save this view as X" / "open my X view" call save_view / open_view; "accept every Duke pair" / "star all findings about #18"

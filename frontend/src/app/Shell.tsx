@@ -433,12 +433,12 @@ export default function Shell() {
       onClose={() => setStack((s) => s.filter((p) => p.kind !== "chat"))} onClear={clearChat} memoryTick={memoryTick}
       partners={partnerIds} onOverlay={setOverlay} onPickPlace={pickPlace} picking={picking} onCompare={(f) => push({ kind: "notebook", preselect: f.id })} onNotebook={() => push({ kind: "notebook" })} onOpenView={openView} mapTools={mt.cardProps} />
   ) : top.kind === "notebook" ? (
-    <NotebookPanel onBack={back} preselect={top.preselect} onOpen={(f) => push({ kind: "finding", id: f.id, f })} onCombined={(f) => { setOverlay(f); push({ kind: "finding", id: f.id, f }); }} />
+    <NotebookPanel onBack={back} preselect={top.preselect} onOpenOverlap={openOverlap} onOpen={(f) => push({ kind: "finding", id: f.id, f })} onCombined={(f) => { setOverlay(f); push({ kind: "finding", id: f.id, f }); }} />
   ) : top.kind === "finding" ? (
     <FindingPanel id={top.id} initial={top.f} onBack={back} partners={partnerIds} onOpen={openOverlap} onOverlay={setOverlay} onPickPlace={pickPlace} picking={picking}
       onCompare={(f) => push({ kind: "notebook", preselect: f.id })} />
   ) : top.kind === "overlap" ? (
-    <OverlapDetailPanel me={me} id={top.id} requests={reqs} onBack={() => { back(); setSelected(null); }} onSent={gotRequest} onOpenRequest={openRequest}
+    <OverlapDetailPanel me={me} id={top.id} requests={reqs} onBack={() => { back(); setSelected(null); }} onSent={gotRequest} onOpenRequest={openRequest} onNotebook={() => push({ kind: "notebook" })}
       onHazards={(id, m) => { back(); setSelected(null); setHazardFocus({ kind: "zone", id: String(id), period: "month", month: m, at: Date.now() }); setTab("weather"); }} />
   ) : top.kind === "goal" ? (
     <GoalPanel me={me} id={top.id} overlaps={ov?.overlaps ?? null} requests={reqs} onBack={back} onOpenOverlap={openOverlap} onSent={gotRequest} />

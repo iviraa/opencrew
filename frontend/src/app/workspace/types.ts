@@ -49,6 +49,11 @@ export const STATUS_LABEL: Record<string, string> = {
 
 // notes and views are written with the person's own login, so row security keeps them inside the company
 export const notesApi = {
+  all: async () => {  // every note our company wrote, newest first (RLS keeps it to us)
+    const { data, error } = await supabase.from("note").select("id,target_kind,target_id,text,created_at").order("created_at", { ascending: false }).limit(500);
+    if (error) throw error;
+    return (data as { id: number; target_kind: string; target_id: string; text: string; created_at: string }[]).map((r) => ({ ...r, when: r.created_at.slice(0, 16).replace("T", " ") })) as Note[];
+  },
   list: async (kind: string, id: string) => {
     const { data, error } = await supabase.from("note").select("id,target_kind,target_id,text,created_at").eq("target_kind", kind).eq("target_id", id).order("created_at", { ascending: false });
     if (error) throw error;

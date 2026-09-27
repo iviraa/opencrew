@@ -1,14 +1,75 @@
-import { Combine, GitCompare, Trash2 } from "lucide-react";
+import { Combine, GitCompare, MapPin, StickyNote, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ago } from "../data";
 import { PanelHeader } from "../panels";
+import { notesApi, type Note } from "../workspace/types";
 import { changesOf, combine, kindLabel } from "./changes";
 import CompareCard from "./CompareCard";
 import FindingCard, { type FindingCardProps } from "./FindingCard";
 import { findings, headline, type Comparison, type Finding } from "./types";
 
-// the starred findings: open one, compare two, or combine their scenario stacks into a new experiment
-export function NotebookPanel({ onBack, onOpen, onCombined, preselect }: { onBack: () => void; onOpen: (f: Finding) => void; onCombined: (f: Finding) => void; preselect?: number }) {
+const targetLabel = (n: Note) => (n.target_kind === "overlap" ? `Overlap #${n.target_id}` : n.target_kind === "project" ? `Project ${n.target_id}` : n.target_kind === "general" ? "General" : `${n.target_kind} ${n.target_id}`);
+
+// the team's notes, grouped by what they are about; an overlap's group opens its detail panel
+function NotesList({ onOpenOverlap }: { onOpenOverlap?: (id: number) => void }) {
+  const [notes, setNotes] = useState<Note[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [text, setText] = useState("");
+  const [about, setAbout] = useState("");
+  const [busy, setBusy] = useState(false);
+  const refresh = () => notesApi.all().then(setNotes).catch((e) => { setNotes([]); setErr(e instanceof Error ? e.message : String(e)); });
+  useEffect(() => { refresh(); }, []);
+  const add = async () => {
+    if (!text.trim()) return;
+    const oid = about.trim().replace("#", "");
+    setBusy(true); setErr(null);
+    try { await notesApi.add(oid ? "overlap" : "general", oid || "general", text); setText(""); setAbout(""); await refresh(); }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
+  };
+  const groups = new Map<string, Note[]>();
+  (notes ?? []).forEach((n) => { const k = `${n.target_kind}:${n.target_id}`; groups.set(k, [...(groups.get(k) ?? []), n]); });
+  return (
+    <div className="thin-scroll -mr-2 flex flex-1 flex-col gap-2 overflow-y-auto pr-2">
+      <form onSubmit={(e) => { e.preventDefault(); add(); }} className="card-still flex flex-col gap-1.5 px-3 py-2">
+        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} placeholder="Write a note for the team"
+          className="w-full resize-none rounded-xl bg-soft px-2.5 py-1.5 text-sm outline-none focus:bg-grape-soft/40" />
+        <div className="flex items-center gap-1.5">
+          <input value={about} onChange={(e) => setAbout(e.target.value)} placeholder="about #overlap (optional)" inputMode="numeric"
+            className="min-w-0 flex-1 rounded-full border-2 border-line bg-white px-3 py-1 text-xs outline-none focus:border-pen" />
+          <button disabled={busy || !text.trim()} className="rounded-full bg-grape px-3 py-1 text-xs font-semibold text-white disabled:opacity-40">Add note</button>
+        </div>
+      </form>
+      {[...groups.entries()].map(([key, ns]) => {
+        const first = ns[0], oid = first.target_kind === "overlap" ? Number(first.target_id) : NaN;
+        return (
+          <div key={key} className="card-still flex flex-col gap-1 px-3 py-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-faint">{targetLabel(first)}</span>
+              <span className="flex-1" />
+              {onOpenOverlap && Number.isFinite(oid) && (
+                <button onClick={() => onOpenOverlap(oid)} className="flex items-center gap-1 rounded-full border-2 border-line px-2 py-0.5 text-[11px] font-semibold hover:border-pen"><MapPin size={11} /> Open</button>
+              )}
+            </div>
+            {ns.map((n) => (
+              <div key={n.id} className="flex items-start gap-2 rounded-xl bg-soft px-2.5 py-1.5">
+                <p className="min-w-0 flex-1 text-sm leading-snug">{n.text}<span className="ml-1.5 whitespace-nowrap text-[11px] text-faint">{n.when}</span></p>
+                <button onClick={() => notesApi.remove(n.id).then(refresh)} aria-label="Delete note" className="mt-0.5 text-faint hover:text-warn"><Trash2 size={12} /></button>
+              </div>
+            ))}
+          </div>
+        );
+      })}
+      {notes && !notes.length && <p className="px-2 py-6 text-center text-sm text-muted">No notes yet. Ask Crewly to note something, or add one on an overlap's detail panel.</p>}
+      {err && <p className="pt-1 text-xs text-warn">{err}</p>}
+    </div>
+  );
+}
+
+// the notebook: the team's notes and the starred findings (open one, compare two, or combine their scenario stacks)
+export function NotebookPanel({ onBack, onOpen, onCombined, preselect, onOpenOverlap }: {
+  onBack: () => void; onOpen: (f: Finding) => void; onCombined: (f: Finding) => void; preselect?: number; onOpenOverlap?: (id: number) => void;
+}) {
+  const [tab, setTab] = useState<"notes" | "findings">(preselect != null ? "findings" : "notes");
   const [list, setList] = useState<Finding[] | null>(null);
   const [picked, setPicked] = useState<number[]>(preselect != null ? [preselect] : []);
   const [cmp, setCmp] = useState<Comparison | null>(null);
@@ -34,9 +95,28 @@ export function NotebookPanel({ onBack, onOpen, onCombined, preselect }: { onBac
     catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
   };
 
+  const tabs = (
+    <div className="mb-2 flex gap-1 rounded-full bg-soft p-1 text-xs font-semibold">
+      {([["notes", "Notes"], ["findings", "Findings"]] as const).map(([k, label]) => (
+        <button key={k} onClick={() => setTab(k)} aria-pressed={tab === k} className={`flex flex-1 items-center justify-center gap-1 rounded-full px-2 py-1 ${tab === k ? "bg-white shadow-sm" : "text-muted"}`}>
+          {k === "notes" ? <StickyNote size={12} /> : <GitCompare size={12} />} {label}
+        </button>
+      ))}
+    </div>
+  );
+  if (tab === "notes") {
+    return (
+      <>
+        <PanelHeader title="Notebook" sub="Notes the team saved, and starred findings" onBack={onBack} />
+        {tabs}
+        <NotesList onOpenOverlap={onOpenOverlap} />
+      </>
+    );
+  }
   return (
     <>
-      <PanelHeader title="Findings" sub={list ? `${list.length} saved experiment${list.length === 1 ? "" : "s"}` : "Loading..."} onBack={onBack} />
+      <PanelHeader title="Notebook" sub={list ? `${list.length} saved experiment${list.length === 1 ? "" : "s"}` : "Loading..."} onBack={onBack} />
+      {tabs}
       {picked.length === 2 && (
         <div className="mb-2 flex gap-1.5">
           <button onClick={compare} disabled={busy} className="flex flex-1 items-center justify-center gap-1 rounded-full bg-grape px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-40"><GitCompare size={13} /> Compare</button>
