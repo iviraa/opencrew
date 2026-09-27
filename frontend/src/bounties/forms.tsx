@@ -35,7 +35,7 @@ const inDays = (d: number) => {
   return new Date(t.getTime() - t.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);  // datetime-local wants local time
 };
 
-export function PostBounty({ onPosted }: { onPosted: (b: Bounty) => void }) {
+export function PostBounty({ token, onPosted }: { token: string; onPosted: (b: Bounty) => void }) {
   const wallet = useWallet();
   const [f, setF] = useState({ title: "", description: "", region: "", rules: "", reward: "0.1", deadline: inDays(7), reviewers: "", threshold: 1 });
   const [busy, setBusy] = useState<string | null>(null);
@@ -53,7 +53,7 @@ export function PostBounty({ onPosted }: { onPosted: (b: Bounty) => void }) {
       const draft = await bounties.create({
         title: f.title.trim(), description: f.description.trim(), region: f.region.trim(), rules: f.rules.trim(),
         reward_sol: Number(f.reward), deadline: new Date(f.deadline).toISOString(), sponsor: wallet, reviewers, threshold: f.threshold,
-      });
+      }, token);
       setBusy("Approve the transaction in your wallet to create and fund the escrow…");
       const sig = await send(await createAndFundInstructions(client.identity, draft.chain_args));
       setBusy("Confirming on devnet…");

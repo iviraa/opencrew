@@ -8,7 +8,7 @@ export type Bounty = {
   reward_lamports: number; reward_sol: number; deadline: string; sponsor: string; reviewers: string[]; threshold: number;
   rules_commitment: string; region_commitment: string; pda: string | null; status: Status; approved_by: string[];
   contributor: string | null; submission_commitment: string | null; funded_at: string | null; settled_at: string | null;
-  created_at: string; expired: boolean; submissions: number; explorer: string | null;
+  created_at: string; expired: boolean; submissions: number; explorer: string | null; posted_by: string | null;
 };
 
 export type ChainArgs = {
@@ -42,8 +42,12 @@ export const bounties = {
   list: () => req<Bounty[]>(""),
   get: (id: number) => req<Bounty>(`/${id}`),
   transactions: (id: number) => req<Tx[]>(`/${id}/transactions`),
+  // posting needs a utility login (the main app's Supabase session); viewing, claiming and submitting do not
   create: (body: { title: string; description: string; region: string; rules: string; reward_sol: number; deadline: string;
-    sponsor: string; reviewers: string[]; threshold: number }) => req<{ id: number; chain_args: ChainArgs }>("", json(body)),
+    sponsor: string; reviewers: string[]; threshold: number }, token: string) => {
+    const init = json(body);
+    return req<{ id: number; chain_args: ChainArgs }>("", { ...init, headers: { ...init.headers, Authorization: `Bearer ${token}` } });
+  },
   sync: (id: number, signature: string, kind: Tx["kind"], pda?: string) => req<Bounty>(`/${id}/sync`, json({ signature, kind, pda })),
   submit: (id: number, form: FormData) => req<{ id: number; commitment: string; duplicate: boolean }>(`/${id}/submissions`, { method: "POST", body: form }),
   submissions: (id: number, a: ReviewAuth) => req<Submission[]>(`/${id}/submissions`, { headers: auth(a) }),

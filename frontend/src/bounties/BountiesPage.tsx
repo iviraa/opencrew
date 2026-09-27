@@ -1,6 +1,7 @@
 // /bounties: public damage-verification bounties paid in devnet SOL. Reached only by URL; the main app never links here.
-import { ArrowLeft, Clock, ExternalLink, MapPin, Plus, ShieldCheck, TriangleAlert, Users } from "lucide-react";
+import { ArrowLeft, Building2, Clock, ExternalLink, LogIn, MapPin, Plus, ShieldCheck, TriangleAlert, Users } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { supabase } from "../app/data";
 import { bounties, type Bounty, type Tx } from "./api";
 import { ClaimBounty, PostBounty, RefundButton, ReviewPanel } from "./forms";
 import { explorerAddress, explorerTx, Providers, short, WalletButton } from "./solana";
@@ -15,10 +16,22 @@ export default function BountiesPage() {
 
 type View = { kind: "list" } | { kind: "detail"; id: number } | { kind: "post" };
 
+// a utility's login from the main app (same site, same session); null for the public, undefined while checking
+function useUtilityToken() {
+  const [token, setToken] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setToken(data.session?.access_token ?? null)).catch(() => setToken(null));
+    const { data } = supabase.auth.onAuthStateChange((_e, s) => setToken(s?.access_token ?? null));
+    return () => data.subscription.unsubscribe();
+  }, []);
+  return token;
+}
+
 function Page() {
   const [list, setList] = useState<Bounty[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<View>({ kind: "list" });
+  const token = useUtilityToken();
 
   const load = useCallback(() => {
     bounties.list().then((b) => { setList(b); setError(null); }).catch((e) => setError(e.message));
@@ -48,12 +61,12 @@ function Page() {
           <div className="board-frame" />
           <div className="relative">
             {view.kind === "list" && (
-              <BountyList list={list} error={error} onOpen={(id) => setView({ kind: "detail", id })} onPost={() => setView({ kind: "post" })} />
+              <BountyList list={list} error={error} canPost={!!token} onOpen={(id) => setView({ kind: "detail", id })} onPost={() => setView({ kind: "post" })} />
             )}
             {view.kind === "post" && (
               <>
                 <Back onClick={() => setView({ kind: "list" })} />
-                <PostBounty onPosted={(b) => { load(); setView({ kind: "detail", id: b.id }); }} />
+                {token ? <PostBounty token={token} onPosted={(b) => { load(); setView({ kind: "detail", id: b.id }); }} /> : <UtilityLogin />}
               </>
             )}
             {view.kind === "detail" && (
@@ -92,7 +105,17 @@ export function StatusChip({ b }: { b: Bounty }) {
 
 const when = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 
-function BountyList({ list, error, onOpen, onPost }: { list: Bounty[] | null; error: string | null; onOpen: (id: number) => void; onPost: () => void }) {
+function UtilityLogin() {
+  return (
+    <div className="flex max-w-[560px] flex-col gap-3">
+      <h1 className="text-3xl font-semibold">Post a bounty</h1>
+      <p className="text-muted">Only utilities post bounties. Log in with your utility account, then come back to this page.</p>
+      <a href="/" className="pen-btn flex items-center gap-2 self-start bg-grape px-5 py-2.5 font-semibold text-white"><LogIn size={17} /> Utility login</a>
+    </div>
+  );
+}
+
+function BountyList({ list, error, canPost, onOpen, onPost }: { list: Bounty[] | null; error: string | null; canPost: boolean; onOpen: (id: number) => void; onPost: () => void }) {
   return (
     <div>
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -102,9 +125,13 @@ function BountyList({ list, error, onOpen, onPost }: { list: Bounty[] | null; er
             Sponsors post a reward for verified storm-damage evidence in a broad area. People on the ground submit photos or reports, reviewers check them, and the escrowed reward pays out on Solana.
           </p>
         </div>
-        <button onClick={onPost} className="pen-btn flex items-center gap-2 bg-grape px-5 py-2.5 font-logo text-lg font-semibold text-white">
-          <Plus size={18} /> Post a bounty
-        </button>
+        {canPost ? (
+          <button onClick={onPost} className="pen-btn flex items-center gap-2 bg-grape px-5 py-2.5 font-logo text-lg font-semibold text-white">
+            <Plus size={18} /> Post a bounty
+          </button>
+        ) : (
+          <a href="/" className="flex items-center gap-1.5 text-sm font-semibold text-muted hover:text-ink"><LogIn size={15} /> Utility? Log in to post bounties</a>
+        )}
       </div>
 
       {error && <p className="mt-6 text-sm font-medium text-warn" role="alert">Could not load bounties: {error}</p>}
@@ -125,6 +152,7 @@ function BountyList({ list, error, onOpen, onPost }: { list: Bounty[] | null; er
             </div>
             <div className="display text-2xl font-semibold text-grape">{b.reward_sol} <span className="text-base text-muted">devnet SOL</span></div>
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted">
+              {b.posted_by && <span className="flex items-center gap-1"><Building2 size={14} />{b.posted_by}</span>}
               <span className="flex items-center gap-1"><MapPin size={14} />{b.region}</span>
               <span className="flex items-center gap-1"><Clock size={14} />{b.status === "funded" && !b.expired ? "Closes " : "Closed "}{when(b.deadline)}</span>
               <span className="flex items-center gap-1"><Users size={14} />{b.submissions} submission{b.submissions === 1 ? "" : "s"}</span>
@@ -161,6 +189,7 @@ function BountyDetail({ id }: { id: number }) {
             <StatusChip b={b} />
           </div>
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted">
+            {b.posted_by && <span className="flex items-center gap-1"><Building2 size={14} />Posted by {b.posted_by}</span>}
             <span className="flex items-center gap-1"><MapPin size={14} />{b.region}</span>
             <span className="flex items-center gap-1"><Clock size={14} />Deadline {when(b.deadline)}</span>
           </div>

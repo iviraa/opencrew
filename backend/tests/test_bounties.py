@@ -9,6 +9,7 @@ from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from fastapi.testclient import TestClient
 
 from app.bounties import api as bapi, chain
+from app.auth import current_user
 from app.db import connect, get_conn
 from app.main import app
 
@@ -72,10 +73,12 @@ def client():
         yield conn
 
     app.dependency_overrides[get_conn] = shared
+    app.dependency_overrides[current_user] = lambda: {"id": "u1", "company": "gpc", "username": "georgia", "token": "t"}  # a utility login
     try:
         yield TestClient(app)
     finally:
         app.dependency_overrides.pop(get_conn, None)
+        app.dependency_overrides.pop(current_user, None)
         conn.rollback()
         conn.close()
 
@@ -132,6 +135,19 @@ def test_draft_is_private_until_funded_on_chain(world):
     # retrying the same signature is harmless
     assert c.post(f"/api/bounties/{bid}/sync", json={"signature": SIG, "kind": "create"}).status_code == 200
     assert len(c.get(f"/api/bounties/{bid}/transactions").json()) == 1
+
+
+def test_only_a_utility_login_can_post(world):
+    app.dependency_overrides.pop(current_user, None)  # the public: no login
+    body = {"title": "Downed line photos", "description": "Photos of downed lines after the storm.", "region": "Aiken County, SC",
+            "rules": "Timestamped photo, no faces.", "reward_sol": 0.1, "deadline": (datetime.now(timezone.utc) + timedelta(days=3)).isoformat(),
+            "sponsor": world["sponsor"], "reviewers": [world["sponsor"]], "threshold": 1}
+    assert world["client"].post("/api/bounties", json=body).status_code == 401
+
+
+def test_posted_bounty_names_the_utility(world):
+    bid = new_bounty(world)["id"]
+    assert fund(world, bid).json()["posted_by"]  # the utility's name, from the login that posted it
 
 
 def test_sync_rejects_someone_elses_account(world):

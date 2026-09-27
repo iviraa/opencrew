@@ -12,7 +12,9 @@ from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Uploa
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
+from app.auth import current_user
 from app.bounties import chain
+from app.companies import name
 from app.db import get_conn
 
 router = APIRouter(prefix="/api/bounties")
@@ -36,7 +38,8 @@ CREATE TABLE IF NOT EXISTS bounty.tx (
   signature TEXT PRIMARY KEY, bounty_id BIGINT NOT NULL REFERENCES bounty.bounty(id), kind TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-ALTER TABLE bounty.submission ADD COLUMN IF NOT EXISTS email TEXT"""
+ALTER TABLE bounty.submission ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE bounty.bounty ADD COLUMN IF NOT EXISTS company_id TEXT"""
 
 MAX_EVIDENCE_BYTES = 5 * 1024 * 1024
 EVIDENCE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic", "application/pdf", "text/plain"}
@@ -45,7 +48,7 @@ EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 TX_KINDS = {"create", "approve", "refund"}
 PUBLIC_COLS = """id, title, description, region, rules, reward_lamports, deadline, sponsor, reviewers, threshold,
   rules_commitment, region_commitment, pda, status, approved_by, contributor, submission_commitment,
-  funded_at, settled_at, created_at"""
+  funded_at, settled_at, created_at, company_id"""
 
 
 def ensure(conn):
@@ -63,6 +66,7 @@ def public(row, submissions=0):
     out["expired"] = row["status"] == "funded" and row["deadline"] < datetime.now(timezone.utc)
     out["submissions"] = submissions
     out["explorer"] = chain.explorer("address", row["pda"]) if row["pda"] else None
+    out["posted_by"] = name(row["company_id"]) if row.get("company_id") else None
     return out
 
 
@@ -124,8 +128,9 @@ def list_bounties(conn=Depends(get_conn)):
 
 
 @router.post("")
-def create_bounty(body: NewBounty, conn=Depends(get_conn)):
-    """A draft plus the exact arguments the sponsor's wallet passes to create_bounty. Public once /sync sees the account."""
+def create_bounty(body: NewBounty, user=Depends(current_user), conn=Depends(get_conn)):
+    """A draft plus the exact arguments the sponsor's wallet passes to create_bounty. Public once /sync sees the account.
+    Only a logged-in utility can post; the public views, claims and submits."""
     ensure(conn)
     wallets = [body.sponsor, *body.reviewers]
     if not all(chain.is_wallet(w) for w in wallets):
@@ -142,9 +147,9 @@ def create_bounty(body: NewBounty, conn=Depends(get_conn)):
     region_c = chain.commitment({"region": body.region}).hex()
     row = conn.execute(
         """INSERT INTO bounty.bounty (title, description, region, rules, reward_lamports, deadline, sponsor, reviewers,
-             threshold, rules_commitment, region_commitment) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+             threshold, rules_commitment, region_commitment, company_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
         (body.title, body.description, body.region, body.rules, lamports, _ts(unix), body.sponsor, body.reviewers,
-         body.threshold, rules_c, region_c)).fetchone()
+         body.threshold, rules_c, region_c, user["company"])).fetchone()
     return {"id": row["id"], "chain_args": {"bounty_id": row["id"], "reward_lamports": lamports, "deadline": unix,
             "rules_commitment": rules_c, "region_commitment": region_c, "reviewers": body.reviewers, "threshold": body.threshold}}
 
