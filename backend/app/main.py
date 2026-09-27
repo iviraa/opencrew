@@ -594,6 +594,8 @@ app.include_router(stormlab_router)
 app.include_router(scenario_api.router)
 from app.comms import api as comms_api  # noqa: E402
 app.include_router(comms_api.router)
+from app import share as share_api  # noqa: E402  public share pages and export downloads, before the static mount
+app.include_router(share_api.router)
 
 @app.get("/config.js", include_in_schema=False)
 def web_config():
