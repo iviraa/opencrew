@@ -7,7 +7,7 @@
 ### Unlock collaborations. Save money. Everyone wins!
 
 **Utilities build right next to each other without knowing it. Crewly finds every overlap, puts a sourced price
-on it, and helps both sides act on it, before the next storm hits.**
+on it, and helps both sides act on it end-to-end.**
 
 ![ShellHacks 2026](https://img.shields.io/badge/ShellHacks-2026-5b2bb5?style=flat-square)
 ![Sperry Tech GridLock Challenge](https://img.shields.io/badge/Sperry_Tech-GridLock_Challenge-1b2447?style=flat-square)
