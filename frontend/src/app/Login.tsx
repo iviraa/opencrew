@@ -1,23 +1,26 @@
 import { LogIn } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
-import { EMAIL_DOMAIN, colorFor, publicApi, supabase, type Company } from "./data";
+import { EMAIL_DOMAIN, colorFor, company, publicApi, supabase, type Company } from "./data";
 import { beaver } from "./mascot";
 
 const Beaver = lazy(() => import("./Beaver"));
 
 const DEMO_PASSWORD = "crewly123";
-const DEMO = ["dominion", "georgia"];  // the two demo logins; other utilities are neighbors in the data
+const DEMO = [{ login: "dominion", id: "desc" }, { login: "georgia", id: "gpc" }];  // the two demo logins; other utilities are neighbors in the data
+
+// the chips stand on the built-in registry, so they are there before — and without — the directory
+const demoChips = (cs: Company[] = []) => DEMO.map((d) => cs.find((c) => c.login === d.login) ?? { ...company(d.id), login: d.login });
 
 export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [people, setPeople] = useState<Company[]>([]);
+  const [people, setPeople] = useState<Company[]>(demoChips);
 
   useEffect(() => {
-    publicApi.get<Company[]>("/api/app/directory").then((cs) => setPeople(DEMO.map((l) => cs.find((c) => c.login === l)).filter((c): c is Company => !!c)))
-      .catch(() => setPeople([]));
+    publicApi.get<Company[]>("/api/app/directory").then((cs) => setPeople(demoChips(cs)))
+      .catch(() => {});  // the directory only refines the chips; it is not what puts them there
   }, []);
 
   const submit = async (e?: React.FormEvent) => {
