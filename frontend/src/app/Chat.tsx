@@ -6,6 +6,7 @@ import { GoalChip } from "./GoalPanel";
 import MemoryList from "./Memory";
 import { OverlapCard, latestFor } from "./panels";
 import ChartCard from "./generate/ChartCard";
+import ChartPair from "./generate/ChartPair";
 import ReportCard from "./generate/ReportCard";
 import TableCard from "./generate/TableCard";
 import type { Chart, Report, Table } from "./generate/types";
@@ -28,7 +29,7 @@ import { useRefIndex } from "./ui/refs";
 
 export type ChatMsg = {
   role: "user" | "model"; text: string; ids?: number[]; title?: string; offline?: boolean; confirm?: ChatAction[]; goal?: number;
-  plan?: { id: number; horizon?: string; item?: string }; chart?: Chart; table?: Table; report?: Report; finding?: Finding; compare?: Comparison; draft?: Draft;
+  plan?: { id: number; horizon?: string; item?: string }; chart?: Chart; chart2?: Chart; table?: Table; report?: Report; finding?: Finding; compare?: Comparison; draft?: Draft;
   workspace?: WorkspaceCard; refresh?: RefreshCardData;
   cards?: MapCard[];  // map, forecast, route, download, share and explain hand-overs
 };
@@ -105,7 +106,7 @@ export default function Chat({ me, msgs, busy, overlaps, requests, plans, onSend
             ))}
             {m.goal != null && <GoalChip id={m.goal} onOpen={() => onOpenGoal(m.goal!)} />}
             {m.plan && <PlanCard store={plans} id={m.plan.id} horizon={m.plan.horizon} item={m.plan.item} onOpenPlan={onOpenPlan} onOpenGoal={onOpenGoal} onOpenOverlap={onOpen} />}
-            {m.chart && <ChartCard chart={m.chart} />}
+            {m.chart && (m.chart2 ? <ChartPair a={m.chart} b={m.chart2} /> : <ChartCard chart={m.chart} />)}
             {m.table && <TableCard table={m.table} />}
             {m.report && <ReportCard report={m.report} />}
             {m.finding && <FindingCard finding={m.finding} partners={partners} onOpen={onOpen} onOverlay={onOverlay} onPickPlace={onPickPlace} picking={picking} onCompare={onCompare} />}

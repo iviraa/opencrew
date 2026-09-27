@@ -14,12 +14,13 @@ export type Report = {
 
 export const KIND_LABEL: Record<string, string> = {
   feasibility: "Feasibility", cost_analysis: "Cost analysis", hazard_exposure: "Hazard exposure", plan: "Coordination plan", pack: "Overlap pack",
-  finding: "What-if finding", agenda: "Meeting agenda", memo: "Memo",
+  finding: "What-if finding", agenda: "Meeting agenda", memo: "Memo", comparison: "Comparison",
 };
 export const SECTION_LABEL: Record<string, string> = {
   verdict: "Verdict", factors: "Factors", conditions: "What would make it work", shifts: "Shift options",
   savings: "Savings", weather: "Weather cost", coordination: "Coordinating", now7: "Next 7 days", season: "Next season", month: "Typical month",
   totals: "Totals", items: "Pairs", risks: "Risks", brief: "Brief", feasibility: "Feasibility", cost_analysis: "Cost analysis", hazard_exposure: "Hazards",
+  overview: "At a glance", hazards: "Weather", ranking: "Ranking",
 };
 
 export const fmt = (v: unknown, unit?: string) => {
@@ -39,3 +40,6 @@ export const toCsv = (columns: string[], rows: Record<string, unknown>[]) => {
   const cell = (v: unknown) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
   return [columns.join(","), ...rows.map((r) => columns.map((c) => cell(r[c])).join(","))].join("\n");
 };
+
+// the tallest point of a chart, so two charts can share one scale
+export const chartTop = (c: Chart) => Math.max(1, ...c.x.map((_, i) => c.kind === "stacked" ? c.series.reduce((s, sr) => s + (sr.values[i] ?? 0), 0) : Math.max(...c.series.map((sr) => sr.values[i] ?? 0))));

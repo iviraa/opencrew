@@ -15,7 +15,9 @@ KINDS = {
     "finding": ("Experiment finding", ["stack", "metrics", "deltas", "notes", "evidence", "sources"]),
     "agenda": ("Coordination call agenda", ["context", "decisions", "data", "questions", "logistics"]),
     "memo": ("Cost-sharing memo", ["purpose", "projects", "savings", "timing", "split", "risks", "next_steps"]),
+    "comparison": ("Overlap comparison", ["overview", "feasibility", "hazards", "ranking"]),
 }
+WEIGHTS = {"savings": 0.45, "feasibility": 0.35, "weather": 0.20}  # how the comparison ranks overlaps; printed in the method box
 
 TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS report (
@@ -46,6 +48,9 @@ h1{font-size:23px;line-height:1.2;margin:8px 0 6px;font-weight:700;letter-spacin
 h2{font-size:16px;margin:26px 0 6px;padding-top:16px;border-top:1px solid var(--line)}h3{font-size:14px;margin:16px 0 4px}
 p{margin:6px 0 10px}.lead{color:var(--muted);margin:0 0 8px}
 table{border-collapse:collapse;width:100%;margin:8px 0 14px;font-size:13px}
+figure.chart{margin:10px 0 18px;page-break-inside:avoid}figure.chart svg{width:100%;height:auto;display:block}
+figure.chart figcaption{font-size:12px;color:#5b6272;margin-top:4px}.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3a4150;margin-top:6px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
 th,td{padding:7px 9px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
 th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);border-bottom:2px solid var(--ink);font-weight:600}
 td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;width:1%}tr:last-child td{border-bottom:1px solid var(--ink)}
@@ -295,6 +300,165 @@ def sec_hazards(conn, company, ident, sections, d):
         d.source(e.get("method"))
 
 
+def ids_of(ref):
+    """'13, 14 and #15' as [13, 14, 15]: two to six distinct overlap ids."""
+    ids = list(dict.fromkeys(int(x) for x in re.findall(r"\d{1,7}", str(ref or ""))))
+    if not 2 <= len(ids) <= 6:
+        raise ValueError("a comparison needs two to six overlap ids, like 13,14,15")
+    return ids
+
+
+PALETTE = ["#3b5bdb", "#e8590c", "#2b8a3e", "#ae3ec9", "#0c8599", "#c92a2a"]  # one colour per overlap, readable in print
+
+
+def legend(names, colors=PALETTE):
+    return "<div class='legend'>" + "".join(f"<span><i style='background:{colors[i % len(colors)]}'></i>{esc(n)}</span>" for i, n in enumerate(names)) + "</div>"
+
+
+def svg_ranges(rows, unit_fmt, caption, w=720, bar=22, gap=14):
+    """Horizontal low-to-high range bars, one per row: (label, low, high)."""
+    left, right = 150, 90
+    top = max((h for _, _, h in rows), default=0) or 1
+    hgt = len(rows) * (bar + gap) + 24
+    x = lambda v: left + (w - left - right) * v / top  # noqa: E731
+    out = [f"<svg viewBox='0 0 {w} {hgt}' xmlns='http://www.w3.org/2000/svg' font-family='system-ui,sans-serif' font-size='12'>"]
+    for t in range(5):  # light gridlines with values
+        gx = left + (w - left - right) * t / 4
+        out.append(f"<line x1='{gx:.0f}' y1='0' x2='{gx:.0f}' y2='{hgt - 18}' stroke='#e6e8ee'/><text x='{gx:.0f}' y='{hgt - 4}' text-anchor='middle' fill='#8a90a0'>{esc(unit_fmt(top * t / 4))}</text>")
+    for i, (label, lo, hi) in enumerate(rows):
+        y = i * (bar + gap) + 4
+        c = PALETTE[i % len(PALETTE)]
+        out.append(f"<text x='{left - 10}' y='{y + bar / 2 + 4:.0f}' text-anchor='end' fill='#1f2430' font-weight='600'>{esc(label)}</text>"
+                   f"<rect x='{left}' y='{y}' width='{max(x(hi) - left, 1):.1f}' height='{bar}' rx='3' fill='{c}' opacity='0.18'/>"
+                   f"<rect x='{x(lo):.1f}' y='{y}' width='{max(x(hi) - x(lo), 3):.1f}' height='{bar}' rx='3' fill='{c}'/>"
+                   f"<text x='{x(hi) + 6:.1f}' y='{y + bar / 2 + 4:.0f}' fill='#3a4150'>{esc(unit_fmt(lo))} to {esc(unit_fmt(hi))}</text>")
+    return f"<figure class='chart'>{''.join(out)}</svg><figcaption>{esc(caption)}</figcaption></figure>"
+
+
+def svg_lines(series, labels, caption, unit="days", w=720, h=240):
+    """A line per series over the x labels: series = [(name, [values])]."""
+    left, bottom, top_pad = 40, 26, 10
+    top = max((v for _, vs in series for v in vs), default=0) or 1
+    x = lambda i: left + (w - left - 12) * i / max(len(labels) - 1, 1)  # noqa: E731
+    y = lambda v: top_pad + (h - bottom - top_pad) * (1 - v / top)  # noqa: E731
+    out = [f"<svg viewBox='0 0 {w} {h}' xmlns='http://www.w3.org/2000/svg' font-family='system-ui,sans-serif' font-size='11'>"]
+    for t in range(5):
+        v = top * t / 4
+        out.append(f"<line x1='{left}' y1='{y(v):.0f}' x2='{w - 12}' y2='{y(v):.0f}' stroke='#e6e8ee'/><text x='{left - 6}' y='{y(v) + 4:.0f}' text-anchor='end' fill='#8a90a0'>{v:.1f}</text>")
+    for i, lab in enumerate(labels):
+        out.append(f"<text x='{x(i):.0f}' y='{h - 8}' text-anchor='middle' fill='#8a90a0'>{esc(lab)}</text>")
+    for k, (name_, vs) in enumerate(series):
+        c = PALETTE[k % len(PALETTE)]
+        pts = " ".join(f"{x(i):.1f},{y(v):.1f}" for i, v in enumerate(vs))
+        out.append(f"<polyline points='{pts}' fill='none' stroke='{c}' stroke-width='2.5' stroke-linejoin='round'/>"
+                   + "".join(f"<circle cx='{x(i):.1f}' cy='{y(v):.1f}' r='2.8' fill='{c}'/>" for i, v in enumerate(vs)))
+    return f"<figure class='chart'>{''.join(out)}</svg>{legend([n for n, _ in series])}<figcaption>{esc(caption)}</figcaption></figure>"
+
+
+def svg_stacked(rows, parts, caption, w=720, bar=22, gap=14):
+    """Horizontal stacked bars of weighted parts: rows = [(label, {part: value})], parts = [(key, label, colour)]."""
+    left, right = 150, 60
+    hgt = len(rows) * (bar + gap) + 8
+    out = [f"<svg viewBox='0 0 {w} {hgt}' xmlns='http://www.w3.org/2000/svg' font-family='system-ui,sans-serif' font-size='12'>"]
+    for i, (label, vals) in enumerate(rows):
+        y, cx = i * (bar + gap) + 4, float(left)
+        out.append(f"<text x='{left - 10}' y='{y + bar / 2 + 4:.0f}' text-anchor='end' fill='#1f2430' font-weight='600'>{esc(label)}</text>")
+        for key, _, c in parts:
+            wd = (w - left - right) * vals[key]
+            out.append(f"<rect x='{cx:.1f}' y='{y}' width='{max(wd, 0):.1f}' height='{bar}' fill='{c}'/>")
+            cx += wd
+        out.append(f"<text x='{cx + 6:.1f}' y='{y + bar / 2 + 4:.0f}' fill='#3a4150' font-weight='600'>{sum(vals.values()):.2f}</text>")
+    return f"<figure class='chart'>{''.join(out)}</svg>{legend([lab for _, lab, _ in parts], [c for _, _, c in parts])}<figcaption>{esc(caption)}</figcaption></figure>"
+
+
+def sec_comparison(conn, company, ref, sections, d):
+    """Several overlaps side by side: savings, feasibility, weather next season, and a weighted ranking."""
+    from app.feasibility.assess import assess
+    from app.hazards.exposure import assess as exposure
+    rows = []
+    for i in ids_of(ref):
+        c = overlap(conn, company, i)
+        op, f = c["op"], assess(conn, i, company)
+        e = exposure(conn, "zone", str(i), "season")
+        rows.append({"id": i, "c": c, "op": op, "f": f, "days": (e or {}).get("affected_days", {}), "lead": ((e or {}).get("hazards") or [{}])[0].get("label"),
+                     "season": (e["start"], e["end"]) if e else None, "mid": (float(op["savings_low"] or 0) + float(op["savings_high"] or 0)) / 2})
+        d.source(*[x for fac in f["factors"] for x in fac.get("sources", [])], (e or {}).get("method"))
+    top_mid = max(r["mid"] for r in rows) or 1
+    calm_days = min(float(r["days"].get("high", 0)) for r in rows)
+    for r in rows:  # each part scaled 0..1 against the best in this set, in proportion, so a small gap stays a small gap
+        hi = float(r["days"].get("high", 0))
+        r["parts"] = {"savings": r["mid"] / top_mid, "feasibility": float(r["f"]["score"] or 0), "weather": (calm_days / hi) if hi else 1.0}
+        r["rank"] = sum(WEIGHTS[k] * v for k, v in r["parts"].items())
+    rows.sort(key=lambda r: -r["rank"])
+    best_save = max(rows, key=lambda r: r["mid"])
+    calm = min(rows, key=lambda r: r["days"].get("high", 0))
+    feas = max(rows, key=lambda r: r["f"]["score"] or 0)
+    first = rows[0]
+    tag = lambda r: f"#{r['id']}"  # noqa: E731
+    d.title = "Overlap comparison: " + join([tag(r) for r in sorted(rows, key=lambda r: r["id"])])
+    d.subtitle = f"{name(company)} · {len(rows)} overlaps with " + join(list(dict.fromkeys(short(r["c"]["partner_id"]) for r in rows)))
+    leads = {}  # overlap -> what it leads on, so one winner reads as one sentence
+    for r_, what in ((best_save, f"savings ({rng({'low': best_save['op']['savings_low'], 'high': best_save['op']['savings_high']})})"),
+                     (calm, "weather exposure next season"), (feas, f"feasibility (score {feas['f']['score']:.2f})")):
+        leads.setdefault(tag(r_), []).append(what)
+    d.summary.append(f"Of the {len(rows)} overlaps compared, " + "; ".join(f"{k} leads on {join(v)}" for k, v in leads.items()) + ".")
+    d.summary.append(f"Weighing savings, feasibility and weather together, {tag(first)} ranks first: {first['c']['ours']} with {short(first['c']['partner_id'])}'s {first['c']['theirs']}."
+                     + (f" {tag(rows[1])} is a close second." if len(rows) > 1 and first["rank"] - rows[1]["rank"] < 0.05 else ""))
+    d.fig("Ranks first", tag(first), f"weighted score {first['rank']:.2f} of 1")
+    d.fig("Most savings", tag(best_save), rng({"low": best_save["op"]["savings_low"], "high": best_save["op"]["savings_high"]}))
+    d.fig("Least weather", tag(calm), f"{calm['days'].get('low', 0):g} to {calm['days'].get('high', 0):g} days next season")
+    d.fig("Most feasible", tag(feas), f"{str(feas['f']['verdict']).title()}, score {feas['f']['score']:.2f}")
+    if "overview" in sections:
+        d.section("At a glance", "Each overlap on the same measures; savings are one-off costs paid once instead of twice.", table(
+            ["Overlap", "Partner", "Our project", "Tier", "Distance", "Shared window", "Savings"],
+            [[tag(r), short(r["c"]["partner_id"]), r["c"]["ours"], r["op"]["tier"], f"{r['op']['distance_m'] / MILE_M:.1f} mi", pct(r["op"]["time_overlap"]),
+              rng({"low": r["op"]["savings_low"], "high": r["op"]["savings_high"]})] for r in rows], num={4, 5, 6})
+            + svg_ranges([(tag(r), float(r["op"]["savings_low"] or 0), float(r["op"]["savings_high"] or 0)) for r in rows], usd,
+                         "Estimated one-off savings if coordinated; the solid bar is the low-to-high range."))
+    if "feasibility" in sections:
+        names = [fac["label"] for fac in rows[0]["f"]["factors"]]
+        grid = [[n] + [chip(next((fac["verdict"] for fac in r["f"]["factors"] if fac["label"] == n), "")) for r in rows] for n in names]
+        grid.append(["Overall"] + [chip(r["f"]["verdict"]) for r in rows])
+        d.section("Feasibility side by side", "The seven feasibility factors for each overlap; one factor rated unlikely caps the verdict.", table(["Factor"] + [tag(r) for r in rows], grid))
+    if "hazards" in sections and any(r["season"] for r in rows):
+        s0 = next(r["season"] for r in rows if r["season"])
+        d.section(f"Weather next season: {span(*s0)}", "Affected days from ten years of county history across both sites of each overlap.", table(
+            ["Overlap", "Affected days", "Leading hazard"],
+            [[tag(r), f"{r['days'].get('low', 0):g} to {r['days'].get('high', 0):g}", r["lead"] or "none"] for r in rows], num={1})
+            + svg_ranges([(tag(r), float(r["days"].get("low", 0)), float(r["days"].get("high", 0))) for r in rows],
+                         (lambda v: f"{v:.1f} d") if max(float(r["days"].get("high", 0)) for r in rows) < 10 else (lambda v: f"{v:.0f} d"),
+                         "Weather-affected days next season, low to high, across both sites of each overlap.")
+            + months_chart(conn, company, rows))
+    if "ranking" in sections:
+        d.section("Ranking", f"Savings weigh {WEIGHTS['savings']:.0%}, feasibility {WEIGHTS['feasibility']:.0%} and weather {WEIGHTS['weather']:.0%}; each part is scaled against the best overlap in this set.", table(
+            ["Rank", "Overlap", "Savings part", "Feasibility part", "Weather part", "Score"],
+            [[str(n), tag(r), f"{r['parts']['savings']:.2f}", f"{r['parts']['feasibility']:.2f}", f"{r['parts']['weather']:.2f}", f"{r['rank']:.2f}"] for n, r in enumerate(rows, 1)])
+            + svg_stacked([(tag(r), {k: WEIGHTS[k] * v for k, v in r["parts"].items()}) for r in rows],
+                          [("savings", "Savings", "#3b5bdb"), ("feasibility", "Feasibility", "#2b8a3e"), ("weather", "Low weather exposure", "#e8590c")],
+                          "Weighted score out of 1: how much each part contributes to the ranking."))
+        lines, order = [], {k: sorted(rows, key=lambda x: -x["parts"][k]) for k in WEIGHTS}
+        place = lambda n: ["first", "second", "third", "fourth", "fifth", "sixth"][n]  # noqa: E731
+        label = {"savings": "savings", "feasibility": "feasibility", "weather": "low weather exposure"}
+        for r in rows:  # where each overlap stands on each measure, against the others in this set
+            spots = {k: order[k].index(r) for k in WEIGHTS}
+            firsts = [label[k] for k, n in spots.items() if n == 0]
+            rest = [f"{place(n)} on {label[k]}" for k, n in spots.items() if n > 0]
+            lines.append(f"<b>{tag(r)}:</b> " + (f"first on {join(firsts)}" + ("; " if rest else "") if firsts else "") + join(rest) + ".")
+        d.section("What sets them apart", "", ul(lines))
+    d.source(f"ranking weights: savings {WEIGHTS['savings']:.0%}, feasibility {WEIGHTS['feasibility']:.0%}, weather {WEIGHTS['weather']:.0%}", "crewly cost-savings model")
+
+
+def months_chart(conn, company, rows):
+    """Typical affected days per month for each overlap, one line each; left out quietly if the history is missing."""
+    from app.crewly import charts
+    try:
+        ch, _ = charts.make(conn, company, "hazard_days_by_month", {"ids": [str(r["id"]) for r in rows]})
+    except Exception:  # a chart is a bonus; the tables already carry the numbers
+        return ""
+    return svg_lines([(s_["name"], s_["values"]) for s_ in ch["series"]], [m[:3] for m in ch["x"]],
+                     "Typical weather-affected days by month (ten years of county history, all hazards), the more exposed site of each overlap.")
+
+
 def sec_plan(conn, company, horizon, sections, d):
     row = plan_context(conn, company, horizon)
     t, items = row["totals"], row["items"]
@@ -516,7 +680,7 @@ def uniq_figures(figs, limit=5):
     """At most five tiles, and never two that show the same value."""
     out, seen = [], set()
     for f in figs:
-        key = str(f.get("value") if isinstance(f, dict) else f[1]).strip().lower()
+        key = (str(f.get("value")) + "|" + str(f.get("note") or "")).strip().lower()  # same value with a different note is a different tile
         if key not in seen:
             seen.add(key); out.append(f)
     return out[:limit]
@@ -776,6 +940,8 @@ def compose(conn, company, kind, ref_id=None, sections=None, options=None):
         sec_agenda(conn, company, ref, sections, options, d)
     elif kind == "memo":
         sec_memo(conn, company, ref, sections, options, d)
+    elif kind == "comparison":
+        sec_comparison(conn, company, ref_id, sections, d)
     else:
         if not ref:
             raise ValueError("this report needs an overlap id like #18" + (" or a site id" if kind == "hazard_exposure" else ""))
