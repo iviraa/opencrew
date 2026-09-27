@@ -9,10 +9,12 @@ import type { ReactNode } from "react";
 
 export const RPC_URL = "https://api.devnet.solana.com";  // devnet only, by design
 
-// version 0: our transactions are a few hundred bytes, and every current wallet signs v0 (not all sign v1 yet)
+// version 0: our transactions are a few hundred bytes, and every current wallet signs v0 (not all sign v1 yet).
+// No estimated compute limit: the estimate leaves ~2k units spare, and Phantom's injected safety checks need
+// more than that, so its simulation fails and it reports "not enough SOL". The runtime default is plenty.
 export const client = createClient()
   .use(walletSigner({ chain: "solana:devnet" }))
-  .use(solanaRpc({ rpcUrl: RPC_URL, transactionConfig: { version: 0 } }));
+  .use(solanaRpc({ rpcUrl: RPC_URL, transactionConfig: { version: 0, estimateResourceLimits: false } }));
 
 export type AppClient = typeof client;
 
