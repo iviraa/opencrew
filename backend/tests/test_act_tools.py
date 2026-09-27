@@ -156,7 +156,7 @@ def test_agent_loop_passes_the_confirm_through(conn, monkeypatch):
     monkeypatch.setattr(agent, "types", SimpleNamespace(**{k: getattr(agent.types, k) for k in dir(agent.types) if not k.startswith("_")}))
     monkeypatch.setattr(agent.types, "Content", lambda role, parts: SimpleNamespace(role=role, parts=parts))
     replies = iter([_resp(calls=[("propose_request", {"opportunity_id": oid})]), _resp(text="Tap Confirm to send it.")])
-    monkeypatch.setattr(agent, "gemini", lambda _call: next(replies))
+    monkeypatch.setattr(agent, "gemini", lambda _call, _tier="flash": next(replies))
     out = agent.run(conn, [{"role": "user", "text": f"ask them about #{oid}"}], app_system(GPC), app_tools(GPC))
     assert out["reply"] == "Tap Confirm to send it."
     assert [a["type"] for a in out["ui_actions"]] == ["confirm"] and out["ui_actions"][0]["opportunity_id"] == oid
