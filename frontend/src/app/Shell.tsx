@@ -22,7 +22,7 @@ import { planLine, type Horizon } from "./plan/types";
 import { usePlans } from "./plan/usePlans";
 import { changesOf } from "./findings/changes";
 import { FindingPanel, NotebookPanel } from "./findings/Notebook";
-import { headline, type Comparison, type Finding } from "./findings/types";
+import type { Comparison, Finding } from "./findings/types";
 import { cardOf, viewsApi, type ViewState } from "./workspace/types";
 import ScanOverlay from "./scan/ScanOverlay";
 import { RADAR_MS, pop as popAt, useScan } from "./scan/useScan";
@@ -276,7 +276,7 @@ export default function Shell() {
       else if (goal != null) say("Goal set! Check the drafts I wrote.", "happy");
       else if (confirm.length) say("Tap Confirm and I'll do it.", "nod");
       else if (remembered) say("Got it, I'll keep that in mind.", "nod");
-      else if (finding) say(`Finding: ${headline(finding)}.`, "talking");
+      else if (finding) say(finding.title, "talking");  // the card carries the numbers
       else if (compare) say("Here are the two side by side.", "nod");
       else if (draft) say("Draft ready. Edit it, then copy or send.", "nod");
       else if (refresh) say(refresh.ask ? "Apply it from the card when you are sure." : "Here is where the planner lists stand.", "nod");

@@ -65,7 +65,7 @@ def ch_shift_window(conn, company, p):
         scope = {"job_ids": [job]}
     spec = engine.window_shifted(conn, job, months, p.get("start"), p.get("end"))
     row = conn.execute(engine.JOB_SQL, (job,)).fetchone()
-    what = f"{'later' if months and months > 0 else 'earlier'} by {abs(int(months))} month(s)" if months is not None else f"to {spec.get('start', row['start_at'])} to {spec.get('end', row['end_at'])}"
+    what = f"{'later' if months and months > 0 else 'earlier'} by {abs(int(months))} month{'' if abs(int(months)) == 1 else 's'}" if months is not None else f"to {spec.get('start', row['start_at'])} to {spec.get('end', row['end_at'])}"
     knobs = [{"name": "months", "type": "month_shift", "value": int(months or 0), "min": -24, "max": 24, "label": f"shift {row['name'][:40]}"}]
     return {"jobs": {job: spec}}, scope, knobs, f"Shift {row['name'][:50]} {what}"
 

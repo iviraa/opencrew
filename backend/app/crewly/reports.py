@@ -263,7 +263,7 @@ def sec_cost(conn, company, opp, sections, d):
                 body += table(["Cheapest months", "Cost per 30 days", "Saves against this period"], [[m["label"], rng(m["cost_per_30d"]), rng(m["saves_vs_period"])] for m in best])
             d.section("Coordinating with the neighbor", "Shared standby on the days both sites are affected, and the months weather history favors.", body)
         d.source(cst["method"], "Cost assumptions: " + ", ".join(cst.get("assumptions", [])))
-    d.source("engine.cost savings model over the filed project costs and windows")
+    d.source("crewly cost-savings model over the filed project costs and windows")
 
 
 def sec_hazards(conn, company, ident, sections, d):
@@ -601,7 +601,7 @@ def sec_agenda(conn, company, ref, sections, options, d):
         d.section(titles["logistics"], "", ul([f"When: {when}." if when else "When: to be set.",
                                                 "Who: one transmission planner per utility, plus a construction lead if available.",
                                                 "Follow-up: a date and an owner agreed before the call ends."]))
-    d.source("planner lists as filed", "engine.cost savings model", "feasibility assessment", "county weather history")
+    d.source("planner lists as filed", "crewly cost-savings model", "feasibility assessment", "county weather history")
 
 
 def memo_head(to, frm, re_, date_=None):
@@ -700,7 +700,7 @@ def sec_memo(conn, company, ref, sections, options, d):
             d.section("Risks", "", ul(risks) if risks else "<p>None flagged.</p>")
         if "next_steps" in sections:
             d.section("Next steps", "", ul(["Accept or skip each pair in the plan.", "Send the requests for accepted pairs.", "Agree splits pair by pair."], ordered=True))
-    d.source("planner lists as filed", "engine.cost savings model", "feasibility assessment", "county weather history")
+    d.source("planner lists as filed", "crewly cost-savings model", "feasibility assessment", "county weather history")
 
 
 def compose(conn, company, kind, ref_id=None, sections=None, options=None):
@@ -741,7 +741,8 @@ def compose(conn, company, kind, ref_id=None, sections=None, options=None):
                 sec_hazards(conn, company, ref, KINDS["hazard_exposure"][1], d)
     summary = " ".join(s.strip() for s in d.summary if s and s.strip())
     if kind == "pack" and d.summary:
-        summary = d.summary[0].strip() + (" " + d.summary[1].strip() if len(d.summary) > 1 and "Scheduling" in d.summary[1] else "")  # the pack leads with the pair and its savings
+        tail = d.summary[1].split("Scheduling", 1) if len(d.summary) > 1 else []  # the cost summary repeats the pair line; keep only its savings sentence
+        summary = d.summary[0].strip() + (" Scheduling" + tail[1].rstrip() if len(tail) == 2 else "")
     return d, sections, summary, ref
 
 

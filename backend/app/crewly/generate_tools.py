@@ -16,8 +16,11 @@ def settle(conn, company, out):
     shows = [a for a in ui if a.get("type") == "show_overlaps"]
     cited = list(dict.fromkeys(int(m) for m in CITED.findall(reply)))
     if shows and cited:
-        ours = {r["id"] for r in conn.execute(mine_sql(company) + " AND op.id = ANY(%s)", (cited,)).fetchall()}
-        keep = [i for i in cited if i in ours][:25]
+        listed = {i for a in ui if a.get("type") in ("show_overlaps", "open_overlap") for i in (a.get("ids") or [a.get("id")]) if i}  # ids a tool returned this turn
+        keep = [i for i in cited if i in listed][:25]  # "#2" inside a project name is not an overlap the answer named
+        if not keep:
+            ours = {r["id"] for r in conn.execute(mine_sql(company) + " AND op.id = ANY(%s)", (cited,)).fetchall()}
+            keep = [i for i in cited if i in ours][:25]
         if keep and set(keep) != set(shows[-1]["ids"]):
             shows[-1]["ids"] = keep  # the cards follow the answer, not the model's first guess
         ui = [a for a in ui if a.get("type") != "show_overlaps" or a is shows[-1]]
