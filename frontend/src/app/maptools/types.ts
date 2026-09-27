@@ -17,9 +17,11 @@ export type Route = {
 };
 export type Download = { id: number; kind: string; format: string; filename: string; size: number; filters: Record<string, unknown> };
 export type Share = { id: number; token: string; path: string; kind: string; ref_id: string; title: string; expires_at: string; days: number };
+export type Result = { low?: number; high?: number; value?: number | string; verdict?: string; unit?: string };
 export type Explain = {
-  title: string; formula: string; what: string; opportunity_id?: number; inputs: { label: string; value: string | number; source?: string }[];
-  steps: string[]; sources: { title: string; url: string }[]; assumptions?: { key: string; label: string; value: string | number; source?: string }[]; result?: string;
+  title: string; formula: string; what: string; opportunity_id?: number; inputs: { label: string; value: string | number; unit?: string; source?: string }[];
+  steps: string[]; sources: { title: string; url: string }[]; result?: Result;
+  assumptions?: { key: string; label: string; low?: number; high?: number; value?: number | string; unit?: string; verified?: boolean; source?: string; page?: string; note?: string }[];
 };
 export type MapView = {
   tab: "overlaps" | "hazards" | "news"; period?: "now7" | "weeks" | "season" | "month"; month?: number; hazards?: string[]; ids?: number[]; filters?: Record<string, unknown>;

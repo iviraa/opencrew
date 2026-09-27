@@ -3,7 +3,10 @@ import { useState } from "react";
 import { API_BASE } from "../../apiBase";
 import { api, supabase, usd } from "../data";
 import { download as saveBlob, fmt } from "../generate/types";
-import { kb, type Download, type Explain, type Forecast, type MapCard, type Projects, type Route, type Share, type Timeline } from "./types";
+import { kb, type Download, type Explain, type Forecast, type MapCard, type Projects, type Result, type Route, type Share, type Timeline } from "./types";
+
+const money = (v: unknown, unit?: string) => (unit === "$" || unit === "USD" ? fmt(v, "USD") : `${fmt(v)}${unit ? ` ${unit}` : ""}`);
+const result = (r: Result) => r.verdict ? `${r.verdict}${r.value != null ? ` (${fmt(r.value)})` : ""}` : r.low != null && r.high != null ? `${money(r.low, r.unit)} to ${money(r.high, r.unit)}` : money(r.value, r.unit);
 
 export type CardProps = { onPickProject?: (id: string, mine?: boolean) => void; onOpenTimeline?: (t: Timeline) => void; onShowRoute?: (r: Route) => void; onOpen?: (overlapId: number) => void };
 
@@ -155,15 +158,15 @@ export function ExplainCard({ explain, onOpen }: { explain: Explain } & CardProp
       <p className="mt-1 whitespace-pre-line px-1 text-[12px] leading-snug">{explain.formula}</p>
       {explain.inputs.length > 0 && (
         <table className="mt-1 w-full text-[11px]"><tbody>
-          {explain.inputs.map((i, k) => <tr key={k} className="border-t border-line"><td className="px-1 py-0.5 text-muted">{i.label}</td><td className="px-1 py-0.5 text-right font-semibold tabular-nums">{fmt(i.value)}</td><td className="px-1 py-0.5 text-right text-[10px] text-faint">{i.source ?? ""}</td></tr>)}
+          {explain.inputs.map((i, k) => <tr key={k} className="border-t border-line"><td className="px-1 py-0.5 text-muted">{i.label}</td><td className="px-1 py-0.5 text-right font-semibold tabular-nums">{fmt(i.value)}</td><td className="px-1 py-0.5 text-right text-[10px] text-faint">{i.source ?? i.unit ?? ""}</td></tr>)}
         </tbody></table>
       )}
       {explain.steps.length > 0 && <ol className="mt-1 list-decimal flex-col gap-0.5 px-1 pl-5 text-[11px] text-muted">{explain.steps.map((s, k) => <li key={k}>{s}</li>)}</ol>}
-      {explain.result && <div className="mt-1 px-1 text-sm font-semibold">{explain.result}</div>}
+      {explain.result && <div className="mt-1 px-1 text-sm font-semibold">{result(explain.result)}</div>}
       {(explain.assumptions?.length ?? 0) > 0 && (
         <div className="mt-1 px-1">
           <button onClick={() => setMore(!more)} className="text-[11px] font-semibold text-grape">{more ? "Hide" : "Show"} assumptions ({explain.assumptions!.length})</button>
-          {more && <ul className="mt-0.5 text-[11px] text-muted">{explain.assumptions!.map((a) => <li key={a.key}>{a.label}: <b>{fmt(a.value)}</b>{a.source ? ` (${a.source})` : ""}</li>)}</ul>}
+          {more && <ul className="mt-0.5 flex flex-col gap-0.5 text-[11px] text-muted">{explain.assumptions!.map((a) => <li key={a.key}>{a.label}: <b>{result(a)}</b>{a.verified === false ? " · proxy" : ""}{a.source ? ` · ${a.source}${a.page ? `, p. ${a.page}` : ""}` : ""}</li>)}</ul>}
         </div>
       )}
       {explain.sources.length > 0 && <div className="mt-1 flex flex-wrap gap-1 px-1">{explain.sources.map((s) => <a key={s.url} href={s.url} target="_blank" rel="noreferrer" className="rounded-full bg-soft px-2 py-0.5 text-[10px] text-muted hover:text-ink">{s.title}</a>)}</div>}

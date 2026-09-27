@@ -270,7 +270,7 @@ def query_data(ctx, conn, dataset, filters=None, group_by=None, aggregate=None, 
     except ValueError as e:
         return {"error": str(e)}, []
     rows, cols = run_query(base["rows"], group_by, aggregate, sort, limit)
-    table = {"dataset": dataset, "filters": {**base["filters"], **({"group_by": group_by} if group_by else {}), **({"aggregate": aggregate} if aggregate else {})},
+    table = {"dataset": dataset, "filters": {**base["filters"], **({"group_by": group_by} if group_by else {}), **({"aggregate": ", ".join(f"{fn} {f}" for f, fn in aggregate.items())} if aggregate else {})},  # chips read as text
              "columns": cols, "rows": rows, "count": len(rows)}
     actions = [{"type": "table", "table": table}]
     if group_by and aggregate and rows:
