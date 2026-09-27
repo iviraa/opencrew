@@ -3,6 +3,7 @@ import base64
 import hashlib
 import hmac
 import os
+import secrets as rnd
 import time
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -50,8 +51,8 @@ def _unb64(s):
 
 
 def sign(kind, ref_id, company, expires_at):
-    """token = payload.signature; the payload says what it opens and until when, the signature says we issued it."""
-    payload = f"{kind}:{ref_id}:{company}:{int(expires_at)}".encode()
+    """token = payload.signature; the payload says what it opens and until when (plus a nonce, so two links never collide), the signature says we issued it."""
+    payload = f"{kind}:{ref_id}:{company}:{int(expires_at)}:{rnd.token_hex(4)}".encode()
     sig = hmac.new(secret(), payload, hashlib.sha256).digest()[:20]
     return f"{_b64(payload)}.{_b64(sig)}"
 
@@ -66,10 +67,11 @@ def verify(token, now=None):
     if not hmac.compare_digest(hmac.new(secret(), payload, hashlib.sha256).digest()[:20], sig):
         return None
     try:
-        kind, ref_id, company, exp = payload.decode().split(":", 3)
+        kind, ref_id, company, exp = payload.decode().split(":")[:4]
+        exp = int(exp)
     except ValueError:
         return None
-    if kind not in KINDS or int(exp) < (now or time.time()):
+    if kind not in KINDS or exp < (now or time.time()):
         return None
     return {"kind": kind, "ref_id": ref_id, "company": company, "expires_at": int(exp)}
 

@@ -48,7 +48,7 @@ def planner_tools(ctx):
     h = {"type": "string", "enum": list(build.HORIZONS), "description": "quarter (next 3 months), year, or window (whole build windows)"}
     return {
         "build_plan": (_bind(ctx, build_plan), "Build or rebuild our coordination plan for a horizon: which overlaps to pursue, the cheapest "
-                       "months to work each pair by weather history, expected savings, risks and conflicts. Opens the Plan tab. Nothing is sent.",
+                       "months to work each pair by weather history, expected savings, risks and conflicts. Shows the plan card in the chat. Nothing is sent.",
                        {"horizon": h}, []),
         "plan_status": (_bind(ctx, plan_status), "The current plan for a horizon: pairs, months, savings, which items the user accepted or skipped.",
                         {"horizon": h}, []),

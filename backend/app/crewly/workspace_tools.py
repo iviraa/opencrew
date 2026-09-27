@@ -40,7 +40,8 @@ def _usd(n):
     return f"${n / 1e6:.1f}M" if n >= 1e6 else f"${round(n / 1e3)}k" if n >= 1e3 else f"${round(n)}"
 
 
-def _target(kind, ident, allowed=TARGETS):
+def _target(kind, ident, allowed=TARGETS, conn=None, ctx=None):
+    """A checked (kind, id): overlaps must be ours, projects must exist, utilities must be known."""
     kind = (kind or "").strip().lower()
     if kind not in allowed:
         raise ValueError(f"target_kind must be one of {', '.join(allowed)}")
@@ -52,13 +53,22 @@ def _target(kind, ident, allowed=TARGETS):
         if not who:
             raise ValueError(f"no utility called {ident!r}")
         ident = who
+    elif kind == "overlap":
+        if not ident.isdigit():
+            raise ValueError(f"an overlap id is a number like #18, got {ident!r}")
+        if conn is not None and not _mine(conn, ctx, ident):
+            raise ValueError(f"#{ident} is not one of our overlaps")
+    elif kind == "project" and conn is not None and not conn.execute("SELECT 1 FROM job WHERE id = %s", (ident,)).fetchone():
+        raise ValueError(f"no project {ident!r}")
+    elif kind == "request" and not ident.isdigit():
+        raise ValueError(f"a request id is a number, got {ident!r}")
     return kind, ident
 
 
 # ---------- notes ----------
 
 def add_note(ctx, conn, target_kind, target_id, text):
-    kind, ident = _target(target_kind, target_id)
+    kind, ident = _target(target_kind, target_id, conn=conn, ctx=ctx)
     text = " ".join(str(text or "").split())[:2000]
     if not text:
         return {"error": "nothing to note"}, []
@@ -125,8 +135,10 @@ def set_reminder(ctx, conn, text, due_at=None, in_days=None, target_kind=None, t
     text = " ".join(str(text or "").split())[:500]
     if not text:
         return {"error": "a reminder needs some text"}, []
-    kind, ident = _target(target_kind, target_id, REMINDER_TARGETS) if target_kind and target_id else (None, None)
+    kind, ident = _target(target_kind, target_id, REMINDER_TARGETS, conn, ctx) if target_kind and target_id else (None, None)
     due = _due(due_at, in_days)
+    if due.date() < _now().date():
+        return {"error": f"{due.date()} is in the past; give a date from today on"}, []
     row = rest(ctx, "POST", "reminder", json={"text": text, "due_at": due.isoformat(), "target_kind": kind, "target_id": ident},
                headers={"Prefer": "return=representation"})[0]
     out = {"saved": True, "reminder": _reminder_row(row), "delivery": "it lands in the bell when due", **_reminders(ctx)}
@@ -371,7 +383,9 @@ def _matches(item, flt, company):
         return False
     if flt.get("partner"):
         who = _find_company(flt["partner"])
-        if who and item.get("partner") != who:
+        if not who:
+            raise ValueError(f"no utility called {flt['partner']!r}")  # never widen to every partner
+        if item.get("partner") != who:
             return False
     if flt.get("verdict") and item.get("verdict") != flt["verdict"]:
         return False
@@ -397,7 +411,10 @@ def plan_bulk(ctx, conn, action, filter=None, horizon="quarter"):
     if not row:
         return {"error": "no plan yet; call build_plan"}, []
     flt = filter or {}
-    hits = [i for i in row["items"] if _matches(i, flt, ctx["company"])]
+    try:
+        hits = [i for i in row["items"] if _matches(i, flt, ctx["company"])]
+    except ValueError as e:
+        return {"error": str(e)}, []
     state = "accepted" if action == "accept" else "skipped"
     for it in hits:
         row = store.update_item(conn, row, it["id"], {"state": state}) or row
@@ -413,7 +430,9 @@ def findings_bulk(ctx, conn, action, filter=None):
     if action not in ("star", "unstar", "delete"):
         return {"error": "action must be star, unstar or delete"}, []
     from app.scenario import experiments
-    flt = filter or {}
+    flt = {k: v for k, v in (filter or {}).items() if v not in (None, "", [])}
+    if action == "delete" and not flt:
+        return {"error": "deleting every finding needs a filter (ids, kind or opportunity_id); say which ones"}, []
     conn.execute(experiments.TABLE_SQL)
     rows = conn.execute("SELECT id, kind, params FROM finding WHERE company_id = %s ORDER BY id DESC LIMIT 200", (ctx["company"],)).fetchall()
     hits = [f for f in rows if finding_matches(f, flt)]

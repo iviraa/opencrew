@@ -43,14 +43,28 @@ def month_labels(lo, hi):
 def _partner_id(options):
     from app.crewly.app_tools import find_company
     p = options.get("partner")
-    return find_company(p) if p else None
+    who = find_company(p) if p else None
+    if p and not who:
+        raise ValueError(f"no utility called {p!r}")  # never fall back to everyone
+    return who
 
 
-def _opp(conn, options):
+def _opp(conn, options, company=None):
     opp = str(options.get("id") or "").lstrip("#")
     if not opp.isdigit():
         raise ValueError("this dataset needs an overlap id like #18")
+    if company and not own_zone(conn, company, int(opp)):
+        raise ValueError(f"#{opp} is not one of our overlaps")
     return int(opp)
+
+
+def own_zone(conn, company, opp_id):
+    return conn.execute("SELECT 1 FROM opportunity op JOIN job ja ON ja.id = op.job_a JOIN job jb ON jb.id = op.job_b WHERE op.id = %s AND %s IN (ja.org_id, jb.org_id)",
+                        (opp_id, company)).fetchone() is not None
+
+
+def own_site(conn, company, job_id):
+    return conn.execute("SELECT 1 FROM job WHERE id = %s AND org_id = %s", (job_id, company)).fetchone() is not None
 
 
 # ---------- datasets: each returns (chart, rows) ----------
@@ -86,13 +100,13 @@ def hazard_days_by_month(conn, company, options):
     hazards = [h for h in (options.get("hazards") or []) if h in HAZARDS] or list(HAZARDS)
     if ident.isdigit():
         op = conn.execute(exposure.ZONE_SQL, {"id": int(ident)}).fetchone()
-        if not op:
-            raise ValueError(f"no overlap #{ident}")
+        if not op or company not in (op["a_org"], op["b_org"]):
+            raise ValueError(f"#{ident} is not one of our overlaps")
         sites, title = [op["job_a"], op["job_b"]], f"Weather-affected days by month, overlap #{ident}"
     else:
         r = conn.execute(exposure.SITE_SQL, {"id": ident}).fetchone()
-        if not r:
-            raise ValueError(f"no site {ident}")
+        if not r or r["org_id"] != company:
+            raise ValueError(f"{ident} is not one of our sites")
         sites, title = [ident], f"Weather-affected days by month, {r['name']}"
     per_site = [cost.month_days(conn, s, hazards) for s in sites]
     series = []
@@ -141,7 +155,7 @@ def projects_by_year(conn, company, options):
 def cost_by_category(conn, company, options):
     from app.engine.cost import savings_for
     from app.queries import OPP_SQL
-    opp = _opp(conn, options)
+    opp = _opp(conn, options, company)
     op = conn.execute(OPP_SQL + " WHERE op.id = %s", (opp,)).fetchone()
     if not op or company not in (op["a_org"], op["b_org"]):
         raise ValueError(f"#{opp} is not one of our overlaps")
@@ -253,6 +267,8 @@ def hazard_table(conn, company, f):
     ident = str(f.get("id") or "").lstrip("#")
     kind = "zone" if ident.isdigit() else "site"
     period = f.get("period") if f.get("period") in PERIODS else "month"
+    if ident and not (own_zone(conn, company, int(ident)) if kind == "zone" else own_site(conn, company, ident)):
+        raise ValueError(f"{'#' if kind == 'zone' else ''}{ident} is not one of ours")
     out = assess(conn, kind, ident, period, _int(f.get("month"), None)) if ident else None
     if not out:
         raise ValueError("this dataset needs a site id or overlap id")
