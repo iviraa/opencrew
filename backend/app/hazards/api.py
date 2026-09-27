@@ -93,11 +93,27 @@ def hazard_layers(period: str = "now7", month: int | None = None, hazards: str |
             "sources": [SOURCES[s] for s in SOURCES if s in used]}
 
 
+def visible(conn, company, kind, ident):
+    """Our overlaps, and our projects or a partner's project inside one of our overlaps."""
+    if kind == "zone":
+        if not str(ident).lstrip("-").isdigit():
+            return False
+        return bool(conn.execute("""SELECT 1 FROM opportunity op JOIN job a ON a.id = op.job_a JOIN job b ON b.id = op.job_b
+                                    WHERE op.id = %s AND %s IN (a.org_id, b.org_id)""", (int(ident), company)).fetchone())
+    return bool(conn.execute("""SELECT 1 FROM job j WHERE j.id = %(j)s AND (j.org_id = %(c)s OR EXISTS (
+                                  SELECT 1 FROM opportunity op JOIN job a ON a.id = op.job_a JOIN job b ON b.id = op.job_b
+                                  WHERE %(j)s IN (op.job_a, op.job_b) AND %(c)s IN (a.org_id, b.org_id)))""", {"j": ident, "c": company}).fetchone())
+
+
 @router.get("/exposure")
 def hazard_exposure(kind: str, id: str, period: str = "now7", month: int | None = None, hazards: str | None = None, cost: bool = False,
                     user=Depends(current_user), conn=Depends(get_conn)):
     if kind not in ("site", "zone") or period not in PERIODS:
         raise HTTPException(400, "kind must be site or zone; period one of " + ", ".join(PERIODS))
+    if month is not None and not 1 <= int(month) <= 12:
+        raise HTTPException(400, "month must be 1 to 12")
+    if not visible(conn, user["company"], kind, id):
+        raise HTTPException(404, f"{kind} {id} not found")
     picked = parse_hazards(hazards)
     out = exposure.assess(conn, kind, id, period, month, picked)
     if not out:

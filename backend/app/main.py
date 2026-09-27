@@ -121,7 +121,7 @@ app = FastAPI(title="OpenCrew", lifespan=lifespan)
 async def unhandled(request, exc):  # a 500 says what broke (no secrets), so a deployed app can be fixed from its response
     import traceback
     print("".join(traceback.format_exception(exc))[-2000:], flush=True)
-    return JSONResponse(500, {"detail": f"{type(exc).__name__}: {str(exc)[:300]}"})
+    return JSONResponse({"detail": f"{type(exc).__name__}: {str(exc)[:300]}"}, status_code=500)
 
 if os.environ.get("CORS_ORIGINS"):  # the frontend is hosted on another domain, e.g. vercel
     from fastapi.middleware.cors import CORSMiddleware

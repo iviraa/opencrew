@@ -177,13 +177,19 @@ def apply_event(conn, company, event, jobs_in_scope):
         return out
     if kind == "storm":
         when = event["date"] if isinstance(event["date"], date) else date.fromisoformat(str(event["date"])[:10])
-        cat = event.get("category")
+        cat, note = event.get("category"), None
         if cat is None and event.get("max_wind_mph"):
             cat = wind.category_of(float(event["max_wind_mph"]))
-        cat = cat if cat in wind.CATEGORY_MPH else int(cat) if str(cat).isdigit() else "ts"
+        cat, note = wind.parse_category(cat)
+        tornado = cat in wind.TORNADO_MPH
         landfall = datetime.combine(when, datetime.min.time(), timezone.utc) + timedelta(hours=12)
-        wf = wind.field(float(event["lon"]), float(event["lat"]), landfall, cat, float(event.get("heading_deg", 20.0)), float(event.get("speed_mph", wind.FORWARD_MPH)))
+        wf = wind.field(float(event["lon"]), float(event["lat"]), landfall, cat, float(event.get("heading_deg", 20.0)),
+                        0.0 if tornado else float(event.get("speed_mph", wind.FORWARD_MPH)))  # a tornado is modeled where it touches down, not as a moving cyclone
         out = storm_event(conn, company, wf, when, rows)
+        if note:
+            out.setdefault("notes", []).append(note)
+        if tornado:
+            out.setdefault("notes", []).append(f"{cat} tornado modeled as a narrow wind field about a mile wide at that point; real paths vary")
         out["storm"] = {"category": cat, "max_wind_mph": wind.wind_of(cat), "date": when.isoformat(), "lon": event["lon"], "lat": event["lat"],
                         "heading_deg": wf["heading_deg"], "speed_mph": wf["speed_mph"], "radii_nm": wf["radii_nm"], "place": event.get("place")}
         return out

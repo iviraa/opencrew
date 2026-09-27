@@ -15,6 +15,8 @@ CATEGORY_MPH = {"ts": (39, 73), 1: (74, 95), 2: (96, 110), 3: (111, 129), 4: (13
 TYPICAL_RADII_NM = {  # 34 / 50 / 64 kt radii by category: estimates in the range NHC advisories show for Atlantic storms (nhc_radii, nhc_helene)
     "ts": (90, 30, 0), 1: (100, 50, 25), 2: (120, 60, 35), 3: (140, 70, 45), 4: (160, 80, 55), 5: (180, 90, 65),
 }
+TORNADO_MPH = {"EF0": (65, 85), "EF1": (86, 110), "EF2": (111, 135), "EF3": (136, 165), "EF4": (166, 200), "EF5": (200, 260)}  # nws_ef
+TORNADO_RADII_NM = (1.5, 1.0, 0.6)  # a narrow path, roughly a mile wide: an estimate, not a track model
 NM_KM = 1.852
 FORWARD_MPH = 15  # typical landfalling forward speed; a knob
 HOURS_BEFORE, HOURS_AFTER = 12, 36  # the field is drawn from offshore approach to a day and a half inland
@@ -30,8 +32,28 @@ def category_of(max_wind_mph):
 
 
 def wind_of(category):
-    lo, hi = CATEGORY_MPH[category]
+    lo, hi = CATEGORY_MPH.get(category) or TORNADO_MPH[category]
     return (lo + hi) // 2
+
+
+def parse_category(value):
+    """1-5, 'ts', or an EF rating -> (category, note): out-of-range numbers are clamped and said so."""
+    if value is None:
+        return 3, None
+    s = str(value).strip().upper().replace(" ", "")
+    if s.startswith("EF") and s[2:].isdigit():
+        return (f"EF{min(int(s[2:]), 5)}", None if int(s[2:]) <= 5 else "tornado ratings stop at EF5; using EF5")
+    if s in ("TS", "TROPICALSTORM"):
+        return "ts", None
+    try:
+        n = int(float(s))
+    except ValueError:
+        return 3, f"category {value!r} not understood; using category 3"
+    if n < 1:
+        return "ts", f"category {n} is below the hurricane scale; using a tropical storm"
+    if n > 5:
+        return 5, f"category {n} is beyond the scale; using category 5"
+    return n, None
 
 
 def km(a_lon, a_lat, b_lon, b_lat):
@@ -64,7 +86,7 @@ def decay(hours_after_landfall):
 
 def field(lon, lat, landfall, category, heading_deg=20.0, speed_mph=FORWARD_MPH, radii_nm=None):
     """Bands swept by 34, 50 and 64 kt winds along the track: {34: polygon|None, 50: ..., 64: ...} plus hourly circles for timing."""
-    r34, r50, r64 = radii_nm or TYPICAL_RADII_NM[category]
+    r34, r50, r64 = radii_nm or (TORNADO_RADII_NM if category in TORNADO_MPH else TYPICAL_RADII_NM[category])
     hourly = []  # (t, hours, {kt: circle})
     peak = wind_of(category)
     for t, clon, clat, h in track(lon, lat, landfall, heading_deg, speed_mph):
