@@ -1,5 +1,6 @@
 """ERCOT TPIT (July 2026, no-cost edition): Oncor's planned and conceptual projects in Texas."""
 import json
+import re
 
 import pandas as pd
 
@@ -8,7 +9,7 @@ from app.ingest.national.common import clean, clear, register_org, register_sour
 from app.ingest.national.south_names import ends_from_title, resolve, station
 
 FILE = "data/raw/national/ercot-tpit/ercot_tpit_2026_07.xlsx"
-SHEETS = ["FutureTPIT071326NoCost", "PlannedTPIT071326NoCost"]
+SHEETS = re.compile(r"^(Future|Planned)TPIT\d*NoCost$")  # the sheet names carry the edition date
 PRIVATE = {"TSP/Company Contact"}  # a named person's email and phone: not ours to keep
 COL = {  # short names for the long TPIT headers
     "num": "ERCOT Project Number", "title": "Project Title (text, please start with location name first)", "desc": "Project Description (text)",
@@ -58,7 +59,7 @@ def mapped(r, sheet):
 def rows():
     x = pd.ExcelFile(ROOT / FILE)
     seen = set()
-    for sheet in SHEETS:
+    for sheet in [s for s in x.sheet_names if SHEETS.match(s)]:
         for _, r in pd.read_excel(x, sheet, header=1).iterrows():
             if pd.isna(r.get(COL["num"])):
                 continue

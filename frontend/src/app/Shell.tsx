@@ -26,6 +26,7 @@ import { headline, type Comparison, type Finding } from "./findings/types";
 import { cardOf, viewsApi, type ViewState } from "./workspace/types";
 import ScanOverlay from "./scan/ScanOverlay";
 import { RADAR_MS, pop as popAt, useScan, type ScanCtx } from "./scan/useScan";
+import type { RefreshRow } from "./refresh/types";
 
 const Beaver = lazy(() => import("./Beaver"));
 
@@ -243,6 +244,8 @@ export default function Shell() {
       const finding = r.ui_actions.filter((a) => a.type === "finding").pop()?.finding as Finding | undefined;
       const compare = r.ui_actions.filter((a) => a.type === "compare").pop()?.compare as Comparison | undefined;
       const draft = r.ui_actions.filter((a) => a.type === "draft").pop()?.draft as Draft | undefined;
+      const refreshAct = r.ui_actions.filter((a) => a.type === "refresh").pop();
+      const refresh = refreshAct ? { rows: refreshAct.refresh as RefreshRow[], ask: !!refreshAct.ask } : undefined;  // planner list updates
       const confirm = r.ui_actions.filter((a) => a.type === "confirm"), goal = r.ui_actions.filter((a) => a.type === "goal").pop()?.id;
       const remembered = r.ui_actions.some((a) => a.type === "memory");
       const acts = r.ui_actions as unknown as ({ type: string } & Record<string, unknown>)[];
@@ -254,7 +257,7 @@ export default function Shell() {
       const plan = planned ? { id: planned.id!, horizon: planned.horizon, item: planned.item } : undefined;
       setChat([...next, { role: "model", text: r.reply || "Done.", ids, ...(title && { title }), offline: r.offline, ...(confirm.length && { confirm }), ...(goal != null && { goal }), ...(plan && { plan }),
         ...(chart && { chart }), ...(table && { table }), ...(report && { report }), ...(finding && { finding }), ...(compare && { compare }), ...(draft && { draft }),
-        ...(workspace && { workspace }) }]);
+        ...(workspace && { workspace }), ...(refresh && { refresh }) }]);
       if (finding) setOverlay(finding);
       if (remembered) setMemoryTick((t) => t + 1);  // crewly saved or dropped a note
       if (r.offline) say("I'm out of energy for today, sorry!", "sad");
@@ -265,6 +268,7 @@ export default function Shell() {
       else if (finding) say(`Finding: ${headline(finding)}.`, "talking");
       else if (compare) say("Here are the two side by side.", "nod");
       else if (draft) say("Draft ready. Edit it, then copy or send.", "nod");
+      else if (refresh) say(refresh.ask ? "Apply it from the card when you are sure." : "Here is where the planner lists stand.", "nod");
       else if (workspace) say(workspace.kind === "brief" ? "Here is your week at a glance." : workspace.kind === "reminder" ? "Noted. It will pop up in the bell when due." : "Here you go.", "nod");
       else if (report) say("Your report is ready. Open it to print or save.", "happy");
       else if (chart) say("Here's your chart.", "nod");
