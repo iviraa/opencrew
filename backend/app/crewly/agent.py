@@ -3,7 +3,7 @@ import json
 from google.genai import types
 
 from app.crewly.tools import TOOLS
-from app.llm import gemini, local_chat, provider, unsourced
+from app.llm import NO_THINKING, gemini, local_chat, provider, thinking, unsourced
 
 MAX_STEPS = 10
 
@@ -45,12 +45,12 @@ def execute(conn, name, args, tools=TOOLS):
         return {"error": str(e)}, []
 
 
-def run(conn, messages, system=SYSTEM, tools=TOOLS):
+def run(conn, messages, system=SYSTEM, tools=TOOLS, tier="flash"):
     which = provider()
     if not which:
         return {"reply": "Crewly is offline: set GEMINI_API_KEY or LOCAL_LLM_URL in .env.", "ui_actions": [], "tool_calls": [], "unsourced": []}
     try:
-        return run_local(conn, messages, system, tools) if which == "local" else run_gemini(conn, messages, system, tools)
+        return run_local(conn, messages, system, tools) if which == "local" else run_gemini(conn, messages, system, tools, tier)
     except Exception as e:  # model outages become a reply, not a 500
         conn.rollback()
         return {"reply": offline_reply(e), "ui_actions": [], "tool_calls": [], "unsourced": [], "offline": True}
@@ -92,14 +92,17 @@ def run_local(conn, messages, system=SYSTEM, tools=TOOLS):
     return {"reply": reply, "ui_actions": ui, "tool_calls": calls_log, "unsourced": unsourced(reply, tool_text)}
 
 
-def run_gemini(conn, messages, system=SYSTEM, tools=TOOLS):
+def run_gemini(conn, messages, system=SYSTEM, tools=TOOLS, tier="flash"):
     contents = [types.Content(role="model" if m["role"] == "model" else "user", parts=[types.Part.from_text(text=m["text"])]) for m in messages]
-    config = types.GenerateContentConfig(system_instruction=system, temperature=0.2, tools=[types.Tool(function_declarations=_declarations(tools))],
-                                         automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True))
+    think = thinking(tier)
+    def cfg(model, with_tools=True):  # thinking is per model: some refuse the setting and run plainly
+        return types.GenerateContentConfig(system_instruction=system, temperature=0.2, thinking_config=None if model in NO_THINKING else think,
+                                           **({"tools": [types.Tool(function_declarations=_declarations(tools))],
+                                               "automatic_function_calling": types.AutomaticFunctionCallingConfig(disable=True)} if with_tools else {}))
     ui, calls_log = [], []
     tool_text = next((m["text"] for m in reversed(messages) if m["role"] != "model"), "")  # numbers the user gave are allowed back
     for _ in range(MAX_STEPS):
-        resp = gemini(lambda client, model: client.models.generate_content(model=model, contents=contents, config=config))
+        resp = gemini(lambda client, model: client.models.generate_content(model=model, contents=contents, config=cfg(model)), tier)
         calls = resp.function_calls or []
         if not calls:
             reply = resp.text or ""
@@ -114,7 +117,6 @@ def run_gemini(conn, messages, system=SYSTEM, tools=TOOLS):
             parts.append(types.Part.from_function_response(name=call.name, response={"result": json.loads(json.dumps(result, default=str))}))
         contents.append(types.Content(role="user", parts=parts))
     contents.append(types.Content(role="user", parts=[types.Part.from_text(text="Stop calling tools. Answer now from what you have, in two sentences, and say what you could not finish.")]))
-    closing = types.GenerateContentConfig(system_instruction=system, temperature=0.2)  # no tools: the model has to write
-    resp = gemini(lambda client, model: client.models.generate_content(model=model, contents=contents, config=closing))
+    resp = gemini(lambda client, model: client.models.generate_content(model=model, contents=contents, config=cfg(model, with_tools=False)), tier)  # no tools: the model has to write
     reply = (resp.text or "").strip() or "I gathered part of this; ask for one piece at a time and I will finish it."
     return {"reply": reply, "ui_actions": ui, "tool_calls": calls_log, "unsourced": unsourced(reply, tool_text)}

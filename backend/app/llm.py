@@ -6,6 +6,7 @@ import httpx
 import app.db  # noqa: F401  loads .env so keys work from any entry point
 
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
+PRO = [os.environ.get("GEMINI_MODEL_PRO", "gemini-3.1-pro-preview"), "gemini-pro-latest"]  # the pro tier: plans, what-ifs, comparisons, long tool chains
 FALLBACKS = [MODEL, "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3-flash-preview", "gemini-flash-latest",
              "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-flash-lite-latest", "gemini-2.5-flash"]  # busy or retired models fall through
 SPENT = {}  # model -> day its daily quota ran out, so we skip it until tomorrow
@@ -58,26 +59,41 @@ def local_chat(messages, tools=None, schema=None, max_tokens=3000):
     return r.json()["choices"][0]["message"]
 
 
-def gemini(call):
-    """Run call(client, model) with retries on busy (429/503) and missing (404) models."""
+NO_THINKING = set()  # models that rejected a thinking setting; they run with their default
+
+
+def thinking(tier):
+    """Short thinking for lookups, more for the pro tier: the biggest lever on latency."""
+    from google.genai import types
+    if os.environ.get("GEMINI_THINKING", "on") != "on":
+        return None
+    return types.ThinkingConfig(thinking_level="high" if tier == "pro" else "low")
+
+
+def gemini(call, tier="flash"):
+    """Run call(client, model) with retries on busy (429/503) and missing (404) models; the pro chain goes first when asked for."""
     import time
     from google import genai
     from google.genai import errors
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])  # keep a reference: the sdk closes its http client when collected
     last = None
     today = time.strftime("%Y-%m-%d", time.gmtime())
-    for model in [m for m in dict.fromkeys(FALLBACKS) if SPENT.get(m) != today]:
+    chain = (PRO if tier == "pro" else []) + FALLBACKS
+    for model in [m for m in dict.fromkeys(chain) if SPENT.get(m) != today]:
         for attempt in range(2):
             try:
                 return call(client, model)
             except (errors.ServerError, errors.ClientError) as e:
                 last = e
+                if getattr(e, "code", None) == 400 and "thinking" in str(e).lower() and model not in NO_THINKING:
+                    NO_THINKING.add(model)  # this model wants its default thinking; run it again plainly
+                    continue
                 if getattr(e, "code", None) not in (429, 500, 503, 404):
                     raise
                 if e.code == 404:
                     break  # this model is gone for this key, try the next
-                if e.code == 429 and "PerDay" in str(e):
-                    SPENT[model] = today  # out for the day, no point retrying
+                if e.code == 429 and ("PerDay" in str(e) or model in PRO):
+                    SPENT[model] = today  # out for the day (a pro model is a bonus: never wait on it), fall through to the next
                     break
                 time.sleep(2 * (attempt + 1))
     if last is None:

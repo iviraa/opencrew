@@ -119,7 +119,7 @@ def _fake_gemini(replies):
     """Stand-in for llm.gemini: returns scripted responses, one per model call."""
     it = iter(replies)
 
-    def fake(_call):
+    def fake(_call, _tier="flash"):  # the tier rides along
         r = next(it)
         if isinstance(r, Exception):
             raise r

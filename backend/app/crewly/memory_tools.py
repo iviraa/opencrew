@@ -54,7 +54,8 @@ def memory_tools(ctx):
 def memory_prompt(notes):
     """Saved notes as quoted data: they shape answers but never override the rules above them."""
     rule = """
-- When the user states a lasting preference ("we never...", "always...", "remember that..."), call remember with one short sentence.
+- When the user states a lasting preference ("we never...", "always...", "remember that...") or a decision in passing ("let's focus on Georgia
+  Power this quarter", "I want the least exposed site"), call remember with one short sentence; they should not have to ask.
   When they ask to drop one, call forget (list_memory finds its id)."""
     if not notes:
         return rule

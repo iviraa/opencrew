@@ -1,6 +1,9 @@
 """Endpoints for the Crewly app: everything is seen from the logged-in company's side."""
 import math
 
+import os
+import re
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -79,10 +82,37 @@ class Chat(BaseModel):
     messages: list[dict[str, str]]
 
 
+HARD = re.compile(r"\b(plan|what if|what-if|shift|scenario|compare|versus|vs\.?|chart|graph|trend|report|memo|agenda|which|best|most|least|rank|why|explain|"
+                  r"replay|storm|sensitivity|all three|these|them|both)\b", re.I)
+
+
+def tier_for(messages):
+    """pro for turns that need judgment or several tools, flash for lookups; CREWLY_MODEL_TIER=pro|flash overrides."""
+    forced = os.environ.get("CREWLY_MODEL_TIER", "auto").lower()
+    if forced in ("pro", "flash"):
+        return forced
+    last = next((m["text"] for m in reversed(messages) if m["role"] != "model"), "")
+    return "pro" if HARD.search(last) or len(last) > 160 else "flash"
+
+
+def recent_refs(messages):
+    """Overlap ids the conversation just used, newest first, so "these three" and "that one" resolve without guessing."""
+    ids = []
+    for m in reversed(messages[-8:]):
+        for i in re.findall(r"#(\d{1,7})\b", m["text"]):
+            if i not in ids:
+                ids.append(i)
+    return ids[:8]
+
+
 @router.post("/chat")
 def chat(body: Chat, user=Depends(current_user), conn=Depends(get_conn)):
     user = {**user, "memories": load_memories(user)}  # the company's saved notes, read once per message
-    return settle(conn, user["company"], agent.run(conn, body.messages[-20:], app_system(user), app_tools(user)))
+    msgs = body.messages[-30:]
+    refs = recent_refs(msgs)
+    system = app_system(user) + (f"\n\nOverlaps referred to in the last few messages, newest first: {', '.join('#' + i for i in refs)}. "
+                                 "When the user says 'these', 'them', 'that one' or 'the three', they mean these." if refs else "")
+    return settle(conn, user["company"], agent.run(conn, msgs, system, app_tools(user), tier_for(msgs)))
 
 
 @router.post("/proactive/run")
