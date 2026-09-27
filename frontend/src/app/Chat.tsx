@@ -22,22 +22,25 @@ import type { Draft } from "./comms/types";
 import WorkspaceCardView, { type WorkspaceCard } from "./workspace/Cards";
 import RefreshCard from "./refresh/RefreshCard";
 import type { RefreshCardData } from "./refresh/types";
+import { MapCards, type CardProps } from "./maptools/Cards";
+import type { MapCard } from "./maptools/types";
 
 export type ChatMsg = {
   role: "user" | "model"; text: string; ids?: number[]; title?: string; offline?: boolean; confirm?: ChatAction[]; goal?: number;
   plan?: { id: number; horizon?: string; item?: string }; chart?: Chart; table?: Table; report?: Report; finding?: Finding; compare?: Comparison; draft?: Draft;
   workspace?: WorkspaceCard; refresh?: RefreshCardData;
+  cards?: MapCard[];  // map, forecast, route, download, share and explain hand-overs
 };
 
 const html = (s: string) => DOMPurify.sanitize(marked.parse(s, { async: false }) as string);
 
 export default function Chat({ me, msgs, busy, overlaps, requests, plans, onSend, onOpen, onClose, onDone, onOpenRequest, onOpenGoal, onOpenPlan, onClear, memoryTick = 0,
-  partners = [], onOverlay, onPickPlace, picking, onCompare, onNotebook, onOpenView }: {
+  partners = [], onOverlay, onPickPlace, picking, onCompare, onNotebook, onOpenView, mapTools }: {
   me: Me; msgs: ChatMsg[]; busy: boolean; overlaps: Overlap[] | null; requests: CollabRequest[]; plans: PlanStore;
   onSend: (text: string) => void; onOpen: (id: number) => void; onClose: () => void;
   onDone: (r: CollabRequest) => void; onOpenRequest: (id: number) => void; onOpenGoal: (id: number) => void; onOpenPlan: (id: number, item?: string) => void;
   onClear?: () => void; memoryTick?: number;
-  partners?: string[]; onOverlay?: (f: Finding | null) => void; onPickPlace?: PickPlace; picking?: boolean; onCompare?: (f: Finding) => void; onNotebook?: () => void; onOpenView?: (name: string) => void;
+  partners?: string[]; onOverlay?: (f: Finding | null) => void; onPickPlace?: PickPlace; picking?: boolean; onCompare?: (f: Finding) => void; onNotebook?: () => void; onOpenView?: (name: string) => void; mapTools?: CardProps;
 }) {
   const [text, setText] = useState("");
   const [showMemory, setShowMemory] = useState(false);
@@ -110,6 +113,7 @@ export default function Chat({ me, msgs, busy, overlaps, requests, plans, onSend
             {m.draft && <DraftCard draft={m.draft} />}
             {m.refresh && <RefreshCard card={m.refresh} />}
             {m.workspace && <WorkspaceCardView card={m.workspace} onOpen={onOpen} onOpenRequest={onOpenRequest} onOpenPlan={(id) => onOpenPlan(id)} onNotebook={onNotebook} onAsk={send} onOpenView={onOpenView} />}
+            {m.cards && m.cards.length > 0 && <MapCards cards={m.cards} onOpen={onOpen} {...mapTools} />}
             {m.ids && m.ids.length > 0 && m.goal == null && !m.plan && (
               <div className="flex flex-col gap-1 rounded-2xl border-2 border-line p-1">
                 <div className="px-2 pt-1 text-xs font-semibold text-faint">{m.title ?? `${m.ids.length} on the map`} · tap one for details</div>

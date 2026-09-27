@@ -5,6 +5,7 @@ import { api, colorFor, company, publicApi, usd, type Jobs, type Me, type Overla
 import MapPane, { bboxOf, esc, type Fit, type Scene } from "../MapPane";
 import { PanelHeader } from "../panels";
 import { SectionTitle, Split, fc, splitGeoms } from "../weather/shared";
+import type { HazardControl } from "../maptools/types";
 
 type Period = "now7" | "weeks" | "season" | "month";
 type LayerProps = { id: number; layer: string; hazard: string; product: string; label: string; rank: number; period_start: string; period_end: string; props: Record<string, unknown> };
@@ -58,7 +59,7 @@ function mapLine(l: Layers): string {
   return `${parts.join(", ")} on the map nationwide.`;
 }
 
-export default function HazardsTab({ me, projects, side, focus }: { me: Me; projects: Jobs | null; side: React.ReactNode | null; focus?: HazardFocus | null }) {
+export default function HazardsTab({ me, projects, side, focus, control }: { me: Me; projects: Jobs | null; side: React.ReactNode | null; focus?: HazardFocus | null; control?: HazardControl | null }) {
   const [period, setPeriod] = useState<Period>(focus?.period ?? "now7");
   const [month, setMonth] = useState(focus?.month ?? new Date().getMonth() + 1);
   const [sourced, setSourced] = useState<Record<string, Sourced>>({});
@@ -78,6 +79,12 @@ export default function HazardsTab({ me, projects, side, focus }: { me: Me; proj
     if (focus.month) setMonth(focus.month);
     setOpen({ kind: focus.kind, id: focus.id });
   }, [focus?.at]);  // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {  // crewly set the period, month or hazards from the chat
+    if (!control) return;
+    if (control.period) setPeriod(control.period);
+    if (control.month) setMonth(control.month);
+    if (control.hazards?.length) setOn(new Set(control.hazards));
+  }, [control?.at]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setData(null); setErr(null);

@@ -58,6 +58,8 @@ export type ChatAction = {  // what the chat asks the screen to do
   type: string; ids?: number[]; id?: number; opportunity_id?: number; opportunity_ids?: number[]; bbox?: [number, number, number, number];
   action?: "send_request" | "respond"; note?: string; label?: string; title?: string; request_id?: number; decision?: "approved" | "declined"; feedback?: string;
   horizon?: string; item?: string; chart?: unknown; table?: unknown; report?: unknown; finding?: unknown; compare?: unknown; draft?: unknown; refresh?: unknown; ask?: boolean;  // hand-overs: rendered as cards
+  tab?: string; period?: string; month?: number; hazards?: string[]; filters?: Record<string, unknown>; partner?: string; fit?: unknown;  // map_view
+  projects?: unknown; timeline?: unknown; forecast?: unknown; route?: unknown; download?: unknown; share?: unknown; explain?: unknown;  // map tool cards
 };
 
 export type ChatReply = { reply: string; ui_actions: ChatAction[]; unsourced: string[]; offline?: boolean };

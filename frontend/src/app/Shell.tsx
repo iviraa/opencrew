@@ -27,6 +27,8 @@ import { cardOf, viewsApi, type ViewState } from "./workspace/types";
 import ScanOverlay from "./scan/ScanOverlay";
 import { RADAR_MS, pop as popAt, useScan, type ScanCtx } from "./scan/useScan";
 import type { RefreshRow } from "./refresh/types";
+import MonthGrid from "./maptools/MonthGrid";
+import { useMapTools } from "./maptools/useMapTools";
 
 const Beaver = lazy(() => import("./Beaver"));
 
@@ -255,9 +257,10 @@ export default function Shell() {
       if (typeof saveAs?.name === "string") viewsApi.save(saveAs.name, currentView()).then(() => say(`Saved this view as ${saveAs.name}.`, "nod")).catch(() => say("I couldn't save that view.", "sad"));
       const planned = r.ui_actions.filter((a) => a.type === "plan" && a.id != null).pop();
       const plan = planned ? { id: planned.id!, horizon: planned.horizon, item: planned.item } : undefined;
+      const cards = mt.cardsOf(r.ui_actions);
       setChat([...next, { role: "model", text: r.reply || "Done.", ids, ...(title && { title }), offline: r.offline, ...(confirm.length && { confirm }), ...(goal != null && { goal }), ...(plan && { plan }),
         ...(chart && { chart }), ...(table && { table }), ...(report && { report }), ...(finding && { finding }), ...(compare && { compare }), ...(draft && { draft }),
-        ...(workspace && { workspace }), ...(refresh && { refresh }) }]);
+        ...(workspace && { workspace }), ...(refresh && { refresh }), ...(cards.length && { cards }) }]);
       if (finding) setOverlay(finding);
       if (remembered) setMemoryTick((t) => t + 1);  // crewly saved or dropped a note
       if (r.offline) say("I'm out of energy for today, sorry!", "sad");
@@ -270,6 +273,7 @@ export default function Shell() {
       else if (draft) say("Draft ready. Edit it, then copy or send.", "nod");
       else if (refresh) say(refresh.ask ? "Apply it from the card when you are sure." : "Here is where the planner lists stand.", "nod");
       else if (workspace) say(workspace.kind === "brief" ? "Here is your week at a glance." : workspace.kind === "reminder" ? "Noted. It will pop up in the bell when due." : "Here you go.", "nod");
+      else if (cards.length) say(mt.line(cards) ?? "Here you go.", "nod");
       else if (report) say("Your report is ready. Open it to print or save.", "happy");
       else if (chart) say("Here's your chart.", "nod");
       else if (table) say(`Here are ${table.count} rows, with a CSV download.`, "nod");
@@ -279,6 +283,7 @@ export default function Shell() {
       if (plan?.item) { setTab("overlaps"); push({ kind: "plan", id: plan.id, item: plan.item }); }  // an explained item opens in the panel
       const fly = r.ui_actions.filter((a) => a.type === "fly").pop();
       if (fly?.bbox && !ids?.length) setFit({ bbox: fly.bbox, key: `y${Date.now()}`, maxZoom: 10 });
+      await mt.apply(r.ui_actions);  // map_view, highlights, routes and the timeline
     } catch {
       setChat([...next, { role: "model", text: "Sorry, I couldn't reach the server just now. Please try again.", offline: true }]);
       say("I couldn't reach the server.", "sad");
@@ -398,13 +403,14 @@ export default function Shell() {
     if (b) setFit({ bbox: b, key: `p${id}${Date.now()}`, maxZoom: 11 });
     if (f) say(`Here's ${f.properties.name.length > 40 ? `${f.properties.name.slice(0, 40)}...` : f.properties.name}.`, "nod");
   };
+  const mt = useMapTools({ me, projects, ov, setTab, setFit, showIds, setPartner, pickProject, openOverlap });  // the chat's map, data and explain hand-overs
 
   // ---------- right quarter ----------
   const panel = !me || !top ? null : top.kind === "chat" ? (
     <Chat me={me} msgs={chat} busy={chatBusy} overlaps={ov?.overlaps ?? null} requests={reqs} plans={plans} onSend={sendChat} onOpen={openOverlap}
       onDone={gotRequest} onOpenRequest={openRequest} onOpenGoal={(id) => push({ kind: "goal", id })} onOpenPlan={(id, item) => { setTab("overlaps"); push({ kind: "plan", id, item }); }}
       onClose={() => setStack((s) => s.filter((p) => p.kind !== "chat"))} onClear={clearChat} memoryTick={memoryTick}
-      partners={partnerIds} onOverlay={setOverlay} onPickPlace={pickPlace} picking={picking} onCompare={(f) => push({ kind: "notebook", preselect: f.id })} onNotebook={() => push({ kind: "notebook" })} onOpenView={openView} />
+      partners={partnerIds} onOverlay={setOverlay} onPickPlace={pickPlace} picking={picking} onCompare={(f) => push({ kind: "notebook", preselect: f.id })} onNotebook={() => push({ kind: "notebook" })} onOpenView={openView} mapTools={mt.cardProps} />
   ) : top.kind === "notebook" ? (
     <NotebookPanel onBack={back} preselect={top.preselect} onOpen={(f) => push({ kind: "finding", id: f.id, f })} onCombined={(f) => { setOverlay(f); push({ kind: "finding", id: f.id, f }); }} />
   ) : top.kind === "finding" ? (
@@ -477,11 +483,15 @@ export default function Shell() {
               onRebuild={() => { const p = plans.plans[top.id]; if (p) plans.byHorizon(p.horizon, true).then((np) => { setStack((s) => [...s.slice(0, -1), { kind: "plan", id: np.id }]); say(planLine(np), "nod"); }).catch(() => {}); }} />
           } />
         )}
-        {me && tab === "overlaps" && top?.kind !== "plan" && (
+        {me && tab === "overlaps" && top?.kind !== "plan" && mt.timeline && (  // a timeline from the chat takes the map's place until closed
+          <Split side={roomy(panel ?? overlapsSide)} map={<MonthGrid timeline={mt.timeline} onPick={(id, mine) => mt.cardProps.onPickProject?.(id, mine)} onBack={mt.closeTimeline} />} />
+        )}
+        {me && tab === "overlaps" && top?.kind !== "plan" && !mt.timeline && (
           <Split side={roomy(panel ?? overlapsSide)} map={
-            <MapPane scene={shownScene} fit={fit} onPick={(p) => p.startsWith("op:") && openOverlap(Number(p.slice(3)))}
+            <MapPane scene={mt.decorate(shownScene)} fit={fit} onPick={(p) => p.startsWith("op:") && openOverlap(Number(p.slice(3)))}
               onMapClick={(lon, lat) => { const cb = pickCb.current; if (cb) { pickCb.current = null; setPicking(false); cb(lon, lat); } }}>
               {picking && <div className="pop-in absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full border-2 border-pen bg-white px-3 py-1 text-xs font-semibold">Click the map to set the place</div>}
+              {mt.decorated && !overlay && !picking && <button onClick={mt.clear} className="pop-in absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full border-2 border-pen bg-white px-3 py-1 text-xs font-semibold hover:bg-grape-soft">Crewly's highlight is on the map · clear</button>}
               {overlay && !picking && (
                 <button onClick={() => setOverlay(null)} className="pop-in absolute left-1/2 top-3 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border-2 border-pen bg-white px-3 py-1 text-xs font-semibold hover:bg-grape-soft">
                   Scenario shown: {changesOf(overlay).length} change{changesOf(overlay).length === 1 ? "" : "s"} · clear
@@ -504,7 +514,7 @@ export default function Shell() {
             </MapPane>
           } />
         )}
-        {me && tab === "weather" && <HazardsTab me={me} projects={projects} side={roomy(panel)} focus={hazardFocus} />}
+        {me && tab === "weather" && <HazardsTab me={me} projects={projects} side={roomy(panel)} focus={hazardFocus} control={mt.hazardControl} />}
         {me && tab === "news" && <NewsTab projects={projects} side={roomy(panel)} onOpenOverlap={openOverlap} />}
         {!me && !err && <div className="grid flex-1 place-items-center text-muted"><span className="dots">Getting your projects</span></div>}
 
