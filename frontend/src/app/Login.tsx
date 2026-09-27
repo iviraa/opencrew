@@ -6,6 +6,8 @@ import { beaver } from "./mascot";
 const Beaver = lazy(() => import("./Beaver"));
 
 const DEMO_PASSWORD = "crewly123";
+const LINES = ["Dam, son.", "Nature's engineers, now with a hard hat."];  // the beaver takes turns on the login page
+const LINE_MS = 4500;
 const DEMO = [{ login: "dominion", id: "desc" }, { login: "georgia", id: "gpc" }];  // the two demo logins; other utilities are neighbors in the data
 
 // the chips stand on the built-in registry, so they are there before — and without — the directory
@@ -17,6 +19,12 @@ export default function Login() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [people, setPeople] = useState<Company[]>(demoChips);
+  const [line, setLine] = useState(0);
+
+  useEffect(() => {
+    const t = setInterval(() => setLine((i) => (i + 1) % LINES.length), LINE_MS);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     publicApi.get<Company[]>("/api/app/directory").then((cs) => setPeople(demoChips(cs)))
@@ -39,6 +47,9 @@ export default function Login() {
       <div className="board pop-in flex w-full max-w-[880px] items-stretch gap-2 p-8 md:p-10">
         <div className="board-frame" />
         <div className="relative hidden w-[300px] shrink-0 md:block">
+          <div className="absolute left-4 top-4 z-10" aria-live="polite">
+            <div key={line} className="speech speech-down speech-in">{LINES[line]}</div>
+          </div>
           <Suspense fallback={null}><Beaver className="absolute -bottom-6 -left-6 h-[360px] w-[330px]" /></Suspense>
         </div>
         <form onSubmit={submit} className="flex flex-1 flex-col gap-5 md:pl-6">
