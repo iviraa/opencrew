@@ -62,6 +62,26 @@ def one(refresh_id: int, user=Depends(current_user), conn=Depends(get_conn)):
     return card(row)
 
 
+@router.post("/check")
+def check_all(user=Depends(current_user), conn=Depends(get_conn)):
+    """The scan's call: kick off checks for sources that are due, and hand back what was promoted in the last day."""
+    from datetime import datetime, timedelta, timezone
+    since = datetime.now(timezone.utc) - timedelta(hours=24)
+    latest = {}
+    for r in stage.latest(conn):
+        latest.setdefault(r["source"], r)
+    started = []
+    for name, src in SOURCES.items():
+        last = latest.get(name)
+        due = not last or not last.get("checked_at") or last["checked_at"] < datetime.now(timezone.utc) - timedelta(days=getattr(src, "cadence_days", 7))
+        if due and start(name).get("started"):
+            started.append(name)
+    promoted = [{"source": r["source"], "planner": getattr(SOURCES.get(r["source"]), "planner", r["source"]), "edition": r.get("edition"),
+                 "promoted_at": r.get("promoted_at"), "diff": r.get("diff")}
+                for r in latest.values() if r.get("status") == "promoted" and r.get("promoted_at") and r["promoted_at"] >= since]
+    return {"started": started, "promoted": promoted}
+
+
 @router.post("/check/{source}")
 def check(source: str, user=Depends(current_user)):
     return start(source)

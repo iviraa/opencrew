@@ -14,7 +14,7 @@ from app.db import ROOT
 TABLES = ["org", "source_doc", "job", "job_version", "job_review", "opportunity", "contact", "outreach", "tract", "asset", "grid_line",
           "job_hazard", "storm_event", "incident", "outlook", "phase_risk", "joint_plan", "storm_plan",
           "hazard_fetch", "hazard_layer", "hazard_climate", "hazard_nri",
-          "feasibility_assessment", "coordination_plan", "news_lexicon", "news_raw", "news_item", "report", "finding", "hazard_events_year", "source_refresh"]  # parents first; everything the app reads
+          "feasibility_assessment", "coordination_plan", "news_lexicon", "news_raw", "news_item", "report", "finding", "hazard_events_year", "source_refresh", "share", "export", "forecast_cache"]  # parents first; everything the app reads
 CHUNK = 400_000  # bytes of sql per request; the management api rejects bigger bodies
 
 
