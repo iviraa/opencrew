@@ -61,9 +61,17 @@ def jobs_for(conn, company, opportunity_ids=(), job_ids=(), plan_id=None):
     if plan_id:
         p = conn.execute("SELECT items FROM coordination_plan WHERE id = %s AND company_id = %s", (int(plan_id), company)).fetchone()
         opps += [int(i["id"]) for i in (p["items"] if p else []) if i.get("state") != "skipped"][:8]
-    for op in conn.execute("SELECT job_a, job_b FROM opportunity WHERE id = ANY(%s)", (opps,)).fetchall() if opps else []:
+    for op in conn.execute("""SELECT op.job_a, op.job_b FROM opportunity op JOIN job a ON a.id = op.job_a JOIN job b ON b.id = op.job_b
+                              WHERE op.id = ANY(%s) AND %s IN (a.org_id, b.org_id)""", (opps, company)).fetchall() if opps else []:
         ids.update((op["job_a"], op["job_b"]))
-    return conn.execute(JOBS_SQL, {"ids": list(ids)}).fetchall() if ids else []
+    if not ids and (opps or job_ids):
+        raise ValueError("none of those overlaps or projects are ours")
+    rows = conn.execute(JOBS_SQL, {"ids": list(ids)}).fetchall() if ids else []
+    ours = {r["id"] for r in rows if r["org_id"] == company} | {o for op in conn.execute(
+        """SELECT op.job_a, op.job_b FROM opportunity op JOIN job a ON a.id = op.job_a JOIN job b ON b.id = op.job_b
+           WHERE (op.job_a = ANY(%(ids)s) OR op.job_b = ANY(%(ids)s)) AND %(c)s IN (a.org_id, b.org_id)""", {"ids": list(ids), "c": company}).fetchall()
+        for o in (op["job_a"], op["job_b"])}
+    return [r for r in rows if r["id"] in ours]  # our projects and partners' inside our overlaps only
 
 
 def quantile(vals, q):

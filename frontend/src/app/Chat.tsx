@@ -1,5 +1,3 @@
-import DOMPurify from "dompurify";
-import { marked } from "marked";
 import { ArrowUp, Brain, CloudOff, Eraser, NotebookPen, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import Confirm from "./Confirm";
@@ -17,26 +15,37 @@ import FindingCard from "./findings/FindingCard";
 import type { PickPlace } from "./findings/Knobs";
 import type { Comparison, Finding } from "./findings/types";
 import type { PlanStore } from "./plan/usePlans";
+import DraftCard from "./comms/DraftCard";
+import type { Draft } from "./comms/types";
+import WorkspaceCardView, { type WorkspaceCard } from "./workspace/Cards";
+import RefreshCard from "./refresh/RefreshCard";
+import type { RefreshCardData } from "./refresh/types";
+import { MapCards, type CardProps } from "./maptools/Cards";
+import type { MapCard } from "./maptools/types";
+import { Drawer } from "./ui";
+import { RefText } from "./ui/RefText";
+import { useRefIndex } from "./ui/refs";
 
 export type ChatMsg = {
   role: "user" | "model"; text: string; ids?: number[]; title?: string; offline?: boolean; confirm?: ChatAction[]; goal?: number;
-  plan?: { id: number; horizon?: string; item?: string }; chart?: Chart; table?: Table; report?: Report; finding?: Finding; compare?: Comparison;
+  plan?: { id: number; horizon?: string; item?: string }; chart?: Chart; table?: Table; report?: Report; finding?: Finding; compare?: Comparison; draft?: Draft;
+  workspace?: WorkspaceCard; refresh?: RefreshCardData;
+  cards?: MapCard[];  // map, forecast, route, download, share and explain hand-overs
 };
 
-const html = (s: string) => DOMPurify.sanitize(marked.parse(s, { async: false }) as string);
-
 export default function Chat({ me, msgs, busy, overlaps, requests, plans, onSend, onOpen, onClose, onDone, onOpenRequest, onOpenGoal, onOpenPlan, onClear, memoryTick = 0,
-  partners = [], onOverlay, onPickPlace, picking, onCompare, onNotebook }: {
+  partners = [], onOverlay, onPickPlace, picking, onCompare, onNotebook, onOpenView, mapTools }: {
   me: Me; msgs: ChatMsg[]; busy: boolean; overlaps: Overlap[] | null; requests: CollabRequest[]; plans: PlanStore;
   onSend: (text: string) => void; onOpen: (id: number) => void; onClose: () => void;
   onDone: (r: CollabRequest) => void; onOpenRequest: (id: number) => void; onOpenGoal: (id: number) => void; onOpenPlan: (id: number, item?: string) => void;
   onClear?: () => void; memoryTick?: number;
-  partners?: string[]; onOverlay?: (f: Finding | null) => void; onPickPlace?: PickPlace; picking?: boolean; onCompare?: (f: Finding) => void; onNotebook?: () => void;
+  partners?: string[]; onOverlay?: (f: Finding | null) => void; onPickPlace?: PickPlace; picking?: boolean; onCompare?: (f: Finding) => void; onNotebook?: () => void; onOpenView?: (name: string) => void; mapTools?: CardProps;
 }) {
   const [text, setText] = useState("");
   const [showMemory, setShowMemory] = useState(false);
   const end = useRef<HTMLDivElement>(null);
   const byId = new Map((overlaps ?? []).map((o) => [o.id, o]));
+  const refs = useRefIndex(overlaps);
   const lastSent = requests.find((r) => r.from_company === me.company);  // newest first
   const ideas = [
     lastSent ? `Did ${company(lastSent.to_company).name} approve my last request?` : "Any requests waiting for me?",
@@ -89,26 +98,34 @@ export default function Chat({ me, msgs, busy, overlaps, requests, plans, onSend
             {m.offline ? (
               <p className="flex max-w-[95%] gap-2 rounded-2xl rounded-tl-sm bg-warn-soft px-3 py-2 text-sm text-ink"><CloudOff size={16} className="mt-0.5 shrink-0 text-warn" />{m.text}</p>
             ) : (
-              <div className="crewly max-w-[95%] rounded-2xl rounded-tl-sm bg-soft px-3 py-2 text-sm" dangerouslySetInnerHTML={{ __html: html(m.text) }} />
+              <RefText text={m.text} index={refs} onOpen={onOpen} className="crewly max-w-[95%] rounded-2xl rounded-tl-sm bg-soft px-3 py-2 text-sm" />
             )}
             {m.confirm?.map((a, j) => (
               <Confirm key={j} me={me} action={a} overlaps={overlaps} requests={requests} onDone={onDone} onOpenRequest={onOpenRequest} />
             ))}
             {m.goal != null && <GoalChip id={m.goal} onOpen={() => onOpenGoal(m.goal!)} />}
-            {m.plan && <PlanCard store={plans} id={m.plan.id} horizon={m.plan.horizon} item={m.plan.item} onOpenPlan={onOpenPlan} onOpenGoal={onOpenGoal} />}
+            {m.plan && <PlanCard store={plans} id={m.plan.id} horizon={m.plan.horizon} item={m.plan.item} onOpenPlan={onOpenPlan} onOpenGoal={onOpenGoal} onOpenOverlap={onOpen} />}
             {m.chart && <ChartCard chart={m.chart} />}
             {m.table && <TableCard table={m.table} />}
             {m.report && <ReportCard report={m.report} />}
             {m.finding && <FindingCard finding={m.finding} partners={partners} onOpen={onOpen} onOverlay={onOverlay} onPickPlace={onPickPlace} picking={picking} onCompare={onCompare} />}
             {m.compare && <CompareCard comparison={m.compare} />}
-            {m.ids && m.ids.length > 0 && m.goal == null && !m.plan && (
-              <div className="flex flex-col gap-1 rounded-2xl border-2 border-line p-1">
-                <div className="px-2 pt-1 text-xs font-semibold text-faint">{m.title ?? `${m.ids.length} on the map`} · tap one for details</div>
-                {m.ids.map((id) => byId.get(id)).filter((o): o is Overlap => !!o).map((o) => (
-                  <OverlapCard key={o.id} me={me} o={o} req={latestFor(requests, o.id)} onClick={() => onOpen(o.id)} />
-                ))}
-              </div>
-            )}
+            {m.draft && <DraftCard draft={m.draft} />}
+            {m.refresh && <RefreshCard card={m.refresh} />}
+            {m.workspace && <WorkspaceCardView card={m.workspace} onOpen={onOpen} onOpenRequest={onOpenRequest} onOpenPlan={(id) => onOpenPlan(id)} onNotebook={onNotebook} onAsk={send} onOpenView={onOpenView} />}
+            {m.cards && m.cards.length > 0 && <MapCards cards={m.cards} onOpen={onOpen} {...mapTools} />}
+            {m.ids && m.ids.length > 0 && m.goal == null && !m.plan && (() => {
+              const os = m.ids.map((id) => byId.get(id)).filter((o): o is Overlap => !!o);
+              const card = (o: Overlap) => <OverlapCard key={o.id} me={me} o={o} req={latestFor(requests, o.id)} onClick={() => onOpen(o.id)} />;
+              const head = os.slice(0, os.length > 4 ? 3 : 4), rest = os.slice(head.length);
+              return (
+                <div className="flex flex-col gap-1 rounded-2xl border-2 border-line p-1.5">
+                  <div className="px-1.5 pt-0.5 text-[11px] font-semibold text-faint">{m.title ?? `${os.length} on the map`} · tap one for details</div>
+                  {head.map(card)}
+                  {rest.length > 0 && <Drawer title={`${rest.length} more`} summary={rest.map((o) => `#${o.id}`).join(", ")}>{rest.map(card)}</Drawer>}
+                </div>
+              );
+            })()}
           </div>
         ))}
         {busy && <div className="typing flex gap-1 self-start rounded-2xl rounded-tl-sm bg-soft px-3 py-3"><span /><span /><span /></div>}

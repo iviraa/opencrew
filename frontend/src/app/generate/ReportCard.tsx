@@ -1,25 +1,33 @@
-import { ExternalLink, FileText, RefreshCw } from "lucide-react";
+import { ExternalLink, FileText, Printer, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { API_BASE } from "../../apiBase";
 import { api, supabase } from "../data";
-import { SECTION_LABEL, type Report } from "./types";
+import { Card, Chip, Drawer, Lead, Note, Pill, Row, StatRow, dateShort } from "../ui";
+import { KIND_LABEL, SECTION_LABEL, type Report } from "./types";
 
-// a printable report crewly wrote: opens in a new tab (fetched with the login, shown from a blob), sections can be trimmed and regenerated
+const fetchHtml = async (id: number) => {
+  const token = (await supabase.auth.getSession()).data.session?.access_token;
+  const res = await fetch(`${API_BASE}/api/app/report/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error(res.statusText);
+  return res.text();
+};
+
+// a printable report crewly wrote: a document preview in the chat, opened in a new tab with the login; sections can be trimmed and regenerated
 export default function ReportCard({ report: initial }: { report: Report }) {
+  const [more, setMore] = useState(false);  // the summary folds to four lines
   const [report, setReport] = useState(initial);
   const [picked, setPicked] = useState<string[]>(initial.sections);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const open = async () => {
+  const open = async (print = false) => {
     setErr(null);
     const win = window.open("", "_blank");  // open first so browsers allow it, then fill it
     try {
-      const token = (await supabase.auth.getSession()).data.session?.access_token;
-      const res = await fetch(`${API_BASE}/api/app/report/${report.id}`, { headers: { Authorization: `Bearer ${token}` } });
-      if (!res.ok) throw new Error(res.statusText);
-      const url = URL.createObjectURL(await res.blob());
-      if (win) win.location.href = url; else window.location.href = url;
+      const html = await fetchHtml(report.id);
+      if (!win) throw new Error("The browser blocked the new tab.");
+      win.document.open(); win.document.write(html); win.document.close();
+      if (print) setTimeout(() => win.print(), 400);
     } catch (e) { win?.close(); setErr(e instanceof Error ? e.message : String(e)); }
   };
 
@@ -31,29 +39,34 @@ export default function ReportCard({ report: initial }: { report: Report }) {
     finally { setBusy(false); }
   };
   const changed = picked.join() !== report.sections.join();
+  const kind = KIND_LABEL[report.kind] ?? report.kind.replace(/_/g, " ");
+  const figures = (report.figures ?? []).slice(0, 4);
 
   return (
-    <div className="pop-in rounded-2xl border-2 border-pen bg-white p-2">
-      <div className="flex items-start gap-2 px-1">
-        <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-grape-soft text-grape"><FileText size={16} /></span>
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold leading-snug">{report.title}</div>
-          <div className="text-[11px] text-faint">Print or save as PDF from the page</div>
-        </div>
-      </div>
-      <div className="mt-1.5 flex flex-wrap gap-1 px-1">
-        {report.all_sections.map((s) => (
-          <label key={s} className={`flex cursor-pointer items-center gap-1 rounded-full border-2 px-2 py-0.5 text-[11px] font-semibold ${picked.includes(s) ? "border-pen" : "border-line text-muted"}`}>
-            <input type="checkbox" className="hidden" checked={picked.includes(s)} onChange={(e) => setPicked((p) => e.target.checked ? [...p, s] : p.filter((x) => x !== s))} />
-            {SECTION_LABEL[s] ?? s}
-          </label>
-        ))}
-      </div>
-      <div className="mt-2 flex gap-1.5 px-1">
-        <button onClick={open} className="flex flex-1 items-center justify-center gap-1 rounded-full bg-grape px-2.5 py-1 text-xs font-semibold text-white"><ExternalLink size={13} /> Open report</button>
-        {changed && <button onClick={regenerate} disabled={busy || !picked.length} className="flex items-center justify-center gap-1 rounded-full border-2 border-line px-2.5 py-1 text-xs font-semibold hover:border-pen disabled:opacity-40"><RefreshCw size={13} /> {busy ? "..." : "Regenerate"}</button>}
-      </div>
-      {err && <p className="px-1 pt-1 text-[11px] text-warn">{err}</p>}
-    </div>
+    <Card icon={<FileText size={15} />} title={report.title} busy={busy}
+      sub={<Row><Chip tone="info">{kind}</Chip><span>{dateShort(report.created_at)}</span><span>· {report.sections.length} section{report.sections.length === 1 ? "" : "s"}</span></Row>}>
+      <Lead>
+        <span className={more ? "" : "line-clamp-4"}>{report.summary ?? `A printable ${kind.toLowerCase()} covering ${report.sections.map((s) => (SECTION_LABEL[s] ?? s).toLowerCase()).join(", ")}.`}</span>
+        {(report.summary?.length ?? 0) > 260 && <button type="button" onClick={() => setMore(!more)} className="ml-1 text-xs font-semibold text-grape hover:underline">{more ? "Less" : "More"}</button>}
+      </Lead>
+      {figures.length > 0 && <StatRow items={figures.map((f) => ({ label: f.label, value: f.value, note: f.note }))} cols={figures.length >= 4 ? 2 : undefined} />}
+      <Drawer title="Sections" summary={report.all_sections.map((s) => SECTION_LABEL[s] ?? s).join(" · ")}>
+        <Row>
+          {report.all_sections.map((s) => (
+            <label key={s} className={`flex cursor-pointer items-center gap-1 rounded-full border-2 px-2 py-0.5 text-[11px] font-semibold ${picked.includes(s) ? "border-pen" : "border-line text-muted"}`}>
+              <input type="checkbox" className="hidden" checked={picked.includes(s)} onChange={(e) => setPicked((p) => e.target.checked ? [...p, s] : p.filter((x) => x !== s))} />
+              {SECTION_LABEL[s] ?? s}
+            </label>
+          ))}
+        </Row>
+        {changed ? <Pill onClick={regenerate} disabled={busy || !picked.length} icon={<RefreshCw size={12} />}>{busy ? "Writing" : "Rewrite with these sections"}</Pill>
+          : <Note>Untick a section and rewrite to get a shorter document.</Note>}
+      </Drawer>
+      <Row>
+        <Pill primary grow onClick={() => open(false)} icon={<ExternalLink size={13} />}>Open report</Pill>
+        <Pill onClick={() => open(true)} icon={<Printer size={13} />}>Print / PDF</Pill>
+      </Row>
+      {err && <Note tone="warn">{err}</Note>}
+    </Card>
   );
 }

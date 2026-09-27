@@ -38,6 +38,7 @@ export type Overlap = Opportunity & { a_end: string; b_end: string; partner?: Co
 export const partnerOf = (me: Me, o: Opportunity) => (o.a_org === me.company ? o.b_org : o.a_org);  // the other side of an overlap
 export type OverlapDetail = OpportunityDetail & { a_end: string; b_end: string };
 export type Jobs = GeoJSON.FeatureCollection<GeoJSON.Geometry, Job>;
+export type ContextJob = { id: string; name: string; org_id: string; org: string; kv: number | null; dotted: boolean };
 
 export type RequestSummary = { title: string; ours: string; theirs: string; tier: string; savings_low: number; savings_high: number };
 
@@ -57,7 +58,9 @@ export type Notice = {
 export type ChatAction = {  // what the chat asks the screen to do
   type: string; ids?: number[]; id?: number; opportunity_id?: number; opportunity_ids?: number[]; bbox?: [number, number, number, number];
   action?: "send_request" | "respond"; note?: string; label?: string; title?: string; request_id?: number; decision?: "approved" | "declined"; feedback?: string;
-  horizon?: string; item?: string; chart?: unknown; table?: unknown; report?: unknown; finding?: unknown; compare?: unknown;  // hand-overs: rendered as cards
+  horizon?: string; item?: string; chart?: unknown; table?: unknown; report?: unknown; finding?: unknown; compare?: unknown; draft?: unknown; refresh?: unknown; ask?: boolean;  // hand-overs: rendered as cards
+  tab?: string; period?: string; month?: number; hazards?: string[]; filters?: Record<string, unknown>; partner?: string; fit?: unknown; layers?: { others?: boolean };  // map_view
+  projects?: unknown; timeline?: unknown; forecast?: unknown; route?: unknown; download?: unknown; share?: unknown; explain?: unknown;  // map tool cards
 };
 
 export type ChatReply = { reply: string; ui_actions: ChatAction[]; unsourced: string[]; offline?: boolean };
@@ -80,6 +83,7 @@ export const api = {
   me: () => call<Me>("/api/app/me"),
   companies: () => call<Company[]>("/api/app/companies"),
   projects: () => call<Jobs>("/api/app/projects"),
+  contextProjects: (bbox: [number, number, number, number]) => call<GeoJSON.FeatureCollection<GeoJSON.Geometry, ContextJob>>(`/api/app/context_projects?bbox=${bbox.map((n) => n.toFixed(3)).join(",")}`),  // other utilities' projects in view
   overlaps: () => call<{ overlaps: Overlap[]; jobs: Jobs }>("/api/app/overlaps"),
   overlap: (id: number) => call<OverlapDetail>(`/api/opportunities/${id}`),
   chat: (messages: { role: "user" | "model"; text: string }[]) =>

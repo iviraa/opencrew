@@ -2,6 +2,7 @@ import { Check, Send, X } from "lucide-react";
 import { useState } from "react";
 import { company, overlapFor, requests as requestsApi, type ChatAction, type CollabRequest, type Me, type Overlap } from "./data";
 import { say } from "./mascot";
+import { Card, Chip, Note, Pill, Row } from "./ui";
 
 // what already happened, read from live requests so a reloaded chat never offers the same send twice
 function doneState(me: Me, a: ChatAction, reqs: CollabRequest[]) {
@@ -39,32 +40,29 @@ export default function Confirm({ me, action, overlaps, requests, onDone, onOpen
   };
 
   const decline = !send && action.decision === "declined";
+  const icon = send ? <Send size={15} /> : decline ? <X size={15} /> : <Check size={15} />;
   return (
-    <div className="pop-in rounded-2xl border-2 border-pen bg-white px-3 py-2.5">
-      <div className="text-sm font-semibold leading-snug">{action.label}</div>
-      {action.title && <div className="line-clamp-2 text-xs text-muted">{action.title}</div>}
+    <Card icon={icon} title={action.label} sub={action.title} busy={busy}
+      right={done ? <Chip tone="good" icon={<Check size={11} />}>{done.text}</Chip> : cancelled ? <Chip>Cancelled</Chip> : <Chip tone="amber">Needs your confirm</Chip>}>
       {done ? (
-        <div className="mt-1.5 flex items-center gap-1.5 text-sm font-semibold text-save">
-          <Check size={15} /> {done.text}
-          <button onClick={() => onOpenRequest(done.r.id)} className="ml-auto text-xs text-grape underline">See request</button>
-        </div>
+        <Row><Pill onClick={() => onOpenRequest(done.r.id)}>See the request</Pill></Row>
       ) : cancelled ? (
-        <div className="mt-1.5 text-xs text-muted">Cancelled. Nothing was sent.</div>
+        <Note>Nothing was sent.</Note>
       ) : (
         <>
           <textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} maxLength={2000}
             placeholder={send ? "Note for them (optional)" : "Feedback for them (optional)"}
-            className="mt-2 w-full resize-none rounded-xl border-2 border-line px-2.5 py-1.5 text-sm outline-none focus:border-pen" />
-          <div className="mt-1.5 flex gap-2">
+            className="w-full resize-none rounded-xl border-2 border-line px-2.5 py-1.5 text-sm outline-none focus:border-pen" />
+          <Row>
             <button onClick={confirm} disabled={busy}
               className={`pen-btn flex flex-1 items-center justify-center gap-1.5 px-3 py-1.5 text-sm font-semibold ${decline ? "bg-white" : send ? "bg-grape text-white" : "bg-save text-white"}`}>
-              {send ? <Send size={14} /> : decline ? <X size={14} /> : <Check size={14} />} {busy ? "..." : "Confirm"}
+              {icon} {busy ? "Working" : "Confirm"}
             </button>
-            <button onClick={() => setCancelled(true)} disabled={busy} className="rounded-full px-3 py-1.5 text-sm font-semibold text-muted hover:text-ink">Cancel</button>
-          </div>
-          {err && <p className="mt-1 text-xs text-warn">{err}</p>}
+            <Pill onClick={() => setCancelled(true)} disabled={busy}>Cancel</Pill>
+          </Row>
+          {err && <Note tone="warn">{err}</Note>}
         </>
       )}
-    </div>
+    </Card>
   );
 }

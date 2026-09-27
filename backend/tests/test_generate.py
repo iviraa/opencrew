@@ -54,7 +54,7 @@ def test_report_page_escapes_and_prints():
 
 
 def test_report_kinds_and_default_sections():
-    assert set(reports.KINDS) == {"feasibility", "cost_analysis", "hazard_exposure", "plan", "pack", "finding"}
+    assert set(reports.KINDS) == {"feasibility", "cost_analysis", "hazard_exposure", "plan", "pack", "finding", "agenda", "memo"}
     with pytest.raises(ValueError):
         reports.build(None, "gpc", "nope")
 
@@ -131,9 +131,87 @@ def test_tables_filter_and_cap(conn):
 @needs_db
 def test_reports_carry_the_numbers(conn):
     r = reports.build(conn, "gpc", "cost_analysis", "#18", ["savings"])
-    assert r["sections"] == ["savings"] and "Coordinating saves" in r["html"] and "$" in r["html"]
+    assert r["sections"] == ["savings"] and "estimated to save" in r["html"] and "$" in r["html"] and r["summary"] and r["figures"]
     got = reports.get(conn, r["id"], "gpc")
     assert got and got["title"] == r["title"]
     assert reports.get(conn, r["id"], "desc") is None  # another company cannot open it
     with pytest.raises(ValueError):
         reports.build(conn, "gpc", "feasibility")  # needs an id
+
+
+# ---------- settle: cards match the words ----------
+
+@needs_db
+def test_report_card_drops_the_plan_it_read(conn):
+    out = {"reply": "Here is the report.", "ui_actions": [{"type": "plan", "horizon": "year", "id": 1}, {"type": "report", "report": {"id": 1}}]}
+    assert [a["type"] for a in generate_tools.settle(conn, "desc", out)["ui_actions"]] == ["report"]
+
+
+@needs_db
+def test_overlap_cards_follow_the_ids_named(conn):
+    from app.crewly.app_tools import mine_sql
+    ours = [r["id"] for r in conn.execute(mine_sql("desc") + " ORDER BY op.id LIMIT 3").fetchall()]
+    theirs = conn.execute("SELECT op.id FROM opportunity op JOIN job ja ON ja.id = op.job_a JOIN job jb ON jb.id = op.job_b "
+                          "WHERE 'desc' NOT IN (ja.org_id, jb.org_id) LIMIT 1").fetchone()["id"]
+    out = {"reply": f"Best by savings: #{ours[2]} and #{ours[0]}; request #{theirs} is not ours.",
+           "ui_actions": [{"type": "show_overlaps", "ids": [ours[1]]}, {"type": "show_overlaps", "ids": ours}]}
+    ui = generate_tools.settle(conn, "desc", out)["ui_actions"]
+    assert len(ui) == 1 and ui[0]["ids"] == [ours[2], ours[0]]  # the answer's order, only overlaps we are part of, one card
+
+
+def test_settle_leaves_other_turns_alone():
+    out = {"reply": "No numbers here.", "ui_actions": [{"type": "plan", "horizon": "quarter", "id": 2}]}
+    assert generate_tools.settle(None, "desc", out)["ui_actions"] == [{"type": "plan", "horizon": "quarter", "id": 2}]
+
+
+@needs_db
+def test_plan_report_uses_the_plan_last_seen(conn):
+    from app.planner import api, store
+    api.rebuild(conn, "desc", "window")
+    r = reports.build(conn, "desc", "plan")
+    assert "whole build windows" in r["html"] or "window" in r["html"]
+    assert store.newest(conn, "desc")["horizon"] == "window"
+
+
+# ---------- reports read like documents ----------
+
+NO_NONE = __import__("re").compile(r"\bNone\b|\bnan\b")
+
+
+def _body(html):
+    return __import__("re").sub(r"<style>.*?</style>", "", html, flags=__import__("re").S)
+
+
+@needs_db
+def test_reports_lead_with_a_summary_and_key_figures(conn):
+    from app.scenario import experiments
+    oid = conn.execute("SELECT op.id FROM opportunity op JOIN job ja ON ja.id = op.job_a JOIN job jb ON jb.id = op.job_b "
+                       "WHERE op.horizon = 'long' AND 'gpc' IN (ja.org_id, jb.org_id) AND op.savings_high > 0 ORDER BY op.savings_high DESC LIMIT 1").fetchone()["id"]
+    f = experiments.run(conn, "gpc", "shift_window", {"opportunity_id": oid, "months": 2}, question="What if we shift by 2 months?")
+    for kind, ref in (("feasibility", str(oid)), ("cost_analysis", str(oid)), ("plan", None), ("finding", str(f["id"])), ("hazard_exposure", str(oid)),
+                      ("agenda", str(oid)), ("memo", None), ("pack", str(oid))):
+        r = reports.build(conn, "gpc", kind, ref)
+        body = _body(r["html"])
+        assert r["summary"].count(". ") >= 1 and r["summary"].endswith("."), kind  # full sentences, not fragments
+        assert r["figures"] and all(x["label"] and x["value"] for x in r["figures"]), kind
+        assert "Sources and method" in body and "Prepared by crewly" in body and "not a work order" in body, kind
+        assert not NO_NONE.search(body), (kind, NO_NONE.search(body))
+
+
+@needs_db
+def test_finding_report_pairs_low_and_high_into_ranges(conn):
+    from app.scenario import experiments
+    f = experiments.run(conn, "gpc", "shift_window", {"opportunity_id": 18, "months": 3})
+    r = reports.build(conn, "gpc", "finding", str(f["id"]))
+    body = _body(r["html"])
+    assert "Base against scenario" in body and "<th class=\"num\">Change</th>" in body
+    assert "Savings from coordinating</td>" in body and "(low)" not in body  # one range row, not two halves
+    assert "What was changed" in body and "later by 3 months" in body
+
+
+def test_report_table_right_aligns_numbers_and_memo_head():
+    t = reports.table(["Item", "Low", "High"], [["Yard", "$37k", "$124k"], ["Total", "$90k", "$407k"]])
+    assert t.count('class="num"') == 6 and "<th>Item</th>" in t
+    assert "$5k to $28k" and reports.NUM_RE.match("$5k to $28k") and reports.NUM_RE.match("-8% (-17%)") and not reports.NUM_RE.match("Nov")
+    assert reports.describe_change("shift_window", {"opportunity_id": 18, "months": -1}) == "Move our build window on overlap #18 earlier by 1 month."
+    assert "<dt>Re</dt>" in reports.memo_head("Leadership", "Planning", "Sharing costs")

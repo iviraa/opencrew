@@ -135,4 +135,5 @@ def test_scan_retires_suggestions_that_no_longer_apply(conn, monkeypatch):
     monkeypatch.setattr(p, "_rest", store)
     found = p.scan(conn, "gpc")["found"]
     assert store.retired["company_id"] == "eq.gpc" and store.retired["dismissed_at"] == "is.null"
-    assert store.retired["dedup_key"].startswith("not.in.(") and store.retired["dedup_key"].count('"') == 2 * found  # current ones stay open
+    assert "dedup_key.not.in.(" in store.retired["and"] and store.retired["and"].count('"') == 2 * found + 2  # current ones stay open; the quoted reminder pattern adds two
+    assert 'dedup_key.not.like."reminder:*"' in store.retired["and"]  # reminders wait for the person

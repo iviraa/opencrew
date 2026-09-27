@@ -1,5 +1,31 @@
 """Crewly abilities that hand something over: a chart, a data table, a printable report, or exactly the overlaps it means."""
+import re
+
 from app.crewly import charts, reports
+
+CITED = re.compile(r"#(\d{1,7})\b")
+DOCUMENTS = {"report", "draft"}  # cards that are the answer on their own
+
+
+def settle(conn, company, out):
+    """After the answer: the cards match the words. A document is not shadowed by the plan it read, and overlap cards follow the ids named."""
+    from app.crewly.app_tools import mine_sql
+    ui, reply = list(out.get("ui_actions") or []), out.get("reply") or ""
+    if any(a.get("type") in DOCUMENTS for a in ui):
+        ui = [a for a in ui if a.get("type") != "plan"]  # the plan was only read to write the document
+    shows = [a for a in ui if a.get("type") == "show_overlaps"]
+    cited = list(dict.fromkeys(int(m) for m in CITED.findall(reply)))
+    if shows and cited:
+        listed = {i for a in ui if a.get("type") in ("show_overlaps", "open_overlap") for i in (a.get("ids") or [a.get("id")]) if i}  # ids a tool returned this turn
+        keep = [i for i in cited if i in listed][:25]  # "#2" inside a project name is not an overlap the answer named
+        if not keep:
+            ours = {r["id"] for r in conn.execute(mine_sql(company) + " AND op.id = ANY(%s)", (cited,)).fetchall()}
+            keep = [i for i in cited if i in ours][:25]
+        if keep and set(keep) != set(shows[-1]["ids"]):
+            shows[-1]["ids"] = keep  # the cards follow the answer, not the model's first guess
+        ui = [a for a in ui if a.get("type") != "show_overlaps" or a is shows[-1]]
+    out["ui_actions"] = ui
+    return out
 
 
 def _bind(ctx, fn):
@@ -12,6 +38,7 @@ def show_overlaps(ctx, conn, ids, title=None):
     want = [int(str(i).lstrip("#")) for i in (ids or []) if str(i).lstrip("#").isdigit()][:25]
     ours = {r["id"] for r in conn.execute(mine_sql(ctx["company"]) + " AND op.id = ANY(%s)", (want,)).fetchall()} if want else set()
     kept = [i for i in want if i in ours]
+    title = re.sub(r"<[^>]*>", "", str(title or "")).strip()[:80]  # a card title is plain text
     return {"shown": kept, "not_ours": [i for i in want if i not in ours]}, [{"type": "show_overlaps", "ids": kept, **({"title": title} if title else {})}]
 
 
@@ -29,7 +56,7 @@ def get_data(ctx, conn, dataset, filters=None):
 
 def make_report(ctx, conn, kind, id=None, sections=None):
     r = reports.build(conn, ctx["company"], kind, id, sections)
-    card = {k: r[k] for k in ("id", "kind", "ref_id", "title", "sections", "all_sections", "created_at")}
+    card = {k: r[k] for k in ("id", "kind", "ref_id", "title", "sections", "all_sections", "created_at", "summary", "figures")}
     return {**card, "next_step": "the report card in the chat opens it; the page has a Print / Save as PDF button"}, [{"type": "report", "report": card}]
 
 
@@ -37,8 +64,8 @@ def generate_tools(ctx):
     datasets = ", ".join(f"{k} ({v[1]})" for k, v in charts.DATASETS.items())
     tables = ", ".join([*charts.TABLES, "requests"])
     return {
-        "show_overlaps": (_bind(ctx, show_overlaps), "Show exactly these overlaps as cards and on the map, in this order. Use it after any answer "
-                          "that names specific overlaps (e.g. 'top 2'), so the cards match what you said.", {
+        "show_overlaps": (_bind(ctx, show_overlaps), "Show exactly these overlaps as cards and on the map, in this order. Call it last, once you "
+                          "have decided which overlaps your answer names (e.g. 'top 2', 'best by criteria'), so the cards match what you said.", {
             "ids": {"type": "array", "items": {"type": "integer"}, "description": "overlap ids, in the order to show"},
             "title": {"type": "string", "description": "short card title, e.g. 'Top 2 by savings'"}}, ["ids"]),
         "make_chart": (_bind(ctx, make_chart), "Build a chart card in the chat from one dataset: " + datasets + ". options: kind (bar, line, stacked), "
@@ -57,16 +84,18 @@ def generate_tools(ctx):
                 "period": {"type": "string"}, "month": {"type": "integer"}, "days": {"type": "integer"}, "impact": {"type": "string"},
                 "direction": {"type": "string"}, "top": {"type": "integer"}}}}, ["dataset"]),
         "make_report": (_bind(ctx, make_report), "Write a printable report (opens as a page with Print / Save as PDF): feasibility, cost_analysis or "
-                        "hazard_exposure for an overlap (#id) or site, plan for the latest plan (id = horizon), or pack (brief + feasibility + cost + "
-                        "hazards for one overlap). Optional sections to include.", {
+                        "hazard_exposure for an overlap (#id) or site, plan for the plan the user last saw (no id needed; id = horizon picks another), "
+                        "or pack (brief + feasibility + cost + hazards for one overlap). Optional sections to include. Never build a plan first.", {
             "kind": {"type": "string", "enum": list(reports.KINDS)}, "id": {"type": "string", "description": "overlap #id, site id, or a plan horizon"},
             "sections": {"type": "array", "items": {"type": "string"}}}, ["kind"]),
     }
 
 
 PROMPT = """
-- When the user asks for a number of things ("top 2", "the 5 biggest"), pass limit=N to the list tool, or call show_overlaps with exactly
-  those ids after you decide, so the cards match your words. Never let a card show more than you named.
+- When the user asks for a number of things ("top 2", "the 5 biggest") or which overlaps are best by some criteria, answer from my_overlaps
+  (limit=N) or get_data, then call show_overlaps last with exactly the ids you named, in that order, so the cards match your words. Never let
+  a card show more than you named, and never build a plan to answer a "which/best/top" question.
 - For "chart", "graph", "plot", "trend" or "visualize" call make_chart with the dataset that fits and options from the user's words (years,
   top N, partner, kind); for "give me the data", "export", "list every", "as a table" call get_data; for "report", "printout", "document",
-  "PDF" or "write up" call make_report. Then describe the result in one sentence; the card carries the numbers, so do not restate them."""
+  "PDF" or "write up" call make_report on its own: it reads the latest plan, finding or overlap itself, so do not build a plan or list
+  overlaps first. Then describe the result in one sentence; the card carries the numbers, so do not restate them."""

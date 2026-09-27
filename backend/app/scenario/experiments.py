@@ -45,6 +45,14 @@ def _num(v):
 
 def ch_shift_window(conn, company, p):
     months = p.get("months")
+    if months is not None:
+        try:
+            months = int(round(float(months)))
+        except (TypeError, ValueError):
+            raise ValueError("months must be a number, e.g. 3 or -6")
+        if abs(months) > 24:
+            raise ValueError("shifts are limited to 24 months either way")
+        p = {**p, "months": months}
     if p.get("opportunity_id"):
         op = _op(conn, company, p["opportunity_id"])
         ours, theirs = _sides(op, company)
@@ -57,7 +65,7 @@ def ch_shift_window(conn, company, p):
         scope = {"job_ids": [job]}
     spec = engine.window_shifted(conn, job, months, p.get("start"), p.get("end"))
     row = conn.execute(engine.JOB_SQL, (job,)).fetchone()
-    what = f"{'later' if months and months > 0 else 'earlier'} by {abs(int(months))} month(s)" if months is not None else f"to {spec.get('start', row['start_at'])} to {spec.get('end', row['end_at'])}"
+    what = f"{'later' if months and months > 0 else 'earlier'} by {abs(int(months))} month{'' if abs(int(months)) == 1 else 's'}" if months is not None else f"to {spec.get('start', row['start_at'])} to {spec.get('end', row['end_at'])}"
     knobs = [{"name": "months", "type": "month_shift", "value": int(months or 0), "min": -24, "max": 24, "label": f"shift {row['name'][:40]}"}]
     return {"jobs": {job: spec}}, scope, knobs, f"Shift {row['name'][:50]} {what}"
 
@@ -277,6 +285,9 @@ def run_stack(conn, company, kind, params, changes, question=None, base_finding_
     notes = [f"{len(changes)} change(s) applied: " + "; ".join(titles)] if len(changes) > 1 else []
     notes += [f"deltas are against finding #{base_finding_id}" if base_finding_id else "deltas are against the untouched base"]
     notes += applied.get("notes", [])
+    bp, sp = (base.get("plan_pairs") or {}).get("value"), (result.get("plan_pairs") or {}).get("value")
+    if bp is not None and sp is not None and sp > bp:  # the plan refilled freed slots, so plan totals are not like for like
+        notes.append(f"the plan grew from {bp} to {sp} pairs (freed slots were refilled, or the horizon widened), so plan totals compare a different set of pairs")
     title = " + ".join(titles) if len(titles) <= 3 else f"{titles[0]} + {len(titles) - 1} more"
     kept = {**clean[0]["params"], **{k: v for k, v in params.items() if k in ("horizon", "job_ids")}} if kind != "compose" else {**params, "changes": clean}
     return finding(conn, company, kind, kept, title[:140], question or title, base, result, scenario, knobs, notes)

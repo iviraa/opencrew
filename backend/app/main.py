@@ -11,10 +11,11 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.config import ASSUMPTIONS, MAX_DRIVE_MIN, STATUSES
-from app import app_api, outreach, vendors, weather_api
+from app import app_api, outreach, scan_api, vendors, weather_api
 from app.feasibility import api as feasibility_api
 from app.hazards import api as hazards_api
 from app.planner import api as planner_api
+from app.refresh import api as refresh_api
 from app.companies import companies
 from app.crewly import agent, brief, proactive, generate_api
 from app.scenario import api as scenario_api
@@ -108,8 +109,23 @@ async def lifespan(_app):
             await asyncio.sleep(news_minutes * 60)
 
     news_task = asyncio.create_task(news_loop()) if news_minutes > 0 else None
+    refresh_minutes = float(os.environ.get("REFRESH_MINUTES") or 0)  # planner list refreshes, off unless set
+
+    def refresh_once():
+        from app.refresh.promote import refresh_once as run_refresh
+        return run_refresh()
+
+    async def refresh_loop():
+        while True:
+            try:
+                print("source refresh:", await asyncio.to_thread(refresh_once))
+            except Exception as e:  # a bad planner site must not kill the loop
+                print("source refresh failed:", e)
+            await asyncio.sleep(refresh_minutes * 60)
+
+    refresh_task = asyncio.create_task(refresh_loop()) if refresh_minutes > 0 else None
     yield
-    for t in (task, hazard_task, nudger, planner_task, news_task):
+    for t in (task, hazard_task, nudger, planner_task, news_task, refresh_task):
         if t:
             t.cancel()
 
@@ -121,7 +137,7 @@ app = FastAPI(title="OpenCrew", lifespan=lifespan)
 async def unhandled(request, exc):  # a 500 says what broke (no secrets), so a deployed app can be fixed from its response
     import traceback
     print("".join(traceback.format_exception(exc))[-2000:], flush=True)
-    return JSONResponse(500, {"detail": f"{type(exc).__name__}: {str(exc)[:300]}"})
+    return JSONResponse({"detail": f"{type(exc).__name__}: {str(exc)[:300]}"}, status_code=500)
 
 if os.environ.get("CORS_ORIGINS"):  # the frontend is hosted on another domain, e.g. vercel
     from fastapi.middleware.cors import CORSMiddleware
@@ -564,6 +580,8 @@ def hazards_one(job_id: str, conn=Depends(get_conn)):
 
 app.include_router(api)
 app.include_router(app_api.router)
+app.include_router(scan_api.router)
+app.include_router(refresh_api.router)
 app.include_router(weather_api.router)
 app.include_router(hazards_api.router)
 app.include_router(feasibility_api.router)
@@ -574,6 +592,10 @@ app.include_router(generate_api.router)
 from app.stormlab.api import router as stormlab_router  # noqa: E402
 app.include_router(stormlab_router)
 app.include_router(scenario_api.router)
+from app.comms import api as comms_api  # noqa: E402
+app.include_router(comms_api.router)
+from app import share as share_api  # noqa: E402  public share pages and export downloads, before the static mount
+app.include_router(share_api.router)
 from app.bounties.api import router as bounties_router  # noqa: E402  solana devnet bounties, self-contained
 app.include_router(bounties_router)
 
