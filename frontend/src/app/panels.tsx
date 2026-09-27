@@ -395,9 +395,9 @@ export function FeasibilitySection({ id, partner }: { id: number; partner: strin
   );
 }
 
-export function OverlapDetailPanel({ me, id, requests, onBack, onSent, onOpenRequest, onHazards }: {
+export function OverlapDetailPanel({ me, id, requests, onBack, onSent, onOpenRequest, onHazards, onNotebook }: {
   me: Me; id: number; requests: CollabRequest[]; onBack: () => void; onSent: (r: CollabRequest) => void; onOpenRequest: (id: number) => void;
-  onHazards?: (id: number, month: number) => void;
+  onNotebook?: () => void; onHazards?: (id: number, month: number) => void;
 }) {
   const [d, setD] = useState<OverlapDetail | null>(null);
   const [wx, setWx] = useState<WeatherCost | null>(null);
@@ -487,7 +487,7 @@ export function OverlapDetailPanel({ me, id, requests, onBack, onSent, onOpenReq
 
         <FeasibilitySection id={d.id} partner={them.name} />
 
-        <NotesBlock kind="overlap" id={String(d.id)} />
+        <NotesBlock kind="overlap" id={String(d.id)} onNotebook={onNotebook} />
 
         <section className="rounded-2xl border-2 border-pen px-3 py-3">
           <h3 className="mb-1 flex items-center gap-1.5 font-logo text-base font-semibold"><Handshake size={17} /> Collaborate</h3>
@@ -611,7 +611,7 @@ export function HistoryPanel({ me, requests, onBack, onOpen, onGoals, onFindings
       <PanelHeader title="Request history" sub={`${requests.length} request${requests.length === 1 ? "" : "s"}`} onBack={onBack}
         right={(onGoals || onFindings) && <span className="mt-1 flex gap-1">
           {onGoals && <button onClick={onGoals} className="rounded-full bg-grape-soft px-2.5 py-1 text-xs font-semibold text-grape hover:bg-grape hover:text-white">Goals</button>}
-          {onFindings && <button onClick={onFindings} className="rounded-full bg-grape-soft px-2.5 py-1 text-xs font-semibold text-grape hover:bg-grape hover:text-white">Findings</button>}
+          {onFindings && <button onClick={onFindings} className="rounded-full bg-grape-soft px-2.5 py-1 text-xs font-semibold text-grape hover:bg-grape hover:text-white">Notebook</button>}
         </span>} />
       <div className="mb-2 flex gap-1 rounded-full bg-soft p-1 text-xs font-semibold">
         {(["all", "sent", "received"] as const).map((t) => (

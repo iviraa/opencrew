@@ -220,7 +220,7 @@ function ViewsCard({ data, ...nav }: { data: ViewsData } & Nav) {
 }
 
 // notes on one target, inside a detail panel; written with the person's own login
-export function NotesBlock({ kind, id }: { kind: string; id: string }) {
+export function NotesBlock({ kind, id, onNotebook }: { kind: string; id: string; onNotebook?: () => void }) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -233,7 +233,8 @@ export function NotesBlock({ kind, id }: { kind: string; id: string }) {
   };
   return (
     <section>
-      <h3 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-muted"><NotebookPen size={14} /> Notes{notes.length ? ` · ${notes.length}` : ""}</h3>
+      <h3 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-muted"><NotebookPen size={14} /> Notes{notes.length ? ` · ${notes.length}` : ""}
+        <span className="flex-1" />{onNotebook && <button type="button" onClick={onNotebook} className="text-xs font-semibold text-grape hover:underline">Open notebook</button>}</h3>
       {notes.slice(0, 5).map((n) => (
         <div key={n.id} className="mb-1 flex items-start gap-1.5 rounded-xl bg-soft px-2.5 py-1.5 text-xs">
           <span className="min-w-0 flex-1"><span className="block">{n.text}</span><span className="text-faint">{n.when}</span></span>
