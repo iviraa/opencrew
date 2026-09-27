@@ -8,6 +8,42 @@ This document lists every ability, what invokes it, and what the person sees. Th
 cd backend && uv run python -m scripts.tool_catalogue
 ```
 
+## Crewly in action
+
+Four real conversations with Crewly, logged in as Dominion Energy SC. Every number on screen came from a tool, and each answer arrives with a card and a change on the map.
+
+### Testing a decision before making it
+
+Asked what happens if our Wateree-Killian rebuild starts 7 months earlier, Crewly runs the shift as an experiment on a copy of the data. Coordination savings on overlap #6184 rise to $127,500 to $566,800, and the shared build window grows from 47% to 67%. The map redraws the scenario, and nothing real changes.
+
+Tools: `run_experiment`, shown as a what-if card with a map overlay.
+
+![A what-if experiment shifting the Wateree-Killian rebuild 7 months earlier](images/whatif-shift.png)
+
+### Answers that point at the map
+
+Asked how long the drive is between our Okatie-Bluffton project and Georgia Power's Deptford–Magnolia project, Crewly finds both projects by name and routes between them on real roads: 42 minutes and 23.7 miles. The route is drawn on the map, and both project names in the answer are links that open them.
+
+Tools: `search_projects`, `route_between`.
+
+![A road route between two utilities' projects near Savannah](images/route.png)
+
+### A chart on request
+
+Asked which neighboring utility is worth the most, Crewly picks the matching dataset and charts estimated savings by partner, low and high. Georgia Power comes out ahead of Duke Energy. The chart switches between bar, line and stacked views and downloads as PNG or CSV.
+
+Tools: `make_chart`.
+
+![A chart of estimated savings by neighboring utility](images/chart-partners.png)
+
+### Handing work to people
+
+One request produces a CSV of every overlap with Duke Energy and a 7-day share link to the yearly coordination plan, which can be copied, opened or revoked. The follow-up question about news that could delay #6184 is answered as a risk assessment with named sources, not as fact about the project.
+
+Tools: `export`, `share_link`, `news_for`.
+
+![A CSV export, a share link to the plan, and a news check](images/export-share.png)
+
 ## How an ability runs
 
 1. The person types in the chat. The frontend posts the last 20 messages to `POST /api/app/chat`.
@@ -76,7 +112,7 @@ Every tool result that should be visible becomes a card. The card types and what
 
 | Tool | What it does | Inputs | Shows |
 |---|---|---|---|
-| `my_overlaps` | Overlaps between our projects and neighboring utilities' projects, best first. Optional date range (both projects building inside it), tier, region and partner_company (a utility's name). Plots them on the map and lists them in the chat as clickable cards. | start_date, end_date, tier, region, partner_company, limit | overlap cards + map highlight |
+| `my_overlaps` | Overlaps between our projects and neighboring utilities' projects, best first. Optional date range (both projects building inside it), tier, region and partner_company (a utility's name). Plots them on the map and lists them in the chat as clickable cards. | start_date, end_date, tier, region, partner_company, limit, sort | overlap cards + map highlight |
 | `open_overlap` | Full details for one overlap (both projects, windows, what can be shared, savings) and open it in the side panel. | **opportunity_id** | overlap detail panel |
 | `show_overlaps` | Show exactly these overlaps as cards and on the map, in this order. Call it last, once you have decided which overlaps your answer names (e.g. 'top 2', 'best by criteria'), so the cards match what you said. | **ids**, title | overlap cards + map highlight |
 | `search_projects` | Find projects by name and how many opportunities each has. | **query**, org | text only |
@@ -140,10 +176,10 @@ Every tool result that should be visible becomes a card. The card types and what
 
 | Tool | What it does | Inputs | Shows |
 |---|---|---|---|
-| `make_chart` | Build a chart card in the chat from one dataset: overlaps_by_month (our overlaps with both projects building, per month; options years [from, to], partner), hazard_days_by_month (typical weather-affected days per month for a site or overlap; options id, hazards), savings_by_partner (estimated savings summed by neighboring utility; options top), projects_by_year (our projects by in-service year, optionally a partner's too; options years, partner), cost_by_category (one overlap's savings by cost type; options id), news_by_impact (our news stories by impact; options days, partner), plan_totals (the latest plan's pairs and savings; options horizon). options: kind (bar, line, stacked), years [from, to], partner (utility name), id (site or overlap), hazards, top, days, horizon. The card has PNG and CSV downloads. | **dataset**, options | chart card |
+| `make_chart` | Build a chart card in the chat from one dataset: overlaps_by_month (our overlaps with both projects building, per month; options years [from, to], partner), hazard_days_by_month (typical weather-affected days per month for a site or overlap; options id, hazards; or ids to compare several overlaps in one chart), savings_by_partner (estimated savings summed by neighboring utility; options top), projects_by_year (our projects by in-service year, optionally a partner's too; options years, partner), cost_by_category (one overlap's savings by cost type; options id), news_by_impact (our news stories by impact; options days, partner), plan_totals (the latest plan's pairs and savings; options horizon). options: kind (bar, line, stacked), years [from, to], partner (utility name), id (site or overlap), hazards, top, days, horizon. The card has PNG and CSV downloads. | **dataset**, options, compare | chart card |
 | `get_data` | Hand over data as a table card with a CSV download. Tables: overlaps, projects, hazard_exposure, news, requests; or any chart dataset's rows. filters: years [from, to], partner, tier, verdict, state, status, id (site or overlap), period, month, days, impact, direction, top. | **dataset**, filters | table card |
 | `query_data` | Group, aggregate and sort any dataset (overlaps, projects, hazard_exposure, news, requests, overlaps_by_month, hazard_days_by_month, savings_by_partner, projects_by_year, cost_by_category, news_by_impact, plan_totals): e.g. average drive_min of overlaps by partner, or sum of savings_high by tier. Returns a table card, plus a chart when grouped. | **dataset**, filters, group_by, aggregate, sort, limit | table card, chart card |
-| `make_report` | Write a printable report (opens as a page with Print / Save as PDF): feasibility, cost_analysis or hazard_exposure for an overlap (#id) or site, plan for the plan the user last saw (no id needed; id = horizon picks another), or pack (brief + feasibility + cost + hazards for one overlap). Optional sections to include. Never build a plan first. | **kind**, id, sections | report card (Print / Save as PDF page) |
+| `make_report` | Write a printable report (opens as a page with Print / Save as PDF): feasibility, cost_analysis or hazard_exposure for an overlap (#id) or site, plan for the plan the user last saw (no id needed; id = horizon picks another), pack (brief + feasibility + cost + hazards for one overlap), or comparison (two to six overlaps side by side with a ranking; id = the ids joined by commas, e.g. '13,14,15'). Optional sections to include. Never build a plan first. | **kind**, id, sections | report card (Print / Save as PDF page) |
 | `export` | Build a file to download: overlaps, projects, plan, findings or hazard_exposure as geojson or kml (for ArcGIS and Google Earth), csv, xlsx, or ics (calendar entries for plan target windows or project build windows). Only what we can see. | **kind**, **format**, filters | download card |
 | `share_link` | An expiring link (default 7 days) that shows a report, finding or the latest plan to someone without a login; revocable from the card. | **kind**, id, expires_days | share-link card |
 
@@ -159,7 +195,7 @@ Every tool result that should be visible becomes a card. The card types and what
 
 | Tool | What it does | Inputs | Shows |
 |---|---|---|---|
-| `add_note` | Save a note for our company on an overlap (#id), a project (id), a utility (name) or a plan item. Shared with everyone at our company, shown on the detail panel. | **target_kind**, **target_id**, **text** | note card |
+| `add_note` | Save a note for our company in the notebook: on an overlap (#id), a project (id), a utility (name), a plan item, or general (no target_id) for anything else. Shared with everyone at our company; overlap notes also show on the detail panel. | **target_kind**, target_id, **text** | note card |
 | `list_notes` | Our notes, all of them or those on one target. | target_kind, target_id | note card |
 | `set_reminder` | Remind us later: 'follow up with Duke in 7 days'. Lands in the bell when due. Give due_at (ISO date or datetime) or in_days; optionally what it is about. | **text**, due_at, in_days, target_kind, target_id | reminder card |
 | `list_reminders` | Our open reminders, soonest first. | include_done | reminder card |
