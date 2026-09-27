@@ -19,15 +19,11 @@ import type { Comparison, Finding } from "./findings/types";
 import type { PlanStore } from "./plan/usePlans";
 import DraftCard from "./comms/DraftCard";
 import type { Draft } from "./comms/types";
-
-export type ChatMsg = {
-  role: "user" | "model"; text: string; ids?: number[]; title?: string; offline?: boolean; confirm?: ChatAction[]; goal?: number;
-  plan?: { id: number; horizon?: string; item?: string }; chart?: Chart; table?: Table; report?: Report; finding?: Finding; compare?: Comparison; draft?: Draft;
 import WorkspaceCardView, { type WorkspaceCard } from "./workspace/Cards";
 
 export type ChatMsg = {
   role: "user" | "model"; text: string; ids?: number[]; title?: string; offline?: boolean; confirm?: ChatAction[]; goal?: number;
-  plan?: { id: number; horizon?: string; item?: string }; chart?: Chart; table?: Table; report?: Report; finding?: Finding; compare?: Comparison;
+  plan?: { id: number; horizon?: string; item?: string }; chart?: Chart; table?: Table; report?: Report; finding?: Finding; compare?: Comparison; draft?: Draft;
   workspace?: WorkspaceCard;
 };
 

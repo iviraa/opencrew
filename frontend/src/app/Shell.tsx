@@ -246,8 +246,8 @@ export default function Shell() {
       const planned = r.ui_actions.filter((a) => a.type === "plan" && a.id != null).pop();
       const plan = planned ? { id: planned.id!, horizon: planned.horizon, item: planned.item } : undefined;
       setChat([...next, { role: "model", text: r.reply || "Done.", ids, ...(title && { title }), offline: r.offline, ...(confirm.length && { confirm }), ...(goal != null && { goal }), ...(plan && { plan }),
-        ...(chart && { chart }), ...(table && { table }), ...(report && { report }), ...(finding && { finding }), ...(compare && { compare }), ...(draft && { draft }) }]);
-        ...(chart && { chart }), ...(table && { table }), ...(report && { report }), ...(finding && { finding }), ...(compare && { compare }), ...(workspace && { workspace }) }]);
+        ...(chart && { chart }), ...(table && { table }), ...(report && { report }), ...(finding && { finding }), ...(compare && { compare }), ...(draft && { draft }),
+        ...(workspace && { workspace }) }]);
       if (finding) setOverlay(finding);
       if (remembered) setMemoryTick((t) => t + 1);  // crewly saved or dropped a note
       if (r.offline) say("I'm out of energy for today, sorry!", "sad");
