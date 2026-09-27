@@ -319,3 +319,21 @@ CREATE TABLE IF NOT EXISTS news_item (
 CREATE INDEX IF NOT EXISTS news_item_published_idx ON news_item (published DESC);
 CREATE INDEX IF NOT EXISTS news_item_orgs_idx ON news_item USING GIN (org_ids);
 CREATE INDEX IF NOT EXISTS news_item_opps_idx ON news_item USING GIN (opportunity_ids);
+
+-- source refresh: each check of a planner's published list, what it found, and whether it went live
+CREATE TABLE IF NOT EXISTS source_refresh (
+  id            SERIAL PRIMARY KEY,
+  source        TEXT NOT NULL,              -- pjm | miso | spp | ercot | westconnect | caiso
+  url           TEXT,
+  edition       TEXT,
+  sha256        TEXT,
+  found_via     TEXT,                       -- index | fixed | discovery_failed
+  status        TEXT NOT NULL,              -- unchanged | rejected | staged | promoted | failed
+  checked_at    TIMESTAMPTZ DEFAULT now(),
+  validation    JSONB,
+  diff          JSONB,
+  staged_path   TEXT,
+  promoted_at   TIMESTAMPTZ,
+  error         TEXT
+);
+CREATE INDEX IF NOT EXISTS source_refresh_source_idx ON source_refresh (source, checked_at DESC);

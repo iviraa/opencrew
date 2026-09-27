@@ -20,11 +20,13 @@ import type { PlanStore } from "./plan/usePlans";
 import DraftCard from "./comms/DraftCard";
 import type { Draft } from "./comms/types";
 import WorkspaceCardView, { type WorkspaceCard } from "./workspace/Cards";
+import RefreshCard from "./refresh/RefreshCard";
+import type { RefreshCardData } from "./refresh/types";
 
 export type ChatMsg = {
   role: "user" | "model"; text: string; ids?: number[]; title?: string; offline?: boolean; confirm?: ChatAction[]; goal?: number;
   plan?: { id: number; horizon?: string; item?: string }; chart?: Chart; table?: Table; report?: Report; finding?: Finding; compare?: Comparison; draft?: Draft;
-  workspace?: WorkspaceCard;
+  workspace?: WorkspaceCard; refresh?: RefreshCardData;
 };
 
 const html = (s: string) => DOMPurify.sanitize(marked.parse(s, { async: false }) as string);
@@ -106,6 +108,7 @@ export default function Chat({ me, msgs, busy, overlaps, requests, plans, onSend
             {m.finding && <FindingCard finding={m.finding} partners={partners} onOpen={onOpen} onOverlay={onOverlay} onPickPlace={onPickPlace} picking={picking} onCompare={onCompare} />}
             {m.compare && <CompareCard comparison={m.compare} />}
             {m.draft && <DraftCard draft={m.draft} />}
+            {m.refresh && <RefreshCard card={m.refresh} />}
             {m.workspace && <WorkspaceCardView card={m.workspace} onOpen={onOpen} onOpenRequest={onOpenRequest} onOpenPlan={(id) => onOpenPlan(id)} onNotebook={onNotebook} onAsk={send} onOpenView={onOpenView} />}
             {m.ids && m.ids.length > 0 && m.goal == null && !m.plan && (
               <div className="flex flex-col gap-1 rounded-2xl border-2 border-line p-1">

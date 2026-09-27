@@ -1,4 +1,6 @@
 """CAISO Transmission Development Forum: approved PG&E projects, stations read from the project names."""
+import re
+
 import pandas as pd
 
 from app.db import ROOT
@@ -10,11 +12,17 @@ DONE = {"Cancelled", "In-Service"}
 NEED = {"R": "reliability", "P": "policy", "E": "economic"}  # letter in the TP project id, e.g. 2526-R-02
 
 
+def isd_column(df):
+    """The current in-service column carries the edition in its name ("Current In-Service July 2026 TDF")."""
+    return next((c for c in df.columns if re.match(r"^Current In-Service .* TDF$", str(c))), "Current In-Service July 2026 TDF")
+
+
 def rows(df):
     seen = {}
+    isd_col = isd_column(df)
     for _, r in df.iterrows():
         status = str(r["Project Status"]).strip()
-        isd = to_date(r["Current In-Service July 2026 TDF"])
+        isd = to_date(r[isd_col])
         if status in DONE or not isinstance(r["Project"], str):
             continue
         if isd and isd.year < 2024:
