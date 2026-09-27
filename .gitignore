@@ -24,3 +24,4 @@ data/layers/
 *.md
 !README.md
 !docs/cost-savings-model.md
+!docs/crewly-abilities.md
