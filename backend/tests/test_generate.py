@@ -137,3 +137,37 @@ def test_reports_carry_the_numbers(conn):
     assert reports.get(conn, r["id"], "desc") is None  # another company cannot open it
     with pytest.raises(ValueError):
         reports.build(conn, "gpc", "feasibility")  # needs an id
+
+
+# ---------- settle: cards match the words ----------
+
+@needs_db
+def test_report_card_drops_the_plan_it_read(conn):
+    out = {"reply": "Here is the report.", "ui_actions": [{"type": "plan", "horizon": "year", "id": 1}, {"type": "report", "report": {"id": 1}}]}
+    assert [a["type"] for a in generate_tools.settle(conn, "desc", out)["ui_actions"]] == ["report"]
+
+
+@needs_db
+def test_overlap_cards_follow_the_ids_named(conn):
+    from app.crewly.app_tools import mine_sql
+    ours = [r["id"] for r in conn.execute(mine_sql("desc") + " ORDER BY op.id LIMIT 3").fetchall()]
+    theirs = conn.execute("SELECT op.id FROM opportunity op JOIN job ja ON ja.id = op.job_a JOIN job jb ON jb.id = op.job_b "
+                          "WHERE 'desc' NOT IN (ja.org_id, jb.org_id) LIMIT 1").fetchone()["id"]
+    out = {"reply": f"Best by savings: #{ours[2]} and #{ours[0]}; request #{theirs} is not ours.",
+           "ui_actions": [{"type": "show_overlaps", "ids": [ours[1]]}, {"type": "show_overlaps", "ids": ours}]}
+    ui = generate_tools.settle(conn, "desc", out)["ui_actions"]
+    assert len(ui) == 1 and ui[0]["ids"] == [ours[2], ours[0]]  # the answer's order, only overlaps we are part of, one card
+
+
+def test_settle_leaves_other_turns_alone():
+    out = {"reply": "No numbers here.", "ui_actions": [{"type": "plan", "horizon": "quarter", "id": 2}]}
+    assert generate_tools.settle(None, "desc", out)["ui_actions"] == [{"type": "plan", "horizon": "quarter", "id": 2}]
+
+
+@needs_db
+def test_plan_report_uses_the_plan_last_seen(conn):
+    from app.planner import api, store
+    api.rebuild(conn, "desc", "window")
+    r = reports.build(conn, "desc", "plan")
+    assert "whole build windows" in r["html"] or "window" in r["html"]
+    assert store.newest(conn, "desc")["horizon"] == "window"
