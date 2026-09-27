@@ -52,7 +52,7 @@ def get_data(ctx, conn, dataset, filters=None):
 
 def make_report(ctx, conn, kind, id=None, sections=None):
     r = reports.build(conn, ctx["company"], kind, id, sections)
-    card = {k: r[k] for k in ("id", "kind", "ref_id", "title", "sections", "all_sections", "created_at")}
+    card = {k: r[k] for k in ("id", "kind", "ref_id", "title", "sections", "all_sections", "created_at", "summary", "figures")}
     return {**card, "next_step": "the report card in the chat opens it; the page has a Print / Save as PDF button"}, [{"type": "report", "report": card}]
 
 

@@ -97,17 +97,10 @@ def render(conn, claims):
     if kind == "report":
         row = reports.get(conn, ref, company) if ref.isdigit() else None
         return row and row["html"]
-    if kind == "finding":
-        try:
-            body, title = reports.sec_finding(conn, company, ref, reports.KINDS["finding"][1])
-        except ValueError:
-            return None
-        return reports.page(title, f"{reports.name(company)} · shared by crewly", body)
     try:
-        body = reports.sec_plan(conn, company, ref or "quarter", reports.KINDS["plan"][1])
+        return reports.render(conn, company, "finding" if kind == "finding" else "plan", ref if kind == "finding" else (ref or None), f"{reports.name(company)} · shared by crewly")
     except ValueError:
         return None
-    return reports.page(f"Coordination plan: {reports.name(company)}", "shared by crewly", body)
 
 
 router = APIRouter()

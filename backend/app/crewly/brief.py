@@ -59,7 +59,7 @@ def job_row(j):
     return (f"| {j['org_name']} | {j['name']}{' (' + j['phase'] + ')' if j['phase'] else ''} | {j['job_type'].replace('_', ' ')}"
             f"{', ' + str(j['voltage_kv']) + ' kV' if j['voltage_kv'] else ''} | {window} ({BASIS.get(j['window_basis'], j['window_basis'])}) "
             f"| {j['in_service']:%b %d, %Y} | {QUALITY.get(j['geom_quality'], j['geom_quality'])}, {round(j['confidence'] * 100)}% "
-            f"| {j['source_title']}, p.{j['source_page']} |")
+            f"| {j['source_title']}{', p. ' + str(j['source_page']) if j['source_page'] else ''} |")  # a filing may carry no page
 
 
 def build(conn, opp_id):
