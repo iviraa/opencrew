@@ -40,6 +40,7 @@ class Source:
     notes: str = ""
     timeout: int = 90  # seconds to wait on the planner's server; some exports are built on request
     probe: str | None = None  # a url template with {mon} and {year}: newest month that answers 200 wins
+    prime: str | None = None  # a page to visit first, for the session cookie an export endpoint expects
     kwargs: dict = field(default_factory=dict)
 
 
@@ -48,7 +49,7 @@ SOURCES = {
                   "https://www.pjm.com/m/ProjectConst/ProjectConstructionUpgrades", [], None, "Data", 0,
                   ["Upgrade Id", "Description", "Project Type", "Voltage", "Cost Estimate", "Required Date", "Transmission Owner", "State",
                    "Location", "Equipment", "Task", "Status", "Driver", "Projected In Service Date", "ISA In-Service Date", "Revised In-Service Date"],
-                  "Upgrade Id", "Projected In Service Date", 7, post=PJM_BODY, date_min_parse=0.5, timeout=600,
+                  "Upgrade Id", "Projected In Service Date", 7, post=PJM_BODY, date_min_parse=0.5, timeout=600, prime="https://www.pjm.com/planning/m/project-construction",
                   notes="continuous export; the Export to Excel button posts this body and the server builds the workbook on request"),
     "miso": Source("miso", "MISO", "MISO MTEP Appendix A quarterly status report", "miso",
                    "https://cdn.misoenergy.org/Appendix%20A%20Status%20Report575959.xlsx",
@@ -164,7 +165,7 @@ def fetch(src, url, get=None, post=None):
     for attempt in range(2):
         try:
             if src.post:
-                r = (post or (lambda u, d: httpx.post(u, data=d, headers=UA, timeout=src.timeout, follow_redirects=True)))(url, {"jsonModel": src.post})
+                r = (post or (lambda u, d: _export(src, u, d)))(url, {"jsonModel": src.post})
             else:
                 r = (get or (lambda u: httpx.get(u, headers=UA, timeout=src.timeout, follow_redirects=True)))(url)
             r.raise_for_status()
@@ -183,6 +184,14 @@ def fetch(src, url, get=None, post=None):
         except (httpx.HTTPError, ValueError, zipfile.BadZipFile) as e:
             last = e
     raise RuntimeError(f"could not fetch {src.name}: {last}")
+
+
+def _export(src, url, data):
+    """An export built on request: the page first for its session cookie, then the form post, streamed slowly by the server."""
+    with httpx.Client(headers={**UA, "Referer": src.prime or url}, timeout=httpx.Timeout(src.timeout, connect=30), follow_redirects=True) as c:
+        if src.prime:
+            c.get(src.prime)
+        return c.post(url, data=data)
 
 
 def staged_path(src, body):
