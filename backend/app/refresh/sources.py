@@ -83,7 +83,7 @@ SOURCES = {
                           "https://doc.westconnect.com/Documents.aspx?NID=21174&dl=1", [], None, "All Projects", 0,
                           ["Sponsor", "Development", "InService", "Length", "Description", "Purpose", "Origin", "Termination", "StateTraversed",
                            "wcprojectID", "projectid", "ProjectName", "Voltage", "Drivers"],
-                          "projectid", "InService", 180, ext="xlsm", date_min_parse=0.7, timeout=240, notes="document id url; a new edition gets a new NID"),
+                          "projectid", "InService", 180, ext="xlsm", date_min_parse=0.7, timeout=240, edition_from=r"NID=(\d+)", notes="document id url; a new edition gets a new NID"),
     "caiso": Source("caiso", "CAISO", "CAISO transmission development forum approved projects", "caiso",
                     "https://www.caiso.com/documents/approved-projects-transmission-planning-process-jul-2026.xlsx",
                     [], None, "PGaE", 0,
@@ -155,8 +155,12 @@ def discover(src, get=None, head=None):
 
 
 def edition_of(src, url):
+    """What to call this edition: the id in its url, else the day a continuous export was pulled."""
+    from datetime import date
     m = re.search(src.edition_from, url) if src.edition_from else None
-    return m.group(1) if m else url.rsplit("/", 1)[-1][:60]
+    if m:
+        return m.group(1)
+    return f"export {date.today().isoformat()}" if src.post else url.rsplit("/", 1)[-1][:60]
 
 
 def fetch(src, url, get=None, post=None):

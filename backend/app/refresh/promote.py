@@ -9,6 +9,7 @@ import httpx
 from app.companies import companies
 from app.db import ROOT, connect
 from app.engine.overlap import recompute
+from app.engine.phases import build_phases
 from app.refresh import stage
 from app.refresh.sources import SOURCES, src_file
 
@@ -80,7 +81,11 @@ def promote(refresh_id, rest=_rest, loader=None):
         if removed:
             conn.execute("DELETE FROM job WHERE id = ANY(%s)", (removed,))  # versions and overlaps go with them
         redo = sorted(set(d["added"]) | set(changed))
-        overlaps = recompute(conn, "long", only_jobs=redo) if redo else None
+        overlaps = None
+        if redo:
+            build_phases(conn, only=redo)  # their near-term phases follow the new windows
+            phases = [r["id"] for r in conn.execute("SELECT id FROM job WHERE parent_job_id = ANY(%s)", (redo,)).fetchall()]
+            overlaps = {"long": recompute(conn, "long", only_jobs=redo), "near": recompute(conn, "near", only_jobs=phases)}
         conn.execute("UPDATE source_doc SET fetched_at = now(), url = %s, edition = %s WHERE id = ANY(%s)", (row["url"], row["edition"], docs))
         who = affected_companies(conn, set(redo) | set(removed))
         conn.commit()

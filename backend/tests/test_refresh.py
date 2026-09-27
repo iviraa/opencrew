@@ -266,11 +266,13 @@ def test_promote_keeps_history_drops_the_gone_and_rings_the_bell(fake_source, mo
     out = promote.promote(row["id"], rest=lambda path, method="GET", **kw: bells.append((path, kw.get("json"))), loader=edition)
     assert out["status"] == "promoted"
     with connect() as c:
-        assert c.execute("SELECT count(*) AS n FROM job WHERE org_id = %s", (ORG,)).fetchone()["n"] == 18
+        assert c.execute("SELECT count(*) AS n FROM job WHERE org_id = %s AND horizon = 'long'", (ORG,)).fetchone()["n"] == 18
         assert c.execute("SELECT upper(work_window)::date::text AS e FROM job WHERE id = 'fake-0'").fetchone()["e"] == "2027-09-01"
         hist = c.execute("SELECT job_id, upper(work_window)::date::text AS e FROM job_version WHERE job_id = 'fake-0'").fetchall()
         assert [h["e"] for h in hist] == ["2027-06-01"]  # the earlier window is kept
         assert c.execute("SELECT count(*) AS n FROM job_version WHERE job_id IN ('fake-18', 'fake-19')").fetchone()["n"] == 0
+        phases = c.execute("SELECT count(*) AS n, min(upper(work_window))::date::text AS first FROM job WHERE parent_job_id = 'fake-0'").fetchone()
+        assert phases["n"] > 0 and phases["first"] > "2026-01-01"  # the near-term phases were rebuilt from the new window
         st = c.execute("SELECT status, promoted_at FROM source_refresh WHERE id = %s", (row["id"],)).fetchone()
         assert st["status"] == "promoted" and st["promoted_at"]
         assert c.execute("SELECT count(*) AS n FROM source_doc WHERE sha256 = %s", (row["sha256"],)).fetchone()["n"] == 1

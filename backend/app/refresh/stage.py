@@ -31,7 +31,7 @@ CREATE INDEX IF NOT EXISTS source_refresh_source_idx ON source_refresh (source, 
 FIELDS = ["name", "status", "voltage_kv", "cost_usd", "in_service", "start", "end"]  # what a changed project is compared on
 SNAPSHOT_SQL = """SELECT id, org_id, name, status, voltage_kv, cost_usd, in_service::text, lower(work_window)::date::text AS start,
                          upper(work_window)::date::text AS "end", source_doc_id, work_window
-                  FROM job WHERE org_id = ANY(%s)"""
+                  FROM job WHERE org_id = ANY(%s) AND horizon = 'long'"""  # phases are derived from these, never loaded
 
 
 def ensure(conn):
