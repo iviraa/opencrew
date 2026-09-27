@@ -24,6 +24,8 @@ import { changesOf } from "./findings/changes";
 import { FindingPanel, NotebookPanel } from "./findings/Notebook";
 import { headline, type Comparison, type Finding } from "./findings/types";
 import { cardOf, viewsApi, type ViewState } from "./workspace/types";
+import ScanOverlay from "./scan/ScanOverlay";
+import { RADAR_MS, pop as popAt, useScan, type ScanCtx } from "./scan/useScan";
 
 const Beaver = lazy(() => import("./Beaver"));
 
@@ -31,10 +33,7 @@ type Tab = "overlaps" | "weather" | "news";
 type Panel = { kind: "overlap"; id: number } | { kind: "request"; id: number } | { kind: "history" } | { kind: "chat" } | { kind: "goal"; id: number } | { kind: "goals" }
   | { kind: "plan"; id: number; item?: string } | { kind: "notebook"; preselect?: number } | { kind: "finding"; id: number; f?: Finding };
 const TABS: { id: Tab; label: string }[] = [{ id: "overlaps", label: "Overlaps" }, { id: "weather", label: "Hazards" }, { id: "news", label: "News & damage" }];
-const SCAN_MS = 3200;
-const SCAN_STEPS = ["Reading your project plans", "Looking for neighbors within 25 miles", "Measuring drive times", "Comparing build windows", "Estimating savings"];
-
-const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const SCAN_STEPS = 5;  // radar step captions live in ScanOverlay
 
 function feature(f: GeoJSON.Feature, props: Record<string, unknown>): GeoJSON.Feature {
   return { type: "Feature", geometry: f.geometry, properties: props };
@@ -67,6 +66,9 @@ export default function Shell() {
   const [ov, setOv] = useState<{ overlaps: Overlap[]; jobs: Jobs } | null>(null);
   const [mode, setMode] = useState<"projects" | "scanning" | "overlaps">("projects");
   const [scanStep, setScanStep] = useState(0);
+  const scanner = useScan(say);  // the discovery choreography: partners and overlaps first, then other utilities
+  const [scanCtx, setScanCtx] = useState<ScanCtx | null>(null);  // what the last scan found, for the grey context layer
+  const [showOthers, setShowOthers] = useState(true);
   const [focus, setFocus] = useState<number[] | null>(null);  // overlaps the chat asked to show
   const [partner, setPartner] = useState<string | null>(null);  // one neighboring utility, or all
   const [selected, setSelected] = useState<number | null>(null);
@@ -174,20 +176,25 @@ export default function Shell() {
   };
 
   const loadOverlaps = useCallback(async (animate: boolean) => {
-    if (animate) { setMode("scanning"); setScanStep(0); say("I'm looking for overlapping projects.", "thinking"); }
-    const [data] = await Promise.all([ov ? Promise.resolve(ov) : api.overlaps(), animate ? wait(SCAN_MS) : null]);
-    setOv(data); setMode("overlaps");
-    if (animate) {
+    if (!animate) {
+      const data = ov ?? await api.overlaps();
+      setOv(data); setMode("overlaps");
+      return data;
+    }
+    setMode("scanning"); setScanStep(0); say("I'm looking for overlapping projects.", "thinking");
+    return new Promise<{ overlaps: Overlap[]; jobs: Jobs }>((resolve, reject) => scanner.start(meRef.current!, (c) => {
+      const data = { overlaps: c.overlaps, jobs: { type: "FeatureCollection" as const, features: [...c.ours.features, ...c.partners.features] } };
+      setScanCtx(c); setOv(data); setMode("overlaps");
       say(data.overlaps.length ? `Found ${data.overlaps.length} overlaps with ${neighbors(data.overlaps, meRef.current!)}!` : "No overlaps nearby right now.", "happy");
       const b = bboxOf([data.jobs]);
       if (b) setFit({ bbox: b, key: `all${Date.now()}` });
-    }
-    return data;
-  }, [ov]);
+      resolve(data);
+    }, reject));
+  }, [ov, scanner.start]);
 
   useEffect(() => {
     if (mode !== "scanning") return;
-    const t = setInterval(() => setScanStep((s) => Math.min(s + 1, SCAN_STEPS.length - 1)), SCAN_MS / SCAN_STEPS.length);
+    const t = setInterval(() => setScanStep((s) => Math.min(s + 1, SCAN_STEPS - 1)), RADAR_MS / SCAN_STEPS);
     return () => clearInterval(t);
   }, [mode]);
 
@@ -326,11 +333,25 @@ export default function Shell() {
     if (!me) return {};
     const lines: GeoJSON.Feature[] = [], points: GeoJSON.Feature[] = [];
     const add = (f: GeoJSON.Feature, props: Record<string, unknown>) => (f.geometry?.type === "Point" ? points : lines).push(feature(f, props));
+    const grey = (f: GeoJSON.Feature<GeoJSON.Geometry, { id: string; name: string; org_id: string; voltage_kv?: number | null; geom_quality?: string }>, k = 1, alpha = 1) =>
+      add(f, { color: "#a3adc7", width: 1.6 * k, radius: 3 * k, opacity: 0.45 * alpha, dash: f.properties.geom_quality === "county_area",
+        title: `<b>${esc(f.properties.name)}</b><br/>${esc(company(f.properties.org_id).name)}${f.properties.voltage_kv ? ` · ${f.properties.voltage_kv} kV` : ""}` });
     if (mode !== "overlaps" || !ov) {
-      projects?.features.forEach((f) => add(f, { color: me.color, width: 3, radius: 5, opacity: mode === "scanning" ? 0.5 : 0.9,
-        title: `<b>${esc(f.properties.name)}</b><br/>${esc(me.name)}` }));
+      projects?.features.forEach((f) => add(f, { color: me.color, width: 3, radius: 5, opacity: 0.9, title: `<b>${esc(f.properties.name)}</b><br/>${esc(me.name)}` }));
+      const c = scanner.ctx;
+      if (mode === "scanning" && c) {  // sites pop in as the scan finds them
+        const seen = (key: string) => { const at = scanner.revealed.get(key); return at == null ? null : popAt(scanner.now - at); };
+        c.partners.features.forEach((f) => { const p = seen(`j:${f.properties.id}`); if (p) add(f, { color: company(f.properties.org_id).color, width: 3 * p.scale, radius: 5 * p.scale, opacity: 0.95 * p.alpha,
+          title: `<b>${esc(f.properties.name)}</b><br/>${esc(company(f.properties.org_id).name)}` }); });
+        c.overlaps.forEach((o) => { const p = seen(`op:${o.id}`); if (!p) return; const s = sides(me, o);
+          const title = `<b>#${o.id} ${esc(TIER_LABEL[o.tier]?.label)}</b><br/>${esc(s.ours.name)}<br/><span style="color:#5e6a8a">with ${esc(s.theirs.name)}</span>`;
+          lines.push({ type: "Feature", geometry: o.link, properties: { color: TIER_LABEL[o.tier]?.color, width: 2.5, dash: true, opacity: p.alpha, title } });
+          points.push({ type: "Feature", geometry: mid(o.link), properties: { color: TIER_LABEL[o.tier]?.color, radius: 5.5 * p.scale, stroke: "#ffffff", opacity: p.alpha, title } }); });
+        c.others.features.forEach((f) => { const p = seen(`j:${f.properties.id}`); if (p) grey(f, p.scale, p.alpha); });
+      }
       return { lines: { type: "FeatureCollection", features: lines }, points: { type: "FeatureCollection", features: points } };
     }
+    if (showOthers && scanCtx) scanCtx.others.features.forEach((f) => grey(f, 1.1, 1));  // other utilities stay as quiet context
     const sel = selected != null ? ov.overlaps.find((o) => o.id === selected) : null;
     const involved = new Set(visible.flatMap((o) => [o.job_a, o.job_b]));
     const hot = sel ? new Set([sel.job_a, sel.job_b]) : null;
@@ -347,7 +368,7 @@ export default function Shell() {
       points.push({ type: "Feature", geometry: mid(o.link), properties: { color: TIER_LABEL[o.tier]?.color, radius: sel?.id === o.id ? 9 : 5.5, stroke: sel?.id === o.id ? "#111014" : "#ffffff", opacity: on ? 1 : 0.15, title, pick: `op:${o.id}` } });
     });
     return { lines: { type: "FeatureCollection", features: lines }, points: { type: "FeatureCollection", features: points } };
-  }, [me, mode, ov, projects, visible, selected]);
+  }, [me, mode, ov, projects, visible, selected, scanner.ctx, scanner.now, scanner.revealed, scanCtx, showOthers]);
 
   const struck = useMemo(() => new Set(changesOf(overlay ?? { kind: "", params: {} } as Finding).filter((c) => c.kind === "exclude_partner").map((c) => String(c.params.partner))), [overlay]);
   const ghosts = useMemo(() => Object.fromEntries(changesOf(overlay ?? { kind: "", params: {} } as Finding).filter((c) => c.kind === "shift_window" && c.params.opportunity_id != null)
@@ -469,21 +490,12 @@ export default function Shell() {
                   </button>
                 </div>
               )}
-              {mode === "scanning" && (
-                <div className="absolute inset-0 grid place-items-center bg-white/55 backdrop-blur-[2px]">
-                  <div className="pop-in flex flex-col items-center gap-5">
-                    <div className="radar">
-                      <span className="radar-ring" /><span className="radar-ring" style={{ animationDelay: ".8s" }} /><span className="radar-ring" style={{ animationDelay: "1.6s" }} />
-                      <span className="blip" style={{ left: "64%", top: "30%", background: "#ff9f1c" }} />
-                      <span className="blip" style={{ left: "28%", top: "58%", background: me.color, animationDelay: ".5s" }} />
-                      <span className="blip" style={{ left: "52%", top: "72%", background: "#00b8a9", animationDelay: "1s" }} />
-                    </div>
-                    <div className="text-center">
-                      <div className="font-logo text-2xl font-semibold"><span className="dots">Scanning for nearby projects</span></div>
-                      <div key={scanStep} className="pop-in mt-1 text-sm text-muted">{SCAN_STEPS[scanStep]}</div>
-                    </div>
-                  </div>
-                </div>
+              {mode === "scanning" && <ScanOverlay phase={scanner.phase} step={scanStep} counts={scanner.counts} color={me.color} />}
+              {scanCtx && mode !== "projects" && (
+                <button onClick={() => setShowOthers((v) => !v)} aria-pressed={showOthers}
+                  className={`absolute right-3 top-3 z-10 flex items-center gap-1.5 rounded-full border-2 px-2.5 py-1 text-xs font-semibold ${showOthers ? "border-pen bg-white" : "border-line bg-white/80 text-muted"}`}>
+                  <span className="h-2 w-2 rounded-full bg-[#a3adc7]" /> Other utilities
+                </button>
               )}
             </MapPane>
           } />
