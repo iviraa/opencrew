@@ -396,8 +396,9 @@ export default function Shell() {
 
   return (
     <div className="relative h-full w-full" onClick={() => pop && setPop(null)}>
-      {/* the whiteboard */}
-      <div className="board absolute bottom-[17vh] left-[4vw] right-[4vw] top-[7vh] flex flex-col px-6 pb-5 pt-4">
+      {/* the whiteboard: the purple showing around it is half the gap it used to be, except at the
+          bottom, where the board stops just above the white "crewly" wordmark rather than over it */}
+      <div className="board absolute bottom-[13vh] left-[2vw] right-[2vw] top-[3.5vh] flex flex-col px-6 pb-5 pt-4">
         <div className="board-frame" />
         <nav className="relative z-10 mb-3 flex items-center gap-6">
           {TABS.map((t) => (
