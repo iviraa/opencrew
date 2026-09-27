@@ -29,14 +29,17 @@ export function bboxOf(fcs: (GeoJSON.FeatureCollection | undefined)[]): [number,
   return b;
 }
 
-export default function MapPane({ scene, fit, onPick, onMapClick, children }: {
-  scene: Scene; fit?: Fit | null; onPick?: (pick: string) => void; onMapClick?: (lon: number, lat: number) => void; children?: React.ReactNode;
+export type Bbox = [number, number, number, number];
+
+export default function MapPane({ scene, context, fit, onPick, onMapClick, onMove, children }: {
+  scene: Scene; context?: GeoJSON.FeatureCollection | null;  // context: a quiet grey layer drawn under the scene (other utilities' projects)
+  fit?: Fit | null; onPick?: (pick: string) => void; onMapClick?: (lon: number, lat: number) => void; onMove?: (bbox: Bbox) => void; children?: React.ReactNode;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const ready = useRef(false);
-  const latest = useRef({ scene, fit, onPick, onMapClick });
-  latest.current = { scene, fit, onPick, onMapClick };
+  const latest = useRef({ scene, context, fit, onPick, onMapClick, onMove });
+  latest.current = { scene, context, fit, onPick, onMapClick, onMove };
 
   const push = () => {
     const m = map.current;
@@ -45,17 +48,25 @@ export default function MapPane({ scene, fit, onPick, onMapClick, children }: {
     (m.getSource("areas") as GeoJSONSource).setData(s.areas ?? EMPTY);
     (m.getSource("lines") as GeoJSONSource).setData(s.lines ?? EMPTY);
     (m.getSource("points") as GeoJSONSource).setData(s.points ?? EMPTY);
+    (m.getSource("context") as GeoJSONSource).setData(latest.current.context ?? EMPTY);
   };
 
   useEffect(() => {
     const m = new maplibregl.Map({ container: box.current!, style: STYLE, bounds: HOME, attributionControl: { compact: true }, fadeDuration: 0 });
     map.current = m;
+    if (import.meta.env.DEV) (window as unknown as { __map?: maplibregl.Map }).__map = m;  // dev only: headless tests read layers and project coordinates
     m.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-left");
     const tip = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 12, maxWidth: "280px" });
     m.on("load", () => {
-      for (const id of ["areas", "lines", "points"]) m.addSource(id, { type: "geojson", data: EMPTY });
+      for (const id of ["context", "areas", "lines", "points"]) m.addSource(id, { type: "geojson", data: EMPTY });
       const num = (k: string, d: number) => ["coalesce", ["get", k], d] as maplibregl.ExpressionSpecification;
       const color = ["coalesce", ["get", "color"], "#5b2bb5"] as maplibregl.ExpressionSpecification;
+      const line = ["in", ["geometry-type"], ["literal", ["LineString", "MultiLineString"]]] as maplibregl.ExpressionSpecification;  // context: thin grey, dotted when only county-placed
+      m.addLayer({ id: "context-fill", type: "fill", source: "context", filter: ["==", ["geometry-type"], "Polygon"], paint: { "fill-color": "#6b7280", "fill-opacity": 0.1 } });
+      m.addLayer({ id: "context-lines", type: "line", source: "context", filter: ["all", line, ["!=", ["get", "dotted"], true]], paint: { "line-color": "#6b7280", "line-width": 2, "line-opacity": 0.45 } });
+      m.addLayer({ id: "context-dotted", type: "line", source: "context", filter: ["all", line, ["==", ["get", "dotted"], true]], paint: { "line-color": "#6b7280", "line-width": 2, "line-opacity": 0.45, "line-dasharray": [0.6, 1.6] } });
+      m.addLayer({ id: "context-points", type: "circle", source: "context", filter: ["==", ["geometry-type"], "Point"],
+        paint: { "circle-color": "#6b7280", "circle-radius": 3.5, "circle-opacity": 0.45, "circle-stroke-color": "#ffffff", "circle-stroke-width": ["case", ["==", ["get", "dotted"], true], 0, 1], "circle-stroke-opacity": 0.6 } });
       m.addLayer({ id: "areas-fill", type: "fill", source: "areas", paint: { "fill-color": color, "fill-opacity": num("opacity", 0.25) } });
       m.addLayer({ id: "areas-edge", type: "line", source: "areas", paint: { "line-color": color, "line-width": 1.5, "line-opacity": 0.7 } });
       m.addLayer({ id: "lines-halo", type: "line", source: "lines", filter: ["!=", ["get", "dash"], true],
@@ -73,8 +84,10 @@ export default function MapPane({ scene, fit, onPick, onMapClick, children }: {
       push();
       const f = latest.current.fit;
       if (f) m.fitBounds(f.bbox, { padding: 60, maxZoom: f.maxZoom ?? 10, duration: 0 });
+      const b = m.getBounds();
+      latest.current.onMove?.([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]);  // the first view asks for its context layer too
     });
-    const hoverable = ["points", "lines-solid", "lines-dash", "areas-fill"];
+    const hoverable = ["points", "lines-solid", "lines-dash", "areas-fill", "context-points", "context-lines", "context-dotted", "context-fill"];  // scene first, context under it
     m.on("mousemove", (e) => {
       if (!ready.current) return;
       const hit = m.queryRenderedFeatures(e.point, { layers: hoverable }).find((f) => f.properties?.title);
@@ -83,6 +96,7 @@ export default function MapPane({ scene, fit, onPick, onMapClick, children }: {
       else tip.remove();
     });
     m.on("mouseout", () => tip.remove());
+    m.on("moveend", () => { const b = m.getBounds(); latest.current.onMove?.([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]); });
     m.on("click", (e) => {
       const hit = m.queryRenderedFeatures(e.point, { layers: hoverable }).find((f) => f.properties?.pick);
       if (hit) latest.current.onPick?.(String(hit.properties.pick));
@@ -93,7 +107,7 @@ export default function MapPane({ scene, fit, onPick, onMapClick, children }: {
     return () => { ro.disconnect(); tip.remove(); m.remove(); map.current = null; ready.current = false; };
   }, []);
 
-  useEffect(push, [scene]);
+  useEffect(push, [scene, context]);
 
   useEffect(() => {
     if (fit && ready.current) map.current?.fitBounds(fit.bbox, { padding: 60, maxZoom: fit.maxZoom ?? 10, duration: 900 });

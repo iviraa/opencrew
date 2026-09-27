@@ -25,7 +25,7 @@ export type Explain = {
 };
 export type MapView = {
   tab: "overlaps" | "hazards" | "news"; period?: "now7" | "weeks" | "season" | "month"; month?: number; hazards?: string[]; ids?: number[]; filters?: Record<string, unknown>;
-  partner?: string; fit?: { bbox: [number, number, number, number] } | { to: string };
+  partner?: string; fit?: { bbox: [number, number, number, number] } | { to: string }; layers?: { others?: boolean };
 };
 
 export type MapCard =

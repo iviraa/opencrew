@@ -213,3 +213,23 @@ def test_export_share_and_query_round_trip(conn):
     claims = share.verify(s["token"])
     assert claims["company"] == "gpc" and share.render(conn, claims).startswith("<!doctype html")
     assert "error" in share_link(GPC, conn, "report", "999999")[0] and "error" in share_link(GPC, conn, "finding", "abc")[0]
+
+
+@needs_db
+def test_context_projects_excludes_our_org_and_stays_in_the_box(conn):
+    from fastapi.testclient import TestClient
+    from app.auth import current_user
+    from app.main import app
+    app.dependency_overrides[current_user] = lambda: GPC
+    try:
+        c = TestClient(app)
+        fc = c.get("/api/app/context_projects?bbox=-86,30,-79,36").json()
+        assert fc["type"] == "FeatureCollection" and len(fc["features"]) > 20
+        assert all(f["properties"]["org_id"] != "gpc" and f["properties"]["org"] and "dotted" in f["properties"] for f in fc["features"])
+        assert any(f["properties"]["dotted"] for f in fc["features"]) and any(not f["properties"]["dotted"] for f in fc["features"])
+        assert c.get("/api/app/context_projects?bbox=-100,44,-99,45").json()["features"] == []
+        assert c.get("/api/app/context_projects?bbox=nope").status_code == 400
+    finally:
+        app.dependency_overrides.pop(current_user, None)
+    out, acts = mt.map_view(GPC, conn, tab="overlaps", layers={"others": False})
+    assert acts[0]["layers"] == {"others": False} and "hiding" in out["did"]

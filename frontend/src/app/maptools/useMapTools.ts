@@ -11,11 +11,11 @@ const GRAPE = "#5b2bb5";
 type Deps = {
   me: Me | null; projects: Jobs | null; ov: { overlaps: Overlap[]; jobs: Jobs } | null;
   setTab: (t: "overlaps" | "weather" | "news") => void; setFit: (f: Fit) => void; showIds: (ids: number[]) => Promise<void>; setPartner: (p: string | null) => void;
-  pickProject: (id: string) => void; openOverlap: (id: number) => void;
+  pickProject: (id: string) => void; openOverlap: (id: number) => void; setOthers: (on: boolean) => void;
 };
 
 // the chat's map, data and explain hand-overs: applies map_view, keeps the highlight, route and timeline the map draws, and makes the cards
-export function useMapTools({ me, projects, ov, setTab, setFit, showIds, setPartner, pickProject, openOverlap }: Deps) {
+export function useMapTools({ me, projects, ov, setTab, setFit, showIds, setPartner, pickProject, openOverlap, setOthers }: Deps) {
   const [highlight, setHighlight] = useState<Set<string> | null>(null);  // project ids a filter picked
   const [route, setRoute] = useState<Route | null>(null);
   const [timeline, setTimeline] = useState<Timeline | null>(null);
@@ -34,6 +34,7 @@ export function useMapTools({ me, projects, ov, setTab, setFit, showIds, setPart
   }, [setFit, setTab]);
 
   const applyView = useCallback(async (v: MapView) => {
+    if (v.layers?.others != null) setOthers(v.layers.others);
     if (v.tab === "hazards") { setTab("weather"); setHazardControl({ period: v.period, month: v.month, hazards: v.hazards, at: Date.now() }); return; }
     if (v.tab === "news") { setTab("news"); return; }
     setTab("overlaps"); setTimeline(null);
@@ -44,7 +45,7 @@ export function useMapTools({ me, projects, ov, setTab, setFit, showIds, setPart
     else if (fit.to === "ours") { const b = bboxOf([projects ?? undefined]); if (b) setFit({ bbox: b, key: `v${Date.now()}` }); }
     else if (fit.to === "overlaps") { const b = bboxOf([ov?.jobs]); if (b) setFit({ bbox: b, key: `v${Date.now()}` }); }
     else if (fit.to.startsWith("overlap:")) await showIds([Number(fit.to.slice(8))]);
-  }, [projects, ov, setTab, setFit, showIds, setPartner]);
+  }, [projects, ov, setTab, setFit, showIds, setPartner, setOthers]);
 
   const cardsOf = useCallback((actions: ChatAction[]) => actions.filter((a) => CARD_TYPES.has(a.type)) as unknown as MapCard[], []);
 

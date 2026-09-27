@@ -7,7 +7,7 @@ import {
   TIER_LABEL, ago, api, company, partnerOf, setCompanies, miles, usd, notices as noticesApi, requests as requestsApi, supabase,
   type CollabRequest, type Jobs, type Me, type Notice, type Overlap, type SuggestionAction,
 } from "./data";
-import MapPane, { bboxOf, esc, type Fit, type Scene } from "./MapPane";
+import MapPane, { bboxOf, esc, type Bbox, type Fit, type Scene } from "./MapPane";
 import { beaver, say } from "./mascot";
 import Speech from "./Speech";
 import { GoalPanel, GoalsList } from "./GoalPanel";
@@ -83,6 +83,9 @@ export default function Shell() {
   const [hazardFocus, setHazardFocus] = useState<HazardFocus | null>(null);  // an overlap asking for its weather cost on the hazards tab
   const [overlay, setOverlay] = useState<Finding | null>(null);  // the experiment whose changes the map and lists show
   const [picking, setPicking] = useState(false);  // a finding is waiting for a click on the map
+  const [others, setOthers] = useState(true);  // the grey context layer: every other utility's placed projects
+  const [context, setContext] = useState<GeoJSON.FeatureCollection | null>(null);
+  const contextBox = useRef<Bbox | null>(null);  // the box the context layer was fetched for, padded so panning rarely refetches
   const pickCb = useRef<((lon: number, lat: number) => void) | null>(null);
   const plans = usePlans();  // every plan crewly has built or shown this session
   const [toast, setToast] = useState<{ text: string; request: number } | null>(null);
@@ -403,7 +406,16 @@ export default function Shell() {
     if (b) setFit({ bbox: b, key: `p${id}${Date.now()}`, maxZoom: 11 });
     if (f) say(`Here's ${f.properties.name.length > 40 ? `${f.properties.name.slice(0, 40)}...` : f.properties.name}.`, "nod");
   };
-  const mt = useMapTools({ me, projects, ov, setTab, setFit, showIds, setPartner, pickProject, openOverlap });  // the chat's map, data and explain hand-overs
+  const mt = useMapTools({ me, projects, ov, setTab, setFit, showIds, setPartner, pickProject, openOverlap, setOthers });  // the chat's map, data and explain hand-overs
+  const onMove = useCallback((b: Bbox) => {  // fetch the context layer for a box twice the view, only when the view leaves the last one
+    const last = contextBox.current;
+    if (last && b[0] >= last[0] && b[1] >= last[1] && b[2] <= last[2] && b[3] <= last[3]) return;
+    const dx = (b[2] - b[0]) / 2, dy = (b[3] - b[1]) / 2, box: Bbox = [b[0] - dx, b[1] - dy, b[2] + dx, b[3] + dy];
+    contextBox.current = box;
+    api.contextProjects(box).then((fc) => setContext({ ...fc, features: fc.features.map((f) => ({ ...f, properties: { ...f.properties,
+      title: `${esc(f.properties.org)} · ${esc(f.properties.name)}${f.properties.kv ? ` · ${f.properties.kv} kV` : ""}` } })) })).catch(() => {});
+  }, []);
+  const contextShown = useMemo(() => (others && context ? { ...context, features: context.features.filter((f) => f.properties?.org_id !== me?.company) } : null), [others, context, me]);
 
   // ---------- right quarter ----------
   const panel = !me || !top ? null : top.kind === "chat" ? (
@@ -488,9 +500,13 @@ export default function Shell() {
         )}
         {me && tab === "overlaps" && top?.kind !== "plan" && !mt.timeline && (
           <Split side={roomy(panel ?? overlapsSide)} map={
-            <MapPane scene={mt.decorate(shownScene)} fit={fit} onPick={(p) => p.startsWith("op:") && openOverlap(Number(p.slice(3)))}
+            <MapPane scene={mt.decorate(shownScene)} context={contextShown} fit={fit} onMove={onMove} onPick={(p) => p.startsWith("op:") && openOverlap(Number(p.slice(3)))}
               onMapClick={(lon, lat) => { const cb = pickCb.current; if (cb) { pickCb.current = null; setPicking(false); cb(lon, lat); } }}>
               {picking && <div className="pop-in absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full border-2 border-pen bg-white px-3 py-1 text-xs font-semibold">Click the map to set the place</div>}
+              <button onClick={() => setOthers((v) => !v)} aria-pressed={others} title="Other utilities' placed projects, in grey under ours"
+                className={`absolute right-3 top-3 z-10 flex items-center gap-1.5 rounded-full border-2 px-2.5 py-1 text-xs font-semibold ${others ? "border-pen bg-white" : "border-line bg-white/80 text-muted"}`}>
+                <span className="h-2 w-4 rounded-full" style={{ background: others ? "#6b7280" : "#d9dce3" }} />Other utilities{contextShown ? ` · ${contextShown.features.length}` : ""}
+              </button>
               {mt.decorated && !overlay && !picking && <button onClick={mt.clear} className="pop-in absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full border-2 border-pen bg-white px-3 py-1 text-xs font-semibold hover:bg-grape-soft">Crewly's highlight is on the map · clear</button>}
               {overlay && !picking && (
                 <button onClick={() => setOverlay(null)} className="pop-in absolute left-1/2 top-3 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border-2 border-pen bg-white px-3 py-1 text-xs font-semibold hover:bg-grape-soft">

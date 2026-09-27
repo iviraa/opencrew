@@ -85,7 +85,7 @@ def overlap_ids_for(conn, company, f):
     return [r["id"] for r in conn.execute(sql, {**params, "co": company}).fetchall()], who
 
 
-def map_view(ctx, conn, tab="overlaps", period=None, month=None, hazards=None, filters=None, fit=None):
+def map_view(ctx, conn, tab="overlaps", period=None, month=None, hazards=None, filters=None, fit=None, layers=None):
     tab = {"weather": "hazards"}.get(tab, tab)
     if tab not in TABS:
         return {"error": f"tab must be one of {', '.join(TABS)}"}, []
@@ -103,6 +103,8 @@ def map_view(ctx, conn, tab="overlaps", period=None, month=None, hazards=None, f
             return {"error": f"hazards must be some of {', '.join(HAZARDS)}"}, []
         if hz:
             action["hazards"] = hz; said.append("hazards " + ", ".join(hz))
+    if isinstance(layers, dict) and "others" in layers:
+        action["layers"] = {"others": bool(layers["others"])}; said.append(("showing" if layers["others"] else "hiding") + " other utilities' projects")
     if filters:
         try:
             ids, who = overlap_ids_for(conn, ctx["company"], filters)
@@ -478,11 +480,12 @@ def map_tools(ctx):
         "years": {"type": "array", "items": {"type": "integer"}}}}
     return {
         "map_view": (_bind(ctx, map_view), "Drive the map: switch tab (overlaps, hazards, news), set the hazards period and month and which hazard layers show, "
-                     "narrow the overlaps list and map with filters (partner, tier, kv, type, status, county, state, years), and fit the map to ours, "
-                     "overlaps, one overlap or a bbox.", {
+                     "narrow the overlaps list and map with filters (partner, tier, kv, type, status, county, state, years), fit the map to ours, "
+                     "overlaps, one overlap or a bbox, and show or hide the grey context layer of other utilities' projects (layers.others).", {
             "tab": {"type": "string", "enum": list(TABS)}, "period": {"type": "string", "enum": list(PERIODS)}, "month": {"type": "integer"},
             "hazards": {"type": "array", "items": {"type": "string", "enum": list(HAZARDS)}}, "filters": filt,
-            "fit": {"type": "string", "description": "ours, overlaps, or overlap:18"}}, ["tab"]),
+            "fit": {"type": "string", "description": "ours, overlaps, or overlap:18"},
+            "layers": {"type": "object", "properties": {"others": {"type": "boolean"}}}}, ["tab"]),
         "filter_projects": (_bind(ctx, filter_projects), "Find and highlight our own projects by kv, type, status, county, state, name or build years; they light "
                             "up on the map and list in a card.", {"filters": filt, "limit": {"type": "integer"}}, []),
         "timeline": (_bind(ctx, timeline), "Our projects (and optionally a partner utility's) on a month timeline for a year range.", {
@@ -501,7 +504,8 @@ def map_tools(ctx):
 
 
 PROMPT = """
-- Map words ("show the map", "switch to hazards", "August floods", "only 230 kV", "just Duke", "zoom to #18", "fit to our projects") mean map_view;
+- Map words ("show the map", "switch to hazards", "August floods", "only 230 kV", "just Duke", "zoom to #18", "fit to our projects",
+  "hide / show other utilities") mean map_view;
   "highlight / find our projects that ..." means filter_projects; "timeline / calendar of our projects" means timeline.
 - "Forecast at ...", "weather this week at ..." means site_forecast; report it as an assessment (gusts, thunder chance, heat index) and never as
   an instruction about who works. "How far / drive time from A to B" means route_between.
