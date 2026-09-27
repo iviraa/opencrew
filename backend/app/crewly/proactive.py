@@ -125,9 +125,21 @@ def follow_ups(company, requests, tasks, now=None):
     return out
 
 
+def due_reminders(company):
+    """Reminders whose time has come; the bell carries them once and they are marked notified."""
+    from app.crewly.workspace_tools import due_reminders as due
+    try:
+        rows = due(company, _rest)
+        for r in rows:
+            _rest("reminder", "PATCH", params={"id": f"eq.{r.pop('id')}"}, json={"notified_at": datetime.now(timezone.utc).isoformat()})
+        return rows
+    except Exception:  # a reminder problem must never stop the other suggestions
+        return []
+
+
 def suggestions(conn, company, requests, tasks, now=None):
     return (request_takes(conn, company, requests) + follow_ups(company, requests, tasks, now)
-            + weather_risks(conn, company) + cold_overlaps(conn, company, requests))
+            + weather_risks(conn, company) + cold_overlaps(conn, company, requests) + due_reminders(company))
 
 
 def scan(conn, company):
@@ -146,6 +158,7 @@ def scan(conn, company):
             if e.response.status_code != 409:
                 raise
     keep = ",".join(f'"{s["dedup_key"]}"' for s in found)
-    stale = {"company_id": f"eq.{company}", "kind": "eq.suggestion", "dismissed_at": "is.null", **({"dedup_key": f"not.in.({keep})"} if keep else {})}
+    stale = {"company_id": f"eq.{company}", "kind": "eq.suggestion", "dismissed_at": "is.null",
+             "and": f'(dedup_key.not.like."reminder:*"{f",dedup_key.not.in.({keep})" if keep else ""})'}  # reminders stay until the person dismisses them
     _rest("notification", "PATCH", params=stale, json={"dismissed_at": datetime.now(timezone.utc).isoformat()})  # answered, passed or recounted: retire it
     return {"company": company, "found": len(found), "created": len(created), "suggestions": created}
