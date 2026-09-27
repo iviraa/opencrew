@@ -20,7 +20,7 @@ export function buildRefIndex(overlaps: Overlap[] | null): RefIndex {
     }
   }
   const names = [...byName.keys()].sort((a, b) => b.length - a.length).slice(0, 600);  // longest first so a longer name wins over one it contains
-  const re = ids.size ? new RegExp(`#(\\d{1,7})(?!\\d)${names.length ? `|(?<![\\w])(${names.map(esc).join("|")})(?![\\w])` : ""}`, "gi") : null;
+  const re = ids.size ? new RegExp(`(?<!k[vV]\\s?)(?<!\\d\\s)#(\\d{1,7})(?!\\d)${names.length ? `|(?<![\\w])(${names.map(esc).join("|")})(?![\\w])` : ""}`, "gi") : null;
   return { ids, byName, re };
 }
 

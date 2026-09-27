@@ -14,6 +14,7 @@ const fetchHtml = async (id: number) => {
 
 // a printable report crewly wrote: a document preview in the chat, opened in a new tab with the login; sections can be trimmed and regenerated
 export default function ReportCard({ report: initial }: { report: Report }) {
+  const [more, setMore] = useState(false);  // the summary folds to four lines
   const [report, setReport] = useState(initial);
   const [picked, setPicked] = useState<string[]>(initial.sections);
   const [busy, setBusy] = useState(false);
@@ -44,7 +45,10 @@ export default function ReportCard({ report: initial }: { report: Report }) {
   return (
     <Card icon={<FileText size={15} />} title={report.title} busy={busy}
       sub={<Row><Chip tone="info">{kind}</Chip><span>{dateShort(report.created_at)}</span><span>· {report.sections.length} section{report.sections.length === 1 ? "" : "s"}</span></Row>}>
-      <Lead>{report.summary ?? `A printable ${kind.toLowerCase()} covering ${report.sections.map((s) => (SECTION_LABEL[s] ?? s).toLowerCase()).join(", ")}.`}</Lead>
+      <Lead>
+        <span className={more ? "" : "line-clamp-4"}>{report.summary ?? `A printable ${kind.toLowerCase()} covering ${report.sections.map((s) => (SECTION_LABEL[s] ?? s).toLowerCase()).join(", ")}.`}</span>
+        {(report.summary?.length ?? 0) > 260 && <button type="button" onClick={() => setMore(!more)} className="ml-1 text-xs font-semibold text-grape hover:underline">{more ? "Less" : "More"}</button>}
+      </Lead>
       {figures.length > 0 && <StatRow items={figures.map((f) => ({ label: f.label, value: f.value, note: f.note }))} cols={figures.length >= 4 ? 2 : undefined} />}
       <Drawer title="Sections" summary={report.all_sections.map((s) => SECTION_LABEL[s] ?? s).join(" · ")}>
         <Row>

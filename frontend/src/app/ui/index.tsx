@@ -57,7 +57,7 @@ const VALUE_TONE: Record<Tone, string> = { good: "text-save", bad: "text-warn", 
 export function Stat({ label, value, note, tone = "flat", big }: { label: React.ReactNode; value: React.ReactNode; note?: React.ReactNode; tone?: Tone; big?: boolean }) {
   return (
     <div className="min-w-0 rounded-xl bg-soft px-2.5 py-1.5">
-      <div className="truncate text-[10px] font-semibold uppercase tracking-wide text-faint">{label}</div>
+      <div className="line-clamp-2 text-[10px] font-semibold uppercase leading-tight tracking-wide text-faint" title={typeof label === "string" ? label : undefined}>{label}</div>
       <div className={`display truncate font-logo font-semibold leading-tight ${big ? "text-xl" : "text-base"} ${VALUE_TONE[tone]}`}>{value}</div>
       {note && <div className="truncate text-[11px] leading-snug text-muted">{note}</div>}
     </div>

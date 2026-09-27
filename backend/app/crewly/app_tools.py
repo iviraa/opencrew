@@ -47,7 +47,11 @@ def mine_sql(company):
     return OPP_SQL + f" WHERE op.horizon = 'long' AND '{company}' IN (ja.org_id, jb.org_id)"
 
 
-def my_overlaps(ctx, conn, start_date=None, end_date=None, tier=None, region=None, partner_company=None, limit=10):
+SORTS = {"best": "op.score DESC, op.distance_m", "savings": "op.savings_high DESC NULLS LAST, op.savings_low DESC NULLS LAST, op.score DESC",
+         "closest": "op.distance_m, op.score DESC", "soonest": "GREATEST(lower(ja.work_window), lower(jb.work_window)), op.score DESC"}
+
+
+def my_overlaps(ctx, conn, start_date=None, end_date=None, tier=None, region=None, partner_company=None, limit=10, sort="best"):
     s, e = _day(start_date), _day(end_date)
     who = find_company(partner_company) if partner_company else None
     if partner_company and not who:
@@ -59,7 +63,7 @@ def my_overlaps(ctx, conn, start_date=None, end_date=None, tier=None, region=Non
     box = REGIONS.get((region or "").lower())
     if box:
         sql += " AND ST_Intersects(ST_Centroid(op.link::geometry), ST_MakeEnvelope(%(x0)s, %(y0)s, %(x1)s, %(y1)s, 4326))"
-    rows = conn.execute(sql + " ORDER BY op.score DESC, op.distance_m LIMIT %(l)s",
+    rows = conn.execute(sql + f" ORDER BY {SORTS.get(sort or 'best', SORTS['best'])} LIMIT %(l)s",
                         {"t": tier, "p": who, "s": s, "e": e, "l": min(int(limit or 10), 25),
                          **dict(zip(("x0", "y0", "x1", "y1"), box or (0, 0, 0, 0)))}).fetchall()
     out = []
@@ -68,8 +72,8 @@ def my_overlaps(ctx, conn, start_date=None, end_date=None, tier=None, region=Non
         row["partner"] = name(partner(r, ctx["company"]))
         row["windows"] = {r["a_org"]: f"{r['a_start']:%b %Y} to {r['a_end']:%b %Y}", r["b_org"]: f"{r['b_start']:%b %Y} to {r['b_end']:%b %Y}"}
         out.append(row)
-    result = {"count": len(rows), "date_range": [str(s) if s else None, str(e) if e else None], "region_known": bool(box) if region else None,
-              "overlaps": out}
+    result = {"count": len(rows), "sorted_by": sort if sort in SORTS else "best", "date_range": [str(s) if s else None, str(e) if e else None],
+              "region_known": bool(box) if region else None, "overlaps": out}
     if not rows and (s or e):
         result["when_overlaps_happen"] = busy_years(conn, ctx["company"])  # so the answer can point somewhere useful
     return result, ([{"type": "show_overlaps", "ids": [r["id"] for r in rows]}] if rows else [])
@@ -195,7 +199,9 @@ def app_tools(ctx):
             "tier": {"type": "string", "enum": ["crossing", "land", "site", "crew"]},
             "region": {"type": "string", "description": "one of " + ", ".join(REGIONS)},
             "partner_company": {"type": "string", "description": "only overlaps with this utility, e.g. Duke Energy"},
-            "limit": {"type": "integer", "description": "exactly how many to return; pass the number the user asked for"}}, []),
+            "limit": {"type": "integer", "description": "exactly how many to return; pass the number the user asked for"},
+            "sort": {"type": "string", "enum": list(SORTS), "description": "best (score), savings (largest savings first), closest, soonest; "
+                     "use savings for 'top by savings', 'most valuable', 'biggest'"}}, []),
         "open_overlap": (_bind(ctx, open_overlap), "Full details for one overlap (both projects, windows, what can be shared, savings) "
                          "and open it in the side panel.", {"opportunity_id": {"type": "integer"}}, ["opportunity_id"]),
         "collab_requests": (_bind(ctx, collab_requests), "Our collaboration requests: ones we sent (and whether they were approved or "
@@ -264,7 +270,8 @@ and name the partner utility for them; never assume there is only one other comp
 Rules:
 - Call a tool before stating any number. Every number you write must come from a tool result from this turn or the user's message.
   Never calculate or estimate numbers yourself.
-- To show, list, find or filter overlaps (including by dates like "in March 2027" or "next year"), call my_overlaps once; the app plots
+- To show, list, find or filter overlaps (including by dates like "in March 2027" or "next year"), call my_overlaps once (sort=savings
+  for "top/best by savings" or "most valuable", limit=N for "top N"); the app plots
   them and shows clickable cards, so keep your text to a one or two sentence summary and do not repeat every row or id.
 - Turn relative dates into start_date and end_date yourself from today's date (e.g. "next year", "this summer", "Q3 2025").
   Writing the dates you searched is fine. If nothing matches, say so and mention the years in when_overlaps_happen.

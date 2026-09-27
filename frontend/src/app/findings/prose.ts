@@ -29,8 +29,10 @@ const lower = (s: string, i: number) => (i === 0 ? s : s[0].toLowerCase() + s.sl
 // the numeric deltas worth talking about: dollars first, then whatever moved most
 export function movers(deltas: Delta[]): Delta[] {
   const weight = (d: Delta) => (unitOf(d.metric, d.unit) === "USD" ? 2 : 1) * Math.abs(d.pct ?? 0);
-  return deltas.filter((d) => typeof d.delta === "number" && d.delta !== 0 && typeof d.base === "number" && typeof d.scenario === "number")
+  const ranked = deltas.filter((d) => typeof d.delta === "number" && d.delta !== 0 && typeof d.base === "number" && typeof d.scenario === "number")
     .sort((a, b) => weight(b) - weight(a) || Math.abs(Number(b.delta)) - Math.abs(Number(a.delta)));
+  const seen = new Set<string>();  // a low/high pair counts as one mover
+  return ranked.filter((d) => { const key = d.label.replace(/\s*\((low|high)\)\s*$/i, "").toLowerCase(); if (seen.has(key)) return false; seen.add(key); return true; });
 }
 
 const clause = (d: Delta) => {

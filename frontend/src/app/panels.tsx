@@ -6,6 +6,7 @@ import {
   type CollabRequest, type Feasibility, type FeasibilityFactor, type Jobs, type Me, type Overlap, type OverlapDetail, type Verdict,
 } from "./data";
 import { say } from "./mascot";
+import { Chip as UiChip, type ChipTone } from "./ui";
 import { NotesBlock } from "./workspace/Cards";
 
 export function PanelHeader({ title, sub, onBack, right }: { title: string; sub?: React.ReactNode; onBack?: () => void; right?: React.ReactNode }) {
@@ -48,13 +49,11 @@ export const pct = (x: number) => `${Math.round(x * 100)}%`;
 export const count = (n: number) => n.toLocaleString("en-US");
 
 export type Tone = "neutral" | "good" | "warn" | "bad" | "info";
-const TONE: Record<Tone, string> = {
-  neutral: "bg-soft text-muted", good: "bg-save-soft text-save", warn: "bg-crew-soft text-[#8a5a00]", bad: "bg-gpc-soft text-[#c23b3b]", info: "bg-grape-soft text-grape",
-};
+const TONE: Record<Tone, ChipTone> = { neutral: "neutral", good: "good", warn: "amber", bad: "danger", info: "info" };  // panel tones on the chat's chip
 
-// one chip style for every label in the app: status, verdict, impact, confidence
+// one chip style for every label in the app: status, verdict, impact, confidence (the same component the chat cards use)
 export function Chip({ tone = "neutral", icon, title, children }: { tone?: Tone; icon?: React.ReactNode; title?: string; children: React.ReactNode }) {
-  return <span title={title} className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold ${TONE[tone]}`}>{icon}{children}</span>;
+  return <UiChip tone={TONE[tone]} icon={icon} title={title}>{children}</UiChip>;
 }
 
 // a confidence as a labelled chip with a small meter, toned by band
