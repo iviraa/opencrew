@@ -1,5 +1,5 @@
 """One round trip for the discovery scan: our projects, the neighbors we overlap with, other utilities nearby, and our overlaps."""
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.app_api import features
 from app.auth import current_user
@@ -28,6 +28,8 @@ def scan_context(center: str | None = Query(None, pattern=r"^-?\d+(\.\d+)?,-?\d+
     ours = conn.execute(JOB_SQL + " WHERE j.horizon = 'long' AND j.org_id = %s ORDER BY lower(j.work_window)", (me,)).fetchall()
     if center:
         lon, lat = (float(x) for x in center.split(","))
+        if not (-180 <= lon <= 180 and -90 <= lat <= 90):
+            raise HTTPException(400, "center must be lon,lat in degrees")
     else:  # the middle of our own service area
         c = conn.execute("SELECT ST_X(ST_Centroid(ST_Collect(geom::geometry))) AS lon, ST_Y(ST_Centroid(ST_Collect(geom::geometry))) AS lat "
                          "FROM job WHERE horizon = 'long' AND org_id = %s", (me,)).fetchone()

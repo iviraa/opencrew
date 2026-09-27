@@ -1,4 +1,6 @@
 """Crewly abilities that hand something over: a chart, a data table, a printable report, or exactly the overlaps it means."""
+import re
+
 from app.crewly import charts, reports
 
 
@@ -12,6 +14,7 @@ def show_overlaps(ctx, conn, ids, title=None):
     want = [int(str(i).lstrip("#")) for i in (ids or []) if str(i).lstrip("#").isdigit()][:25]
     ours = {r["id"] for r in conn.execute(mine_sql(ctx["company"]) + " AND op.id = ANY(%s)", (want,)).fetchall()} if want else set()
     kept = [i for i in want if i in ours]
+    title = re.sub(r"<[^>]*>", "", str(title or "")).strip()[:80]  # a card title is plain text
     return {"shown": kept, "not_ours": [i for i in want if i not in ours]}, [{"type": "show_overlaps", "ids": kept, **({"title": title} if title else {})}]
 
 
