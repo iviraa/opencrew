@@ -218,7 +218,11 @@ export default function Shell() {
     setSelected(id);
     push({ kind: "overlap", id });
     const o = data.overlaps.find((x) => x.id === id);
-    if (o) say(o.savings_high > 0 ? `Overlap #${id}: ${miles(o.distance_m)} apart, could save ${usd(o.savings_low)} to ${usd(o.savings_high)}.` : `Overlap #${id}: close by, but built in different years.`, "nod");
+    if (o) {
+      const line = (low: number, high: number) => say(high > 0 ? `Overlap #${id}: ${miles(o.distance_m)} apart, could save ${usd(low)} to ${usd(high)}.` : `Overlap #${id}: close by, but built in different years.`, "nod");
+      // quote the detail panel's live estimate: the list's stored figure lags behind cost-model and project changes until the next recompute
+      api.overlap(id).then((d) => line(d.savings.low, d.savings.high)).catch(() => line(o.savings_low, o.savings_high));
+    }
     if (o) {
       const jobs = data.jobs.features.filter((f) => f.id === o.job_a || f.id === o.job_b || f.properties.id === o.job_a || f.properties.id === o.job_b);
       const b = bboxOf([{ type: "FeatureCollection", features: [...jobs, { type: "Feature", geometry: o.link, properties: {} }] }]);
