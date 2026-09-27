@@ -574,6 +574,8 @@ app.include_router(generate_api.router)
 from app.stormlab.api import router as stormlab_router  # noqa: E402
 app.include_router(stormlab_router)
 app.include_router(scenario_api.router)
+from app.comms import api as comms_api  # noqa: E402
+app.include_router(comms_api.router)
 
 @app.get("/config.js", include_in_schema=False)
 def web_config():

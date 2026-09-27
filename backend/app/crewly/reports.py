@@ -4,6 +4,7 @@ import json
 from datetime import date
 
 from app.companies import name, short
+from app.config import MILE_M
 
 KINDS = {
     "feasibility": ("Feasibility assessment", ["verdict", "factors", "conditions", "shifts"]),
@@ -12,6 +13,8 @@ KINDS = {
     "plan": ("Coordination plan", ["totals", "items", "risks"]),
     "pack": ("Overlap pack", ["brief", "feasibility", "cost_analysis", "hazard_exposure"]),
     "finding": ("Experiment finding", ["stack", "metrics", "deltas", "notes", "evidence", "sources"]),
+    "agenda": ("Coordination call agenda", ["context", "decisions", "data", "questions", "logistics"]),
+    "memo": ("Cost-sharing memo", ["purpose", "projects", "savings", "timing", "split", "risks", "next_steps"]),
 }
 
 TABLE_SQL = """
@@ -185,7 +188,176 @@ def sec_brief(conn, company, opp):
     return "<h2>Coordination brief</h2>" + body
 
 
-def build(conn, company, kind, ref_id=None, sections=None):
+# ---------- what people take into a call or to a commission ----------
+
+def pair_context(conn, company, opp):
+    """Both projects from our side, savings, what could be shared, plus feasibility and weather timing when they are available."""
+    from app.crewly import brief
+    f = brief.facts(conn, opp)
+    if not f:
+        raise ValueError(f"#{opp} is not one of our overlaps")
+    o, a, b, s = f
+    if company not in (a["org_id"], b["org_id"]):
+        raise ValueError(f"#{opp} is not one of our overlaps")
+    ours, theirs = (a, b) if a["org_id"] == company else (b, a)
+    from app.queries import shareable
+    ctx = {"o": o, "ours": ours, "theirs": theirs, "s": s, "share": shareable(o["tier"], o["a_phase"], o["b_phase"], o["drive_min"]),
+           "partner": name(theirs["org_id"]), "feas": None, "haz": None}
+    try:
+        from app.feasibility.assess import assess
+        ctx["feas"] = assess(conn, opp, company)
+    except Exception:
+        pass
+    try:
+        from app.hazards import cost as hcost
+        got = hcost.for_zone(conn, opp, "month")
+        ctx["haz"] = got
+    except Exception:
+        pass
+    return ctx
+
+
+def window(j):
+    return f"{j['start_at']:%b %Y} to {j['end_at']:%b %Y}"
+
+
+def plan_context(conn, company, horizon):
+    from app.planner import build, store
+    row = store.latest(conn, company, horizon if horizon in build.HORIZONS else "quarter")
+    if not row:
+        raise ValueError("no plan yet; ask me to build one first")
+    return row
+
+
+def sec_agenda(conn, company, ref, sections, options):
+    opts = options or {}
+    when = opts.get("when")
+    out = []
+    if ref.isdigit():
+        c = pair_context(conn, company, int(ref))
+        o, s = c["o"], c["s"]
+        title = f"Coordination call: {c['ours']['name']} and {c['theirs']['name']}"
+        if "context" in sections:
+            out.append("<h2>Context</h2>" + table(["Utility", "Project", "Build window", "In service"],
+                       [[name(company), c["ours"]["name"], window(c["ours"]), f"{c['ours']['in_service']:%b %Y}"],
+                        [c["partner"], c["theirs"]["name"], window(c["theirs"]), f"{c['theirs']['in_service']:%b %Y}"]])
+                       + f"<p>Closest points {o['distance_m'] / MILE_M:.1f} mi apart ({esc(o['tier'])} tier); build windows overlap {round(o['time_overlap'] * 100)}%"
+                       + (f"; {o['drive_min']:.0f} min by road" if o["drive_min"] is not None else "") + f". Rough savings if scheduled together: <b>{rng(s)}</b>.</p>")
+        best = [m["label"] for m in (c["haz"][1]["best_months"] if c["haz"] else [])]
+        if "decisions" in sections:
+            items = [f"What to share first: {', '.join(c['share'][:4])}" if c["share"] else "What to coordinate first: outage timing and access",
+                     "Target months for the shared work" + (f" (weather history favors {', '.join(best)})" if best else ""),
+                     "Who hosts the laydown yard and the shared standby crew", "How savings are split, and who tracks them",
+                     "One contact per utility and the next check-in date"]
+            out.append("<h2>Decisions to make</h2><ol>" + "".join(f"<li>{esc(x)}</li>" for x in items) + "</ol>")
+        if "data" in sections:
+            out.append("<h2>Data each side brings</h2>" + table(["Item", name(company), c["partner"]], [
+                ["Current schedule and phases", window(c["ours"]), window(c["theirs"])],
+                ["Crew plan for the shared months", "to bring", "to bring"], ["Yard and access road locations", "to bring", "to bring"],
+                ["Planned outage windows", "to bring", "to bring"], ["Permit status and constraints", "to bring", "to bring"]]))
+        if "questions" in sections:
+            qs = [cond for f in ((c["feas"] or {}).get("factors") or []) for cond in f.get("conditions", [])][:6]
+            out.append("<h2>Open questions</h2><ul>" + "".join(f"<li>{esc(q)}</li>" for q in qs or ["Are both schedules still as filed?", "Which resources can each side commit?"]) + "</ul>")
+    else:
+        row = plan_context(conn, company, ref or "quarter")
+        items = [i for i in row["items"] if i.get("state") != "skipped"]
+        title = f"Coordination call: our {row['horizon']} plan (v{row['version']})"
+        t = row["totals"]
+        if "context" in sections:
+            out.append(f"<h2>Context</h2><p>{len(items)} pairs in the plan; expected savings <b>{rng(t['savings'])}</b>, weather cost avoided {rng(t['weather_avoided'])}.</p>"
+                       + table(["Overlap", "Ours", "Partner", "Months", "Savings", "Verdict"],
+                               [[f"#{i['id']}", i["ours"], i["partner_name"], f"{i['target_start'][:7]} to {i['target_end'][:7]}", rng(i["savings"]), i["verdict"]] for i in items]))
+        if "decisions" in sections:
+            out.append("<h2>Decisions to make</h2><ol>" + "".join(f"<li>{esc(x)}</li>" for x in [
+                "Which pairs to pursue this period, and in what order", "Target months per pair", "Who hosts yards and standby crews where two pairs meet",
+                "How savings are split across pairs", "Owners and the next check-in date"]) + "</ol>")
+        if "data" in sections:
+            out.append("<h2>Data each side brings</h2><ul><li>Current schedules and phases for every listed project</li><li>Crew and equipment availability by month</li>"
+                       "<li>Yard locations and planned outage windows</li><li>Permit status per project</li></ul>")
+        if "questions" in sections:
+            risks = [(f"#{i['id']}", r) for i in items for r in i.get("risks", [])[:1]][:6]
+            out.append("<h2>Open questions</h2><ul>" + "".join(f"<li><b>{esc(a)}:</b> {esc(str(r))}</li>" for a, r in risks) + "</ul>" if risks else "<h2>Open questions</h2><p>None flagged by the plan.</p>")
+    if "logistics" in sections:
+        out.append("<h2>Logistics</h2><ul>" + (f"<li>When: {esc(str(when))}</li>" if when else "<li>When: to be set</li>")
+                   + "<li>Who: one transmission planner per utility, plus a construction lead if available</li><li>Follow-up: a date and an owner before the call ends</li></ul>")
+    return "".join(out), title
+
+
+def sec_memo(conn, company, ref, sections, options):
+    audience = (options or {}).get("audience") or "internal"
+    out = []
+    lead = ("Prepared for review by the public service commission; public data and deterministic estimates only." if audience == "regulator"
+            else "Internal working memo; estimates for assessment.")
+    if ref.isdigit():
+        c = pair_context(conn, company, int(ref))
+        o, s = c["o"], c["s"]
+        title = f"Cost-sharing memo: {c['ours']['name']} and {c['theirs']['name']}"
+        if "purpose" in sections:
+            out.append(f"<h2>Purpose</h2><p>{esc(lead)}</p><p>{esc(name(company))} and {esc(c['partner'])} plan work {o['distance_m'] / MILE_M:.1f} mi apart with build "
+                       f"windows that overlap {round(o['time_overlap'] * 100)}%. Scheduling the work together is estimated to save <b>{rng(s)}</b>.</p>")
+        if "projects" in sections:
+            out.append("<h2>Projects</h2>" + table(["Utility", "Project", "Type", "Build window", "In service", "Source"],
+                       [[name(company), c["ours"]["name"], c["ours"]["job_type"].replace("_", " "), window(c["ours"]), f"{c['ours']['in_service']:%b %d, %Y}", f"{c['ours']['source_title']}, p.{c['ours']['source_page']}"],
+                        [c["partner"], c["theirs"]["name"], c["theirs"]["job_type"].replace("_", " "), window(c["theirs"]), f"{c['theirs']['in_service']:%b %d, %Y}", f"{c['theirs']['source_title']}, p.{c['theirs']['source_page']}"]]))
+        if "savings" in sections:
+            from app.config import ASSUMPTIONS
+            out.append("<h2>Savings</h2>" + table(["Item", "Low", "High"], [[k, usd(v["low"]), usd(v["high"])] for k, v in s["items"].items()])
+                       + "<h3>Sources</h3><ul>" + "".join(f"<li>{esc(v['label'])}: {v['low']:,} to {v['high']:,} {esc(v['unit'])}{'' if v.get('verified') else ' (estimate)'}. "
+                                                         f"{esc(v['source'])}{', p.' + str(v['page']) if v.get('page') else ''}</li>" for v in ASSUMPTIONS.values() if v.get("scope") != "storm") + "</ul>")
+        haz = c["haz"]
+        if "timing" in sections:
+            if haz:
+                cst, coord = haz
+                best = coord["best_months"]
+                out.append("<h2>Weather and timing</h2>" + (table(["Month", "Cost per 30 days", "Saves vs the assessed month"],
+                           [[m["label"], rng(m["cost_per_30d"]), rng(m["saves_vs_period"])] for m in best]) if best else "")
+                           + f"<p>Expected extra cost of weather in the assessed period: {rng(cst['total'])}. {esc(cst.get('method') or '')}</p>")
+            else:
+                out.append("<h2>Weather and timing</h2><p>Weather cost could not be assessed for this pair.</p>")
+        if "split" in sections:
+            if haz:
+                cst, coord = haz
+                out.append("<h2>Split to agree</h2><p>Working separately costs {sep} in weather standby over the period; coordinating costs {co}, so the shared "
+                           "standby is worth {sv}. The proposed principle is to split that in proportion to each utility's own expected extra cost below; the final split is for the two "
+                           "utilities to agree.</p>".format(sep=rng(coord["separate"]), co=rng(coord["coordinated"]), sv=rng(coord["savings"]))
+                           + table(["Site", "Expected extra cost"], [[st["name"], rng(st["total"])] for st in cst["sites"]])
+                           + ("<p>One-off savings per project: " + "; ".join(f"{x['name']} {rng(x)}" for x in coord["one_off"]) + ".</p>" if coord["one_off"] else ""))
+            else:
+                out.append("<h2>Split to agree</h2><p>Split the estimated savings by an agreed principle once each side's costs are assessed.</p>")
+        if "risks" in sections:
+            f = c["feas"]
+            items = [f"{x['label']}: {x['verdict']}; " + "; ".join(x["evidence"][:1] + x.get("conditions", [])[:1]) for x in ((f or {}).get("factors") or []) if x["verdict"] in ("possible", "unlikely", "unknown")]
+            out.append("<h2>Risks</h2>" + (f"<p>{chip(f['verdict'])} feasibility score {f['score']:.2f}</p>" if f else "") + "<ul>" + "".join(f"<li>{esc(x)}</li>" for x in items or ["No factor was rated below strong."]) + "</ul>")
+        if "next_steps" in sections:
+            out.append("<h2>Next steps</h2><ol>" + "".join(f"<li>{esc(x)}</li>" for x in [
+                "Confirm both schedules with each utility's engineering team", "Agree the target months and what is shared first",
+                "Record the split principle and who tracks actual costs", "Revisit after the next planner list update"]) + "</ol>")
+    else:
+        row = plan_context(conn, company, ref or "quarter")
+        items = [i for i in row["items"] if i.get("state") != "skipped"]
+        t = row["totals"]
+        title = f"Cost-sharing memo: our {row['horizon']} plan (v{row['version']})"
+        if "purpose" in sections:
+            out.append(f"<h2>Purpose</h2><p>{esc(lead)}</p><p>{len(items)} coordinated pairs over the next {esc(row['horizon'])}; expected savings <b>{rng(t['savings'])}</b>, "
+                       f"weather cost avoided by the chosen months {rng(t['weather_avoided'])}.</p>")
+        if "projects" in sections:
+            out.append("<h2>Projects</h2>" + table(["Overlap", "Ours", "Partner", "Their project", "Months"],
+                       [[f"#{i['id']}", i["ours"], i["partner_name"], i["theirs"], f"{i['target_start'][:7]} to {i['target_end'][:7]}"] for i in items]))
+        if "savings" in sections:
+            out.append("<h2>Savings</h2>" + table(["Overlap", "Partner", "Savings", "Verdict"], [[f"#{i['id']}", i["partner_name"], rng(i["savings"]), i["verdict"]] for i in items]))
+        if "timing" in sections:
+            out.append("<h2>Weather and timing</h2><p>Each pair's months were chosen as the cheapest run inside both build windows by ten years of county weather history.</p>")
+        if "split" in sections:
+            out.append("<h2>Split to agree</h2><p>Per pair, in proportion to each utility's own expected extra cost; the memo for a single overlap carries those figures.</p>")
+        if "risks" in sections:
+            risks = [(f"#{i['id']}", r) for i in items for r in i.get("risks", [])[:2]]
+            out.append("<h2>Risks</h2><ul>" + "".join(f"<li><b>{esc(a)}:</b> {esc(str(r))}</li>" for a, r in risks) + "</ul>" if risks else "<h2>Risks</h2><p>None flagged.</p>")
+        if "next_steps" in sections:
+            out.append("<h2>Next steps</h2><ol><li>Accept or skip each pair in the plan</li><li>Send the requests for accepted pairs</li><li>Agree splits pair by pair</li></ol>")
+    return "".join(out), title
+
+
+def build(conn, company, kind, ref_id=None, sections=None, options=None):
     """Render one report and store it; returns the row."""
     if kind not in KINDS:
         raise ValueError(f"unknown report kind {kind!r}; one of {', '.join(KINDS)}")
@@ -197,6 +369,10 @@ def build(conn, company, kind, ref_id=None, sections=None):
         body, title = sec_plan(conn, company, ref or "quarter", sections), f"{label}: {who}"
     elif kind == "finding":
         body, title = sec_finding(conn, company, ref, sections)
+    elif kind == "agenda":
+        body, title = sec_agenda(conn, company, ref, sections, options)
+    elif kind == "memo":
+        body, title = sec_memo(conn, company, ref, sections, options)
     else:
         if not ref:
             raise ValueError("this report needs an overlap id like #18" + (" or a site id" if kind == "hazard_exposure" else ""))
