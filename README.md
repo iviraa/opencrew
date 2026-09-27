@@ -14,6 +14,10 @@ on it, and helps both sides act on it, before the next storm hits.**
 ![Solana](https://img.shields.io/badge/Solana-devnet-9945FF?style=flat-square&logo=solana&logoColor=white)
 ![Gemini](https://img.shields.io/badge/Agent-Gemini-2f6bff?style=flat-square)
 
+### [**→ Open the live app: crewly.miami**](https://crewly.miami/)
+
+[Bounty board](https://crewly.miami/bounties) · [Cost model](docs/cost-savings-model.md) · [Agent abilities](docs/crewly-abilities.md) · [Solana bounties](solana/bounty.md)
+
 </div>
 
 ---
@@ -193,7 +197,7 @@ sequenceDiagram
 
 ## Try it
 
-Log in as either utility from the challenge:
+Open **[crewly.miami](https://crewly.miami/)** and log in as either utility from the challenge:
 
 | Utility | Username | Password |
 |---|---|---|
@@ -207,7 +211,7 @@ Then ask Crewly:
 - *"Replay Hurricane Helene against our active sites."*
 - *"Build a plan for next quarter and draft the emails."*
 
-Bounties are public at `/bounties`, no login needed.
+Bounties are public at **[crewly.miami/bounties](https://crewly.miami/bounties)**, no login needed.
 
 ## Run it locally
 
