@@ -396,8 +396,9 @@ export default function Shell() {
 
   return (
     <div className="relative h-full w-full" onClick={() => pop && setPop(null)}>
-      {/* the whiteboard */}
-      <div className="board absolute bottom-[17vh] left-[4vw] right-[4vw] top-[7vh] flex flex-col px-6 pb-5 pt-4">
+      {/* the whiteboard: the purple showing around it is half the gap it used to be, except at the
+          bottom, where the board stops just above the white "crewly" wordmark rather than over it */}
+      <div className="board absolute bottom-[13vh] left-[2vw] right-[2vw] top-[3.5vh] flex flex-col px-6 pb-5 pt-4">
         <div className="board-frame" />
         <nav className="relative z-10 mb-3 flex items-center gap-6">
           {TABS.map((t) => (
@@ -490,17 +491,19 @@ export default function Shell() {
       {/* the beaver and the bottom bar */}
       <Suspense fallback={null}><Beaver className="absolute bottom-[1vh] left-[1vw] z-20 h-[24vh] min-h-[170px] w-[22vh] min-w-[155px]" /></Suspense>
       <div className="font-logo pointer-events-none absolute bottom-[5.5vh] left-[calc(1vw+max(22vh,155px)+8px)] text-[5vh] font-semibold leading-none text-white">crewly</div>
-      <Speech className="absolute bottom-[calc(10.5vh+12px)] left-[calc(1vw+max(22vh,155px)+2px)] z-30" />
+      {/* the beaver fills about four fifths of his canvas, so the last fifth is empty and reads as a gap
+          in front of his snout; the bubble tucks back over half of it to sit closer to him */}
+      <Speech className="absolute bottom-[calc(10.5vh+12px)] left-[calc(1vw+max(22vh,155px)*0.9+1px)] z-30" />
 
-      <div className="absolute bottom-[4vh] right-[5vw] z-30 flex items-center gap-7" onClick={(e) => e.stopPropagation()}>
+      <div className="absolute bottom-[4vh] right-[5vw] z-30 flex items-center gap-3.5" onClick={(e) => e.stopPropagation()}>
         <button onClick={() => { setStack((s) => [...s.filter((p) => p.kind !== "history"), { kind: "history" }]); setPop(null); say(reqs.length ? `Here are all ${reqs.length} of our requests.` : "No requests yet. Open an overlap to send one.", "nod"); }} aria-label="Request history"
-          className="grid h-[7vh] min-h-11 w-[7vh] min-w-11 place-items-center rounded-full bg-[#ece2e6] text-grape transition hover:scale-105">
+          className="grid h-[3.5vh] min-h-5.5 w-[3.5vh] min-w-5.5 place-items-center rounded-full bg-[#ece2e6] text-grape transition hover:scale-105">
           <Clock3 className="h-[55%] w-[55%]" strokeWidth={2.5} />
         </button>
         <div className="relative">
           <button onClick={() => { setPop(pop === "bell" ? null : "bell"); if (pop !== "bell") say(unread ? `You have ${unread} new update${unread === 1 ? "" : "s"}.` : "You're all caught up!", "nod"); }} aria-label={`Notifications${unread ? `, ${unread} unread` : ""}`} className="relative grid place-items-center text-white transition hover:scale-105">
-            <Bell key={ring} className={`h-[7vh] min-h-11 w-[7vh] min-w-11 ${ring ? "wiggle" : ""}`} fill="white" strokeWidth={1.5} />
-            {unread > 0 && <span className="pop-in absolute -right-1 -top-1 grid h-6 min-w-6 place-items-center rounded-full bg-[#ff1f3d] px-1 text-xs font-bold text-white">{unread}</span>}
+            <Bell key={ring} className={`h-[3.5vh] min-h-5.5 w-[3.5vh] min-w-5.5 ${ring ? "wiggle" : ""}`} fill="white" strokeWidth={1.5} />
+            {unread > 0 && <span className="pop-in absolute -right-0.5 -top-0.5 grid h-3 min-w-3 place-items-center rounded-full bg-[#ff1f3d] px-0.5 text-[9px] font-bold text-white">{unread}</span>}
           </button>
           {pop === "bell" && me && (
             <div className="pop-in absolute bottom-[calc(100%+14px)] right-[-60px] w-[340px] rounded-3xl border-2 border-pen bg-white p-3 shadow-xl">
@@ -535,7 +538,7 @@ export default function Shell() {
           )}
         </div>
         <div className="relative">
-          <button onClick={() => setPop(pop === "profile" ? null : "profile")} aria-label="Profile" className="grid h-[8vh] min-h-12 w-[8vh] min-w-12 place-items-center rounded-full border-[3px] border-white text-white transition hover:scale-105">
+          <button onClick={() => setPop(pop === "profile" ? null : "profile")} aria-label="Profile" className="grid h-[4vh] min-h-6 w-[4vh] min-w-6 place-items-center rounded-full border-[1.5px] border-white text-white transition hover:scale-105">
             <UserRound className="h-[62%] w-[62%]" fill="white" strokeWidth={1.2} />
           </button>
           {pop === "profile" && me && (
