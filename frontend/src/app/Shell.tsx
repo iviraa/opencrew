@@ -7,7 +7,7 @@ import {
   TIER_LABEL, ago, api, company, partnerOf, setCompanies, miles, usd, notices as noticesApi, requests as requestsApi, supabase,
   type CollabRequest, type Jobs, type Me, type Notice, type Overlap, type SuggestionAction,
 } from "./data";
-import MapPane, { bboxOf, esc, type Fit, type Scene } from "./MapPane";
+import MapPane, { bboxOf, esc, type Bbox, type Fit, type Scene } from "./MapPane";
 import { beaver, say } from "./mascot";
 import Speech from "./Speech";
 import { GoalPanel, GoalsList } from "./GoalPanel";
@@ -25,8 +25,10 @@ import { FindingPanel, NotebookPanel } from "./findings/Notebook";
 import { headline, type Comparison, type Finding } from "./findings/types";
 import { cardOf, viewsApi, type ViewState } from "./workspace/types";
 import ScanOverlay from "./scan/ScanOverlay";
-import { RADAR_MS, pop as popAt, useScan, type ScanCtx } from "./scan/useScan";
+import { RADAR_MS, pop as popAt, useScan } from "./scan/useScan";
 import type { RefreshRow } from "./refresh/types";
+import MonthGrid from "./maptools/MonthGrid";
+import { useMapTools } from "./maptools/useMapTools";
 
 const Beaver = lazy(() => import("./Beaver"));
 
@@ -35,6 +37,12 @@ type Panel = { kind: "overlap"; id: number } | { kind: "request"; id: number } |
   | { kind: "plan"; id: number; item?: string } | { kind: "notebook"; preselect?: number } | { kind: "finding"; id: number; f?: Finding };
 const TABS: { id: Tab; label: string }[] = [{ id: "overlaps", label: "Overlaps" }, { id: "weather", label: "Hazards" }, { id: "news", label: "News & damage" }];
 const SCAN_STEPS = 5;  // radar step captions live in ScanOverlay
+const contextOf = (f: Jobs["features"][number], extra: Record<string, unknown> = {}): GeoJSON.Feature => {  // a scan find, shaped like the context layer's features
+  const { id, name, org_id, voltage_kv, geom_quality } = f.properties as { id: string; name: string; org_id: string; voltage_kv?: number | null; geom_quality?: string };
+  const org = company(org_id).name;
+  return { ...f, properties: { id, name, org_id, org, kv: voltage_kv ?? null, dotted: geom_quality === "county_area" || geom_quality === "approx_area",
+    title: `${esc(org)} · ${esc(name)}${voltage_kv ? ` · ${voltage_kv} kV` : ""}`, ...extra } };
+};
 
 function feature(f: GeoJSON.Feature, props: Record<string, unknown>): GeoJSON.Feature {
   return { type: "Feature", geometry: f.geometry, properties: props };
@@ -68,8 +76,6 @@ export default function Shell() {
   const [mode, setMode] = useState<"projects" | "scanning" | "overlaps">("projects");
   const [scanStep, setScanStep] = useState(0);
   const scanner = useScan(say);  // the discovery choreography: partners and overlaps first, then other utilities
-  const [scanCtx, setScanCtx] = useState<ScanCtx | null>(null);  // what the last scan found, for the grey context layer
-  const [showOthers, setShowOthers] = useState(true);
   const [focus, setFocus] = useState<number[] | null>(null);  // overlaps the chat asked to show
   const [partner, setPartner] = useState<string | null>(null);  // one neighboring utility, or all
   const [selected, setSelected] = useState<number | null>(null);
@@ -81,6 +87,9 @@ export default function Shell() {
   const [hazardFocus, setHazardFocus] = useState<HazardFocus | null>(null);  // an overlap asking for its weather cost on the hazards tab
   const [overlay, setOverlay] = useState<Finding | null>(null);  // the experiment whose changes the map and lists show
   const [picking, setPicking] = useState(false);  // a finding is waiting for a click on the map
+  const [others, setOthers] = useState(true);  // the grey context layer: every other utility's placed projects
+  const [context, setContext] = useState<GeoJSON.FeatureCollection | null>(null);
+  const contextBox = useRef<Bbox | null>(null);  // the box the context layer was fetched for, padded so panning rarely refetches
   const pickCb = useRef<((lon: number, lat: number) => void) | null>(null);
   const plans = usePlans();  // every plan crewly has built or shown this session
   const [toast, setToast] = useState<{ text: string; request: number } | null>(null);
@@ -185,7 +194,8 @@ export default function Shell() {
     setMode("scanning"); setScanStep(0); say("I'm looking for overlapping projects.", "thinking");
     return new Promise<{ overlaps: Overlap[]; jobs: Jobs }>((resolve, reject) => scanner.start(meRef.current!, (c) => {
       const data = { overlaps: c.overlaps, jobs: { type: "FeatureCollection" as const, features: [...c.ours.features, ...c.partners.features] } };
-      setScanCtx(c); setOv(data); setMode("overlaps");
+      setContext({ type: "FeatureCollection", features: c.others.features.map((f) => contextOf(f)) }); contextBox.current = null;  // the grey layer keeps the scan's finds until the next pan refetches
+      setOv(data); setMode("overlaps");
       say(data.overlaps.length ? `Found ${data.overlaps.length} overlaps with ${neighbors(data.overlaps, meRef.current!)}!` : "No overlaps nearby right now.", "happy");
       const b = bboxOf([data.jobs]);
       if (b) setFit({ bbox: b, key: `all${Date.now()}` });
@@ -255,9 +265,10 @@ export default function Shell() {
       if (typeof saveAs?.name === "string") viewsApi.save(saveAs.name, currentView()).then(() => say(`Saved this view as ${saveAs.name}.`, "nod")).catch(() => say("I couldn't save that view.", "sad"));
       const planned = r.ui_actions.filter((a) => a.type === "plan" && a.id != null).pop();
       const plan = planned ? { id: planned.id!, horizon: planned.horizon, item: planned.item } : undefined;
+      const cards = mt.cardsOf(r.ui_actions);
       setChat([...next, { role: "model", text: r.reply || "Done.", ids, ...(title && { title }), offline: r.offline, ...(confirm.length && { confirm }), ...(goal != null && { goal }), ...(plan && { plan }),
         ...(chart && { chart }), ...(table && { table }), ...(report && { report }), ...(finding && { finding }), ...(compare && { compare }), ...(draft && { draft }),
-        ...(workspace && { workspace }), ...(refresh && { refresh }) }]);
+        ...(workspace && { workspace }), ...(refresh && { refresh }), ...(cards.length && { cards }) }]);
       if (finding) setOverlay(finding);
       if (remembered) setMemoryTick((t) => t + 1);  // crewly saved or dropped a note
       if (r.offline) say("I'm out of energy for today, sorry!", "sad");
@@ -270,6 +281,7 @@ export default function Shell() {
       else if (draft) say("Draft ready. Edit it, then copy or send.", "nod");
       else if (refresh) say(refresh.ask ? "Apply it from the card when you are sure." : "Here is where the planner lists stand.", "nod");
       else if (workspace) say(workspace.kind === "brief" ? "Here is your week at a glance." : workspace.kind === "reminder" ? "Noted. It will pop up in the bell when due." : "Here you go.", "nod");
+      else if (cards.length) say(mt.line(cards) ?? "Here you go.", "nod");
       else if (report) say("Your report is ready. Open it to print or save.", "happy");
       else if (chart) say("Here's your chart.", "nod");
       else if (table) say(`Here are ${table.count} rows, with a CSV download.`, "nod");
@@ -279,6 +291,7 @@ export default function Shell() {
       if (plan?.item) { setTab("overlaps"); push({ kind: "plan", id: plan.id, item: plan.item }); }  // an explained item opens in the panel
       const fly = r.ui_actions.filter((a) => a.type === "fly").pop();
       if (fly?.bbox && !ids?.length) setFit({ bbox: fly.bbox, key: `y${Date.now()}`, maxZoom: 10 });
+      await mt.apply(r.ui_actions);  // map_view, highlights, routes and the timeline
     } catch {
       setChat([...next, { role: "model", text: "Sorry, I couldn't reach the server just now. Please try again.", offline: true }]);
       say("I couldn't reach the server.", "sad");
@@ -337,9 +350,6 @@ export default function Shell() {
     if (!me) return {};
     const lines: GeoJSON.Feature[] = [], points: GeoJSON.Feature[] = [];
     const add = (f: GeoJSON.Feature, props: Record<string, unknown>) => (f.geometry?.type === "Point" ? points : lines).push(feature(f, props));
-    const grey = (f: GeoJSON.Feature<GeoJSON.Geometry, { id: string; name: string; org_id: string; voltage_kv?: number | null; geom_quality?: string }>, k = 1, alpha = 1) =>
-      add(f, { color: "#a3adc7", width: 1.6 * k, radius: 3 * k, opacity: 0.45 * alpha, dash: f.properties.geom_quality === "county_area",
-        title: `<b>${esc(f.properties.name)}</b><br/>${esc(company(f.properties.org_id).name)}${f.properties.voltage_kv ? ` · ${f.properties.voltage_kv} kV` : ""}` });
     if (mode !== "overlaps" || !ov) {
       projects?.features.forEach((f) => add(f, { color: me.color, width: 3, radius: 5, opacity: 0.9, title: `<b>${esc(f.properties.name)}</b><br/>${esc(me.name)}` }));
       const c = scanner.ctx;
@@ -351,11 +361,9 @@ export default function Shell() {
           const title = `<b>#${o.id} ${esc(TIER_LABEL[o.tier]?.label)}</b><br/>${esc(s.ours.name)}<br/><span style="color:#5e6a8a">with ${esc(s.theirs.name)}</span>`;
           lines.push({ type: "Feature", geometry: o.link, properties: { color: TIER_LABEL[o.tier]?.color, width: 2.5, dash: true, opacity: p.alpha, title } });
           points.push({ type: "Feature", geometry: mid(o.link), properties: { color: TIER_LABEL[o.tier]?.color, radius: 5.5 * p.scale, stroke: "#ffffff", opacity: p.alpha, title } }); });
-        c.others.features.forEach((f) => { const p = seen(`j:${f.properties.id}`); if (p) grey(f, p.scale, p.alpha); });
       }
       return { lines: { type: "FeatureCollection", features: lines }, points: { type: "FeatureCollection", features: points } };
     }
-    if (showOthers && scanCtx) scanCtx.others.features.forEach((f) => grey(f, 1.1, 1));  // other utilities stay as quiet context
     const sel = selected != null ? ov.overlaps.find((o) => o.id === selected) : null;
     const involved = new Set(visible.flatMap((o) => [o.job_a, o.job_b]));
     const hot = sel ? new Set([sel.job_a, sel.job_b]) : null;
@@ -372,7 +380,7 @@ export default function Shell() {
       points.push({ type: "Feature", geometry: mid(o.link), properties: { color: TIER_LABEL[o.tier]?.color, radius: sel?.id === o.id ? 9 : 5.5, stroke: sel?.id === o.id ? "#111014" : "#ffffff", opacity: on ? 1 : 0.15, title, pick: `op:${o.id}` } });
     });
     return { lines: { type: "FeatureCollection", features: lines }, points: { type: "FeatureCollection", features: points } };
-  }, [me, mode, ov, projects, visible, selected, scanner.ctx, scanner.now, scanner.revealed, scanCtx, showOthers]);
+  }, [me, mode, ov, projects, visible, selected, scanner.ctx, scanner.now, scanner.revealed]);
 
   const struck = useMemo(() => new Set(changesOf(overlay ?? { kind: "", params: {} } as Finding).filter((c) => c.kind === "exclude_partner").map((c) => String(c.params.partner))), [overlay]);
   const ghosts = useMemo(() => Object.fromEntries(changesOf(overlay ?? { kind: "", params: {} } as Finding).filter((c) => c.kind === "shift_window" && c.params.opportunity_id != null)
@@ -398,13 +406,32 @@ export default function Shell() {
     if (b) setFit({ bbox: b, key: `p${id}${Date.now()}`, maxZoom: 11 });
     if (f) say(`Here's ${f.properties.name.length > 40 ? `${f.properties.name.slice(0, 40)}...` : f.properties.name}.`, "nod");
   };
+  const mt = useMapTools({ me, projects, ov, setTab, setFit, showIds, setPartner, pickProject, openOverlap, setOthers });  // the chat's map, data and explain hand-overs
+  const onMove = useCallback((b: Bbox) => {  // fetch the context layer for a box twice the view, only when the view leaves the last one
+    const last = contextBox.current;
+    if (last && b[0] >= last[0] && b[1] >= last[1] && b[2] <= last[2] && b[3] <= last[3]) return;
+    const dx = (b[2] - b[0]) / 2, dy = (b[3] - b[1]) / 2, box: Bbox = [b[0] - dx, b[1] - dy, b[2] + dx, b[3] + dy];
+    contextBox.current = box;
+    api.contextProjects(box).then((fc) => setContext({ ...fc, features: fc.features.map((f) => ({ ...f, properties: { ...f.properties,
+      title: `${esc(f.properties.org)} · ${esc(f.properties.name)}${f.properties.kv ? ` · ${f.properties.kv} kV` : ""}` } })) })).catch(() => {});
+  }, []);
+  const contextShown = useMemo<GeoJSON.FeatureCollection | null>(() => {
+    if (!others) return null;
+    const c = scanner.ctx;
+    if (mode === "scanning" && c) {  // the scan's finds pop into the same grey layer as they are revealed
+      const features: GeoJSON.Feature[] = [];
+      c.others.features.forEach((f) => { const at = scanner.revealed.get(`j:${f.properties.id}`); if (at != null) features.push(contextOf(f, popAt(scanner.now - at))); });
+      return { type: "FeatureCollection", features };
+    }
+    return context ? { ...context, features: context.features.filter((f) => f.properties?.org_id !== me?.company) } : null;
+  }, [others, context, me, mode, scanner.ctx, scanner.now, scanner.revealed]);
 
   // ---------- right quarter ----------
   const panel = !me || !top ? null : top.kind === "chat" ? (
     <Chat me={me} msgs={chat} busy={chatBusy} overlaps={ov?.overlaps ?? null} requests={reqs} plans={plans} onSend={sendChat} onOpen={openOverlap}
       onDone={gotRequest} onOpenRequest={openRequest} onOpenGoal={(id) => push({ kind: "goal", id })} onOpenPlan={(id, item) => { setTab("overlaps"); push({ kind: "plan", id, item }); }}
       onClose={() => setStack((s) => s.filter((p) => p.kind !== "chat"))} onClear={clearChat} memoryTick={memoryTick}
-      partners={partnerIds} onOverlay={setOverlay} onPickPlace={pickPlace} picking={picking} onCompare={(f) => push({ kind: "notebook", preselect: f.id })} onNotebook={() => push({ kind: "notebook" })} onOpenView={openView} />
+      partners={partnerIds} onOverlay={setOverlay} onPickPlace={pickPlace} picking={picking} onCompare={(f) => push({ kind: "notebook", preselect: f.id })} onNotebook={() => push({ kind: "notebook" })} onOpenView={openView} mapTools={mt.cardProps} />
   ) : top.kind === "notebook" ? (
     <NotebookPanel onBack={back} preselect={top.preselect} onOpen={(f) => push({ kind: "finding", id: f.id, f })} onCombined={(f) => { setOverlay(f); push({ kind: "finding", id: f.id, f }); }} />
   ) : top.kind === "finding" ? (
@@ -477,11 +504,19 @@ export default function Shell() {
               onRebuild={() => { const p = plans.plans[top.id]; if (p) plans.byHorizon(p.horizon, true).then((np) => { setStack((s) => [...s.slice(0, -1), { kind: "plan", id: np.id }]); say(planLine(np), "nod"); }).catch(() => {}); }} />
           } />
         )}
-        {me && tab === "overlaps" && top?.kind !== "plan" && (
+        {me && tab === "overlaps" && top?.kind !== "plan" && mt.timeline && (  // a timeline from the chat takes the map's place until closed
+          <Split side={roomy(panel ?? overlapsSide)} map={<MonthGrid timeline={mt.timeline} onPick={(id, mine) => mt.cardProps.onPickProject?.(id, mine)} onBack={mt.closeTimeline} />} />
+        )}
+        {me && tab === "overlaps" && top?.kind !== "plan" && !mt.timeline && (
           <Split side={roomy(panel ?? overlapsSide)} map={
-            <MapPane scene={shownScene} fit={fit} onPick={(p) => p.startsWith("op:") && openOverlap(Number(p.slice(3)))}
+            <MapPane scene={mt.decorate(shownScene)} context={contextShown} fit={fit} onMove={onMove} onPick={(p) => p.startsWith("op:") && openOverlap(Number(p.slice(3)))}
               onMapClick={(lon, lat) => { const cb = pickCb.current; if (cb) { pickCb.current = null; setPicking(false); cb(lon, lat); } }}>
               {picking && <div className="pop-in absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full border-2 border-pen bg-white px-3 py-1 text-xs font-semibold">Click the map to set the place</div>}
+              <button onClick={() => setOthers((v) => !v)} aria-pressed={others} title="Other utilities' placed projects, in grey under ours"
+                className={`absolute right-3 top-3 z-10 flex items-center gap-1.5 rounded-full border-2 px-2.5 py-1 text-xs font-semibold ${others ? "border-pen bg-white" : "border-line bg-white/80 text-muted"}`}>
+                <span className="h-2 w-4 rounded-full" style={{ background: others ? "#6b7280" : "#d9dce3" }} />Other utilities{contextShown ? ` · ${contextShown.features.length}` : ""}
+              </button>
+              {mt.decorated && !overlay && !picking && <button onClick={mt.clear} className="pop-in absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full border-2 border-pen bg-white px-3 py-1 text-xs font-semibold hover:bg-grape-soft">Crewly's highlight is on the map · clear</button>}
               {overlay && !picking && (
                 <button onClick={() => setOverlay(null)} className="pop-in absolute left-1/2 top-3 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border-2 border-pen bg-white px-3 py-1 text-xs font-semibold hover:bg-grape-soft">
                   Scenario shown: {changesOf(overlay).length} change{changesOf(overlay).length === 1 ? "" : "s"} · clear
@@ -495,16 +530,10 @@ export default function Shell() {
                 </div>
               )}
               {mode === "scanning" && <ScanOverlay phase={scanner.phase} step={scanStep} counts={scanner.counts} color={me.color} />}
-              {scanCtx && mode !== "projects" && (
-                <button onClick={() => setShowOthers((v) => !v)} aria-pressed={showOthers}
-                  className={`absolute right-3 top-3 z-10 flex items-center gap-1.5 rounded-full border-2 px-2.5 py-1 text-xs font-semibold ${showOthers ? "border-pen bg-white" : "border-line bg-white/80 text-muted"}`}>
-                  <span className="h-2 w-2 rounded-full bg-[#a3adc7]" /> Other utilities
-                </button>
-              )}
             </MapPane>
           } />
         )}
-        {me && tab === "weather" && <HazardsTab me={me} projects={projects} side={roomy(panel)} focus={hazardFocus} />}
+        {me && tab === "weather" && <HazardsTab me={me} projects={projects} side={roomy(panel)} focus={hazardFocus} control={mt.hazardControl} />}
         {me && tab === "news" && <NewsTab projects={projects} side={roomy(panel)} onOpenOverlap={openOverlap} />}
         {!me && !err && <div className="grid flex-1 place-items-center text-muted"><span className="dots">Getting your projects</span></div>}
 

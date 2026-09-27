@@ -26,7 +26,7 @@ export const unitOf = (metric: string, unit?: string) => unit ?? (metric.include
 export const show = (v: number | string | undefined, unit?: string) => (typeof v === "number" ? `${fmt(v, unit)}${unit === "%" ? "%" : unit && unit !== "USD" ? ` ${unit}` : ""}` : String(v ?? ""));
 export const range = (m: Metric | undefined) => (!m ? "" : m.low != null && m.high != null && m.low !== m.high ? `${show(m.low, m.unit)} to ${show(m.high, m.unit)}` : show(m.value, m.unit));
 export const signed = (d: number | string, unit?: string) => (typeof d === "number" ? `${d > 0 ? "+" : ""}${show(d, unit)}` : String(d));
-export const headline = (f: Finding) => (f.deltas[0] ? `${f.deltas[0].label} ${signed(f.deltas[0].delta, unitOf(f.deltas[0].metric, f.deltas[0].unit))}` : f.question);
+export const headline = (f: Finding) => { const d = f.deltas?.[0]; return d ? `${d.label} ${signed(d.delta, unitOf(d.metric, d.unit))}` : f.question ?? f.title ?? ""; };  // a stored finding may carry no deltas
 
 export const findings = {
   run: (kind: string, params: Record<string, unknown>) => api.send<Finding>("/api/app/experiment", "POST", { kind, params }),

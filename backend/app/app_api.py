@@ -1,9 +1,9 @@
 """Endpoints for the Crewly app: everything is seen from the logged-in company's side."""
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.auth import current_user
-from app.companies import companies, partner
+from app.companies import companies, partner, short
 from app.crewly import agent
 from app.crewly import proactive
 from app.crewly.app_tools import app_system, app_tools, mine_sql
@@ -40,6 +40,24 @@ def directory():
 def projects(user=Depends(current_user), conn=Depends(get_conn)):
     rows = conn.execute(JOB_SQL + " WHERE j.horizon = 'long' AND j.org_id = %s ORDER BY lower(j.work_window)", (user["company"],)).fetchall()
     return features(rows)
+
+
+@router.get("/context_projects")
+def context_projects(bbox: str = "", user=Depends(current_user), conn=Depends(get_conn)):
+    """Other utilities' placed long-horizon projects inside a bbox, simplified: the quiet context layer under our map."""
+    try:
+        w, s, e, n = [float(x) for x in bbox.split(",")]
+    except ValueError:
+        raise HTTPException(400, "bbox must be west,south,east,north")
+    w, s, e, n = max(-180.0, min(w, e)), max(-90.0, min(s, n)), min(180.0, max(w, e)), min(90.0, max(s, n))
+    tol = max(0.0005, (e - w) / 2000)  # about a screen pixel at the box width
+    rows = conn.execute("""SELECT j.id, j.name, j.org_id, j.voltage_kv, ST_AsGeoJSON(ST_Simplify(j.geom::geometry, %s), 5)::json AS geom,
+                                  (j.geom_quality IN ('county_area', 'approx_area') OR j.located_via @> '[{"centroid": true}]') AS dotted
+                           FROM job j WHERE j.horizon = 'long' AND j.org_id <> %s AND j.geom IS NOT NULL
+                             AND j.geom::geometry && ST_MakeEnvelope(%s, %s, %s, %s, 4326) ORDER BY j.voltage_kv DESC NULLS LAST LIMIT 2500""",
+                        (tol, user["company"], w, s, e, n)).fetchall()
+    return {"type": "FeatureCollection", "features": [{"type": "Feature", "geometry": r["geom"], "properties": {
+        "id": r["id"], "name": r["name"], "org_id": r["org_id"], "org": short(r["org_id"]), "kv": r["voltage_kv"], "dotted": bool(r["dotted"])}} for r in rows if r["geom"]]}
 
 
 @router.get("/overlaps")
