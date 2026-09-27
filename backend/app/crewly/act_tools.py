@@ -84,14 +84,17 @@ def propose_answer(ctx, conn, request_id, decision, feedback=None):
               "title": r["summary"].get("title")}])
 
 
-def start_goal(ctx, conn, goal, count=5, start_date=None, end_date=None, tier=None):
-    from app.crewly.app_tools import _day, mine_sql
+def start_goal(ctx, conn, goal, count=5, start_date=None, end_date=None, tier=None, partner_company=None):
+    from app.crewly.app_tools import _day, find_company, mine_sql
     s, e = _day(start_date), _day(end_date)
-    sql = mine_sql(ctx["company"]) + " AND op.savings_high > 0 AND (%(t)s::text IS NULL OR op.tier = %(t)s)"
+    who = find_company(partner_company) if partner_company else None
+    if partner_company and not who:
+        return {"error": f"no utility called {partner_company!r}"}, []
+    sql = mine_sql(ctx["company"]) + " AND op.savings_high > 0 AND (%(t)s::text IS NULL OR op.tier = %(t)s) AND (%(p)s::text IS NULL OR %(p)s IN (ja.org_id, jb.org_id))"
     if s or e:
         sql += """ AND ja.work_window && tstzrange(%(s)s::timestamptz, %(e)s::timestamptz)
                    AND jb.work_window && tstzrange(%(s)s::timestamptz, %(e)s::timestamptz)"""
-    rows = conn.execute(sql + " ORDER BY op.score DESC, op.distance_m", {"t": tier, "s": s, "e": e}).fetchall()
+    rows = conn.execute(sql + " ORDER BY op.score DESC, op.distance_m", {"t": tier, "s": s, "e": e, "p": who}).fetchall()
     taken = {r["opportunity_id"] for r in _open_requests(ctx)}
     want = max(1, min(int(count or 5), MAX_GOAL))
     free = [o for o in rows if o["id"] not in taken]
@@ -168,7 +171,8 @@ def act_tools(ctx):
                        "reviews and sends from the goal panel. Nothing is sent.", {
             "goal": {"type": "string", "description": "the goal in the user's words"}, "count": {"type": "integer", "description": "how many overlaps, default 5"},
             "start_date": {"type": "string", "description": "YYYY-MM-DD"}, "end_date": {"type": "string", "description": "YYYY-MM-DD"},
-            "tier": {"type": "string", "enum": ["crossing", "land", "site", "crew"]}}, ["goal"]),
+            "tier": {"type": "string", "enum": ["crossing", "land", "site", "crew"]},
+            "partner_company": {"type": "string", "description": "only overlaps with this utility, e.g. Georgia Power"}}, ["goal"]),
         "goal_status": (_bind(ctx, goal_status), "Progress on a goal (latest one if no id): which drafts are still unsent, sent, approved, "
                         "declined or skipped, with their feedback.", {"task_id": {"type": "integer"}}, []),
     }
