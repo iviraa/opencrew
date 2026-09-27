@@ -37,14 +37,15 @@ function StateChip({ state }: { state: State }) {
 export function GoalChip({ id, onOpen }: { id: number; onOpen: () => void }) {
   const [task, setTask] = useState<AgentTask | null>(null);
   useEffect(() => { goals.get(id).then(setTask).catch(() => {}); }, [id]);
+  const n = task?.steps.length;
   return (
-    <button onClick={onOpen} className="pop-in flex items-center gap-2.5 rounded-2xl border-2 border-pen bg-white px-3 py-2 text-left hover:bg-grape-soft">
-      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-grape text-white"><Flag size={15} /></span>
+    <button onClick={onOpen} className="pop-in flex items-center gap-2.5 rounded-2xl border-2 border-pen bg-white px-3 py-2 text-left shadow-[3px_3px_0_var(--color-pen)] hover:bg-grape-soft">
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-grape-soft text-grape"><Flag size={15} /></span>
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold">Goal: {task ? `${task.steps.length} overlap${task.steps.length === 1 ? "" : "s"} drafted` : "drafted"}</span>
-        <span className="block text-xs text-muted">Review and send from the goal panel</span>
+        <span className="block text-sm font-semibold leading-snug">Goal{n != null ? `: ${n} request${n === 1 ? "" : "s"} drafted` : ""}</span>
+        <span className="block text-[11px] text-muted">Review and send them from the goal panel</span>
       </span>
-      <span className="text-sm font-semibold text-grape">Open</span>
+      <span className="text-xs font-semibold text-grape">Open</span>
     </button>
   );
 }

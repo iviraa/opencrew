@@ -6,8 +6,16 @@ export type Chart = {
   options: Record<string, unknown>;
 };
 export type Table = { dataset: string; filters: Record<string, unknown>; columns: string[]; rows: Record<string, unknown>[]; count: number };
-export type Report = { id: number; kind: string; ref_id: string | null; title: string; sections: string[]; all_sections: string[]; created_at: string };
+export type Figure = { label: string; value: string; note?: string };
+export type Report = {
+  id: number; kind: string; ref_id: string | null; title: string; sections: string[]; all_sections: string[]; created_at: string;
+  summary?: string; figures?: Figure[];  // the report's own summary paragraph and key figures, when the server sends them
+};
 
+export const KIND_LABEL: Record<string, string> = {
+  feasibility: "Feasibility", cost_analysis: "Cost analysis", hazard_exposure: "Hazard exposure", plan: "Coordination plan", pack: "Overlap pack",
+  finding: "What-if finding", agenda: "Meeting agenda", memo: "Memo",
+};
 export const SECTION_LABEL: Record<string, string> = {
   verdict: "Verdict", factors: "Factors", conditions: "What would make it work", shifts: "Shift options",
   savings: "Savings", weather: "Weather cost", coordination: "Coordinating", now7: "Next 7 days", season: "Next season", month: "Typical month",

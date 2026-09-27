@@ -1,10 +1,14 @@
-import { ArrowDown, ArrowUp, FileSpreadsheet } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, FileSpreadsheet, Table2 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { Card, Chip, Note, Pill, Row, capital, plural } from "../ui";
 import { download, fmt, toCsv, type Table } from "./types";
 
-// a data hand-over in the chat: sortable, scrollable, with the filters that made it and a csv download
+const PREVIEW = 5;
+
+// a data hand-over in the chat: the first rows in view, the rest behind "show all", sortable, with a csv download
 export default function TableCard({ table }: { table: Table }) {
   const [sort, setSort] = useState<{ col: string; dir: 1 | -1 } | null>(null);
+  const [all, setAll] = useState(table.rows.length <= PREVIEW + 1);
   const rows = useMemo(() => {
     if (!sort) return table.rows;
     const { col, dir } = sort;
@@ -14,19 +18,15 @@ export default function TableCard({ table }: { table: Table }) {
       return String(x ?? "").localeCompare(String(y ?? "")) * dir;
     });
   }, [table.rows, sort]);
+  const shown = all ? rows : rows.slice(0, PREVIEW);
   const money = (c: string) => /usd|savings|cost/.test(c);
-  const chips = Object.entries(table.filters ?? {}).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(" to ") : String(v)}`);
+  const chips = Object.entries(table.filters ?? {}).map(([k, v]) => `${k.replace(/_/g, " ")}: ${Array.isArray(v) ? v.join(" to ") : String(v)}`);
 
   return (
-    <div className="pop-in rounded-2xl border-2 border-pen bg-white p-2">
-      <div className="flex items-center gap-2 px-1">
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold capitalize leading-snug">{table.dataset.replace(/_/g, " ")} · {table.count} row{table.count === 1 ? "" : "s"}</div>
-          {chips.length > 0 && <div className="mt-0.5 flex flex-wrap gap-1">{chips.map((c) => <span key={c} className="rounded-full bg-soft px-2 py-0.5 text-[11px] text-muted">{c}</span>)}</div>}
-        </div>
-        <button onClick={() => download(`${table.dataset}.csv`, toCsv(table.columns, table.rows), "text/csv")} aria-label="Download CSV" title="Download CSV" className="grid h-7 w-7 shrink-0 place-items-center rounded-full border-2 border-line hover:border-pen"><FileSpreadsheet size={13} /></button>
-      </div>
-      <div className="thin-scroll mt-1.5 max-h-64 overflow-auto rounded-xl border-2 border-line">
+    <Card icon={<Table2 size={15} />} title={`${capital(table.dataset.replace(/_/g, " "))}`} sub={<>{plural(table.count, "row")}{chips.length > 0 && <span> · filtered</span>}</>}
+      right={<Pill onClick={() => download(`${table.dataset}.csv`, toCsv(table.columns, table.rows), "text/csv")} title="Download as CSV" icon={<FileSpreadsheet size={13} />} />}>
+      {chips.length > 0 && <Row>{chips.map((c) => <Chip key={c}>{c}</Chip>)}</Row>}
+      <div className={`thin-scroll overflow-auto rounded-xl border-2 border-line ${all ? "max-h-72" : ""}`}>
         <table className="w-full text-[11px]">
           <thead className="sticky top-0 bg-soft">
             <tr>{table.columns.map((c) => (
@@ -36,12 +36,12 @@ export default function TableCard({ table }: { table: Table }) {
             ))}</tr>
           </thead>
           <tbody>
-            {rows.map((r, i) => (
+            {shown.map((r, i) => (
               <tr key={i} className="border-t border-line">
                 {table.columns.map((c) => {
                   const v = r[c];
                   const s = typeof v === "string" && v.startsWith("http") ? <a href={v} target="_blank" rel="noreferrer" className="text-grape underline">link</a> : fmt(v, money(c) ? "USD" : undefined);
-                  return <td key={c} className="max-w-[180px] truncate px-2 py-1" title={String(v ?? "")}>{s}</td>;
+                  return <td key={c} className={`max-w-[180px] truncate px-2 py-1 ${typeof v === "number" ? "text-right tabular-nums" : ""}`} title={String(v ?? "")}>{s}</td>;
                 })}
               </tr>
             ))}
@@ -49,6 +49,12 @@ export default function TableCard({ table }: { table: Table }) {
           </tbody>
         </table>
       </div>
-    </div>
+      {rows.length > PREVIEW + 1 && (
+        <button type="button" onClick={() => setAll(!all)} aria-expanded={all} className="flex items-center justify-center gap-1 rounded-full py-0.5 text-[11px] font-semibold text-grape hover:bg-grape-soft">
+          <ChevronDown size={13} className={`transition-transform ${all ? "rotate-180" : ""}`} /> {all ? "Show fewer" : `Show all ${rows.length} rows`}
+        </button>
+      )}
+      {table.count > table.rows.length && <Note>Showing the first {table.rows.length} of {table.count}; the CSV has every row.</Note>}
+    </Card>
   );
 }

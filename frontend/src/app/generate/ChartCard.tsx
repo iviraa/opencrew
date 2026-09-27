@@ -1,6 +1,7 @@
-import { Download, FileSpreadsheet } from "lucide-react";
+import { BarChart3, Download, FileSpreadsheet } from "lucide-react";
 import { useRef, useState } from "react";
 import { api } from "../data";
+import { Card, Drawer, Note, Pill, Row } from "../ui";
 import { download, fmt, toCsv, type Chart, type ChartKind } from "./types";
 
 const W = 320, H = 190, PAD = { l: 44, r: 8, t: 8, b: 34 };
@@ -82,34 +83,40 @@ export default function ChartCard({ chart: initial }: { chart: Chart }) {
     img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(xml);
   };
 
+  const peak = chart.series.length === 1 ? (() => { const v = chart.series[0].values; if (!v.length) return null; const i = v.indexOf(Math.max(...v)); return `Peak ${fmt(v[i], chart.unit)} in ${chart.x[i]}`; })() : null;
+  const summary = [`${chart.x.length} ${chart.kind === "line" ? "points" : "bars"}`, chart.series.length > 1 ? `${chart.series.length} series` : null, peak].filter(Boolean).join(" · ");
+
   return (
-    <div ref={box} className={`pop-in rounded-2xl border-2 border-pen bg-white p-2 ${busy ? "opacity-70" : ""}`}>
-      <div className="px-1 text-sm font-semibold leading-snug">{chart.title}</div>
-      <div className="px-1 text-[11px] text-faint">{hover ?? chart.source}</div>
-      <ChartSvg chart={chart} onHover={setHover} />
-      {chart.series.length > 1 && (
-        <div className="flex flex-wrap gap-2 px-1 text-[11px] text-muted">
-          {chart.series.map((s) => <span key={s.name} className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm" style={{ background: s.color ?? "#5b2bb5" }} />{s.name}</span>)}
-        </div>
-      )}
-      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 px-1">
-        <div className="flex rounded-full bg-soft p-0.5 text-[11px] font-semibold">
-          {KINDS.map((k) => <button key={k} onClick={() => rerun({ kind: k })} className={`rounded-full px-2 py-0.5 capitalize ${chart.kind === k ? "bg-white shadow-sm" : "text-muted"}`}>{k}</button>)}
-        </div>
-        {years && (
-          <span className="flex items-center gap-1 text-[11px] text-muted">
-            <input type="number" defaultValue={years[0]} aria-label="From year" className="w-14 rounded-full border-2 border-line px-1.5 py-0.5 text-center" onBlur={(e) => rerun({ years: [Number(e.target.value), years[1]] })} />
-            to <input type="number" defaultValue={years[1]} aria-label="To year" className="w-14 rounded-full border-2 border-line px-1.5 py-0.5 text-center" onBlur={(e) => rerun({ years: [years[0], Number(e.target.value)] })} />
-          </span>
-        )}
-        {typeof opt.top === "number" && (
-          <span className="flex items-center gap-1 text-[11px] text-muted">top <input type="number" defaultValue={opt.top} aria-label="How many" className="w-12 rounded-full border-2 border-line px-1.5 py-0.5 text-center" onBlur={(e) => rerun({ top: Number(e.target.value) })} /></span>
-        )}
-        <span className="flex-1" />
-        <button onClick={png} aria-label="Download PNG" title="Download PNG" className="grid h-7 w-7 place-items-center rounded-full border-2 border-line hover:border-pen"><Download size={13} /></button>
-        <button onClick={() => download(`${chart.dataset}.csv`, toCsv(["x", ...chart.series.map((s) => s.name)], rows), "text/csv")} aria-label="Download CSV" title="Download CSV" className="grid h-7 w-7 place-items-center rounded-full border-2 border-line hover:border-pen"><FileSpreadsheet size={13} /></button>
-      </div>
-      {err && <p className="px-1 pt-1 text-[11px] text-warn">{err}</p>}
+    <div ref={box}>
+      <Card icon={<BarChart3 size={15} />} title={chart.title} sub={hover ?? summary} busy={busy}
+        right={<>
+          <Pill onClick={png} title="Download as PNG" icon={<Download size={13} />} />
+          <Pill onClick={() => download(`${chart.dataset}.csv`, toCsv(["x", ...chart.series.map((s) => s.name)], rows), "text/csv")} title="Download as CSV" icon={<FileSpreadsheet size={13} />} />
+        </>}>
+        <Drawer title="Chart" summary={chart.source} defaultOpen>
+          <ChartSvg chart={chart} onHover={setHover} />
+          {chart.series.length > 1 && (
+            <Row className="text-[11px] text-muted">
+              {chart.series.map((s) => <span key={s.name} className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm" style={{ background: s.color ?? "#5b2bb5" }} />{s.name}</span>)}
+            </Row>
+          )}
+          <Row>
+            <div className="flex rounded-full bg-soft p-0.5 text-[11px] font-semibold">
+              {KINDS.map((k) => <button key={k} onClick={() => rerun({ kind: k })} className={`rounded-full px-2 py-0.5 capitalize ${chart.kind === k ? "bg-white shadow-sm" : "text-muted"}`}>{k}</button>)}
+            </div>
+            {years && (
+              <span className="flex items-center gap-1 text-[11px] text-muted">
+                <input type="number" defaultValue={years[0]} aria-label="From year" className="w-14 rounded-full border-2 border-line px-1.5 py-0.5 text-center" onBlur={(e) => rerun({ years: [Number(e.target.value), years[1]] })} />
+                to <input type="number" defaultValue={years[1]} aria-label="To year" className="w-14 rounded-full border-2 border-line px-1.5 py-0.5 text-center" onBlur={(e) => rerun({ years: [years[0], Number(e.target.value)] })} />
+              </span>
+            )}
+            {typeof opt.top === "number" && (
+              <span className="flex items-center gap-1 text-[11px] text-muted">top <input type="number" defaultValue={opt.top} aria-label="How many" className="w-12 rounded-full border-2 border-line px-1.5 py-0.5 text-center" onBlur={(e) => rerun({ top: Number(e.target.value) })} /></span>
+            )}
+          </Row>
+        </Drawer>
+        {err && <Note tone="warn">{err}</Note>}
+      </Card>
     </div>
   );
 }
