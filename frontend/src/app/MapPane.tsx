@@ -63,10 +63,12 @@ export default function MapPane({ scene, context, fit, onPick, onMapClick, onMov
       const color = ["coalesce", ["get", "color"], "#5b2bb5"] as maplibregl.ExpressionSpecification;
       const line = ["in", ["geometry-type"], ["literal", ["LineString", "MultiLineString"]]] as maplibregl.ExpressionSpecification;  // context: thin grey, dotted when only county-placed
       m.addLayer({ id: "context-fill", type: "fill", source: "context", filter: ["==", ["geometry-type"], "Polygon"], paint: { "fill-color": "#6b7280", "fill-opacity": 0.1 } });
-      m.addLayer({ id: "context-lines", type: "line", source: "context", filter: ["all", line, ["!=", ["get", "dotted"], true]], paint: { "line-color": "#6b7280", "line-width": 2, "line-opacity": 0.45 } });
-      m.addLayer({ id: "context-dotted", type: "line", source: "context", filter: ["all", line, ["==", ["get", "dotted"], true]], paint: { "line-color": "#6b7280", "line-width": 2, "line-opacity": 0.45, "line-dasharray": [0.6, 1.6] } });
+      const scale = ["coalesce", ["get", "scale"], 1] as maplibregl.ExpressionSpecification;  // a site the scan just found pops in a little larger
+      const alpha = ["coalesce", ["get", "alpha"], 1] as maplibregl.ExpressionSpecification;  // and fades in
+      m.addLayer({ id: "context-lines", type: "line", source: "context", filter: ["all", line, ["!=", ["get", "dotted"], true]], paint: { "line-color": "#6b7280", "line-width": ["*", 2, scale], "line-opacity": ["*", 0.45, alpha] } });
+      m.addLayer({ id: "context-dotted", type: "line", source: "context", filter: ["all", line, ["==", ["get", "dotted"], true]], paint: { "line-color": "#6b7280", "line-width": ["*", 2, scale], "line-opacity": ["*", 0.45, alpha], "line-dasharray": [0.6, 1.6] } });
       m.addLayer({ id: "context-points", type: "circle", source: "context", filter: ["==", ["geometry-type"], "Point"],
-        paint: { "circle-color": "#6b7280", "circle-radius": 3.5, "circle-opacity": 0.45, "circle-stroke-color": "#ffffff", "circle-stroke-width": ["case", ["==", ["get", "dotted"], true], 0, 1], "circle-stroke-opacity": 0.6 } });
+        paint: { "circle-color": "#6b7280", "circle-radius": ["*", 3.5, scale], "circle-opacity": ["*", 0.45, alpha], "circle-stroke-color": "#ffffff", "circle-stroke-width": ["case", ["==", ["get", "dotted"], true], 0, 1], "circle-stroke-opacity": ["*", 0.6, alpha] } });
       m.addLayer({ id: "areas-fill", type: "fill", source: "areas", paint: { "fill-color": color, "fill-opacity": num("opacity", 0.25) } });
       m.addLayer({ id: "areas-edge", type: "line", source: "areas", paint: { "line-color": color, "line-width": 1.5, "line-opacity": 0.7 } });
       m.addLayer({ id: "lines-halo", type: "line", source: "lines", filter: ["!=", ["get", "dash"], true],
